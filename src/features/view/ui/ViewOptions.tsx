@@ -32,7 +32,14 @@ import {
   filterKind,
   type Filters,
 } from "@/features/item";
-import { TableSettings, localized, type Field } from "@/features/table";
+import {
+  TableSettings,
+  baseSlug,
+  collapseLanguages,
+  languageGroups,
+  localized,
+  type Field,
+} from "@/features/table";
 import type { DataLanguage } from "@/features/workspace";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { toast } from "@/shared/lib/toast";
@@ -281,13 +288,33 @@ function Panel({
      * который его действительно показывал.
      */
     const hideable = fields.filter((field) => field.slug !== "guid");
-    const visible = shown.filter((field) => field.slug !== "guid");
-    const shownIds = new Set(visible.map((field) => field.id));
+    /*
+     * Мультиязычное поле — одна строка в списке, а не по строке на язык:
+     * в таблице оно одна колонка (см. collapseLanguages), и показывать
+     * его тремя одинаковыми подписями значит предложить скрыть половину
+     * колонки. Переключается вся языковая группа сразу — иначе колонка
+     * теряет язык и подписывается «Название (cyr)».
+     */
+    const codes = languages.map((item) => item.code);
+    const visible = collapseLanguages(
+      shown.filter((field) => field.slug !== "guid"),
+      codes,
+      language,
+    );
+    const shownSlugs = new Set(shown.map((field) => field.slug));
     const hidden = matching(
-      hideable.filter((field) => !shownIds.has(field.id)),
+      collapseLanguages(hideable, codes, language).filter(
+        (field) => !shownSlugs.has(field.slug),
+      ),
       query,
       language,
     );
+    const groups = languageGroups(fields, codes);
+    /** Все языковые варианты поля. Обычное поле — оно само. */
+    const groupOf = (field: Field): Field[] => {
+      const base = baseSlug(field, codes);
+      return (base === null ? undefined : groups.get(base)) ?? [field];
+    };
 
     return (
       <Subpage title={t("view.columns")} busy={busy} onBack={back} hint={t("view.columnsHint")}>
@@ -315,14 +342,14 @@ function Panel({
             language={language}
             draggable={!query}
             onReorder={handlers.onColumns}
-            onHide={(field) => handlers.onColumns(toggleColumn(view, field, false))}
+            onHide={(field) => handlers.onColumns(toggleColumn(view, groupOf(field), false))}
           />
 
           {hidden.map((field) => (
             <PopoverItem
               key={field.id}
               icon={<Icon as={IconEyeOff} size={16} className="shrink-0 text-fg-subtle" />}
-              onClick={() => handlers.onColumns(toggleColumn(view, field, true))}
+              onClick={() => handlers.onColumns(toggleColumn(view, groupOf(field), true))}
             >
               <span className="text-fg-subtle">
                 {localized(field.labels, language, field.label)}
@@ -1083,6 +1110,11 @@ function fixedFields(view: View, shown: Field[]): Field[] {
 /**
  * Новый список колонок после переключения одной.
  *
+ * Переключается СПИСОК полей, а не одно: у мультиязычного поля это все
+ * языковые варианты сразу. Показать один вариант из трёх — значит
+ * оставить колонку без языковой группы, и в таблице она подпишется
+ * «Название (cyr)» вместо «Название».
+ *
  * При скрытии убираются ОБА ключа поля-связи — и id поля, и id связи.
  * Бэкенд при создании view кладёт в columns оба (view.go, INSERT), и
  * колонка, снятая по одному ключу, продолжает находиться по второму:
@@ -1091,11 +1123,13 @@ function fixedFields(view: View, shown: Field[]): Field[] {
  * Новая колонка встаёт в конец: у view нет «правильного места» для неё,
  * а вставка в середину переставила бы соседние без спроса.
  */
-function toggleColumn(view: View, field: Field, visible: boolean): string[] {
-  const keys = new Set([field.id, ...(field.relationId ? [field.relationId] : [])]);
+function toggleColumn(view: View, group: Field[], visible: boolean): string[] {
+  const keys = new Set(
+    group.flatMap((field) => [field.id, ...(field.relationId ? [field.relationId] : [])]),
+  );
   const rest = view.columnIds.filter((id) => !keys.has(id));
 
-  return visible ? [...rest, columnKey(field)] : rest;
+  return visible ? [...rest, ...group.map(columnKey)] : rest;
 }
 
 /** Плейсхолдер один на все три адреса: запись подстановки у них общая. */

@@ -170,6 +170,46 @@ test("вкладка связи собирается из раскладки, в
   ]);
 });
 
+/*
+ * Колонки-ссылки в ответе layout нет — приезжают только стороны связи.
+ * Имя выводится по правилу создания: колонка в table_from называется
+ * `<слаг table_to>_id`. Пока этого не делали, вкладки отсеивались
+ * фильтром целиком и карточка со связями выглядела карточкой без связей.
+ */
+test("колонка-ссылка выводится из сторон связи, когда её имени нет", () => {
+  const next = withTabs([
+    {
+      id: "t1",
+      label: "Дети",
+      type: "relation",
+      relation: {
+        relation_table_slug: "night_child",
+        table_from: { slug: "night_child" },
+        table_to: { slug: "test_shmest1" },
+      },
+    },
+  ]);
+
+  expect(relationTabs(next)[0]?.fieldSlug).toBe("test_shmest1_id");
+});
+
+test("наша сторона — та, которая не relation_table_slug", () => {
+  const next = withTabs([
+    {
+      id: "t1",
+      type: "relation",
+      // Здесь чужая таблица — table_to, значит наша — table_from.
+      relation: {
+        relation_table_slug: "orders",
+        table_from: { slug: "clients" },
+        table_to: { slug: "orders" },
+      },
+    },
+  ]);
+
+  expect(relationTabs(next)[0]?.fieldSlug).toBe("clients_id");
+});
+
 test("запрет на просмотр прячет вкладку, отсутствие прав — нет", () => {
   const tab = (permission: unknown) => ({
     id: "t",

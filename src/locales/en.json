@@ -17,6 +17,7 @@
   "actions.empty": "No actions yet.",
   "actions.failed": "Action failed",
   "actions.function": "Function",
+  "actions.icon": "Icon",
   "actions.label": "Name",
   "actions.method": "On what",
   "actions.saved": "Action saved",

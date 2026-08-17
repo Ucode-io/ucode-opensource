@@ -8,6 +8,8 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { IconPicker } from "@/features/icons";
+import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { CommitInput } from "@/shared/ui/commit-input";
 import { DynamicIcon } from "@/shared/ui/dynamic-icon";
@@ -166,10 +168,19 @@ function Panel({
               />
             }
             onClick={() => {
-              // Без выделения запускать нечего: строки — это и есть
-              // аргумент действия. Строка остаётся видимой, чтобы был
-              // виден сам набор действий.
-              if (!selected.length || run.isPending) return;
+              if (run.isPending) return;
+
+              /*
+               * Без выделения запускать нечего: строки — это и есть
+               * аргумент действия. Строка при этом остаётся кликабельной
+               * и отвечает словами: щелчок, после которого ничего
+               * не происходит и никто ничего не сказал, читается
+               * как поломка.
+               */
+              if (!selected.length) {
+                toast.error(t("actions.selectRows"));
+                return;
+              }
 
               run.mutate({ action, guids: selected });
               close();
@@ -292,6 +303,13 @@ function ActionForm({
             </label>
           ))}
         </div>
+
+        {/* Значок рисуется в списке действий рядом с подписью: без него
+            все строки выглядят одинаково, а выбирают из них на бегу. */}
+        <label className="mb-2 flex flex-col gap-0.5">
+          <span className="px-0.5 text-2xs text-fg-muted">{t("actions.icon")}</span>
+          <IconPicker value={draft.icon} type="ACTION" onChange={(icon) => patch({ icon })} />
+        </label>
 
         {/* Функция — это и есть действие: остальное только оформление. */}
         <SelectMenu
