@@ -6,6 +6,7 @@ import {
   IconGripVertical,
   IconHeading,
   IconLayoutSidebarRightExpand,
+  IconPlus,
   IconSquare,
   IconSquareToggleHorizontal,
   IconX,
@@ -78,6 +79,7 @@ export function ItemDrawer({
   onTab,
   tabContent,
   onLanguage,
+  onAddTab,
   onPdf,
   actions,
   titlePlaceholder,
@@ -109,7 +111,7 @@ export function ItemDrawer({
    * рисует вызывающий — это чужая таблица со своими колонками, и знать
    * о ней карточка не обязана. Пусто — вкладок нет, показана только карточка.
    */
-  tabs?: { id: string; label: string }[] | undefined;
+  tabs?: { id: string; label: string; relationId?: string }[] | undefined;
   /** Открытая вкладка связи. Пусто — открыта сама карточка. */
   tab?: string | undefined;
   onTab?: ((id: string) => void) | undefined;
@@ -117,6 +119,11 @@ export function ItemDrawer({
   tabContent?: ReactNode;
   /** Сменить язык ДАННЫХ. Не задан — переключателя нет. */
   onLanguage?: ((code: string) => void) | undefined;
+  /**
+   * Завести вкладку по связи. Не задан — «+» в полосе вкладок нет:
+   * раскладку правит тот же, кто правит настройки view.
+   */
+  onAddTab?: ((relationId: string, label: string) => void) | undefined;
   /**
    * Открыть PDF записи. Адрес задаёт админ в настройках view
    * (attributes.pdf_url); не задан — кнопки нет.
@@ -383,17 +390,34 @@ export function ItemDrawer({
          * только когда связи есть — одна вкладка «Запись» ничего
          * не переключает.
          */}
-        {row && tabs && tabs.length > 0 && (
-          <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-3">
-            <Tab label={t("drawer.record")} active={!tab} onClick={() => onTab?.("")} />
-            {tabs.map((item) => (
-              <Tab
-                key={item.id}
-                label={item.label}
-                active={tab === item.id}
-                onClick={() => onTab?.(item.id)}
+        {row && ((tabs && tabs.length > 0) || onAddTab) && (
+          <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-3">
+            {/* Прокручивается только сам ряд вкладок: «+» рядом с ним,
+                а не внутри — всплывашка, открытая из прокручиваемого
+                контейнера, обрезается его краями. */}
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+              <Tab label={t("drawer.record")} active={!tab} onClick={() => onTab?.("")} />
+              {(tabs ?? []).map((item) => (
+                <Tab
+                  key={item.id}
+                  label={item.label}
+                  active={tab === item.id}
+                  onClick={() => onTab?.(item.id)}
+                />
+              ))}
+            </div>
+
+            {/* Новая вкладка — это связь, которую ещё не показали:
+                бэкенд заводит вкладки сам, но только тем связям,
+                что существовали на момент создания раскладки. */}
+            {onAddTab && (
+              <AddTabButton
+                relations={relations}
+                shown={new Set((tabs ?? []).map((item) => item.relationId).filter(Boolean))}
+                language={language}
+                onAdd={onAddTab}
               />
-            ))}
+            )}
           </div>
         )}
 
@@ -859,5 +883,71 @@ function IconButton({
     >
       <Icon as={icon} size={16} />
     </button>
+  );
+}
+
+/**
+ * «+» в полосе вкладок: показать ещё одну связь этой таблицы.
+ *
+ * Предлагаются только те, которых во вкладках ещё нет: вторая вкладка
+ * на ту же связь показывала бы те же строки под другим именем.
+ */
+function AddTabButton({
+  relations,
+  shown,
+  language,
+  onAdd,
+}: {
+  relations: Relation[];
+  shown: ReadonlySet<string | undefined>;
+  language: string;
+  onAdd: (relationId: string, label: string) => void;
+}) {
+  const { t } = useTranslation();
+  const rest = relations.filter((relation) => !shown.has(relation.id));
+
+  return (
+    <Popover
+      /* Влево от кнопки: она стоит у самого правого края карточки,
+         и список, раскрытый вправо, уезжает за окно. */
+      align="end"
+      trigger={({ toggle }) => (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={t("drawer.addTab")}
+          title={t("drawer.addTab")}
+          className="grid size-6 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
+        >
+          <Icon as={IconPlus} size={14} />
+        </button>
+      )}
+    >
+      {(close) => (
+        <div className="max-h-72 w-56 overflow-y-auto">
+          <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.addTabHint")}</p>
+
+          {rest.map((relation) => {
+            const label = localized(relation.toLabels, language, relation.toLabel || relation.toSlug);
+
+            return (
+              <PopoverItem
+                key={relation.id}
+                onClick={() => {
+                  onAdd(relation.id, label);
+                  close();
+                }}
+              >
+                {label}
+              </PopoverItem>
+            );
+          })}
+
+          {!rest.length && (
+            <p className="px-2 py-2 text-xs text-fg-subtle">{t("drawer.noMoreRelations")}</p>
+          )}
+        </div>
+      )}
+    </Popover>
   );
 }

@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
 import type { Field } from "@/features/table";
 import {
+  addRelationTab,
   fieldOrder,
   headingSlug,
   hiddenFields,
   moveField,
   relationTabs,
+  removeTab,
   orderColumns,
   sections,
   setHeading,
@@ -158,6 +160,7 @@ test("вкладка связи собирается из раскладки, в
   expect(relationTabs(next)).toEqual([
     {
       id: "t1",
+      relationId: "",
       label: "Заказы",
       tableSlug: "order",
       // Не собранное `<родительский слаг>_id`, а настоящее имя колонки:
@@ -251,4 +254,27 @@ test("колонки вкладки правятся только у своей 
   // Соседняя вкладка не трогается: PUT перезаписывает раскладку целиком.
   expect(next.tabs?.[2]?.relation?.columns).toEqual(["b"]);
   expect(next.tabs?.[0]).toBe(layout.tabs[0]);
+});
+
+test("вкладка помнит свою связь: по ней её заводят и по ней же не заводят второй раз", () => {
+  const next = withTabs([
+    {
+      id: "t1",
+      label: "Дети",
+      type: "relation",
+      relation_id: "r1",
+      relation: { relation_table_slug: "night_child", table_from: { slug: "night_child" }, table_to: { slug: "orders" } },
+    },
+  ]);
+
+  expect(relationTabs(next)[0]?.relationId).toBe("r1");
+});
+
+test("вкладка добавляется списком, а не в обход: PUT пишет tabs целиком", () => {
+  const layout = withTabs([{ id: "s", type: "section", sections: [] }]);
+  const next = addRelationTab(layout, { id: "new", label: "Заказы", relationId: "r9" });
+
+  expect(next.tabs?.length).toBe(2);
+  expect(next.tabs?.[1]).toMatchObject({ id: "new", type: "relation", relation_id: "r9" });
+  expect(removeTab(next, "new").tabs?.length).toBe(1);
 });

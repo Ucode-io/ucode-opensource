@@ -43,6 +43,7 @@ type LayoutSection = { label?: string; fields?: LayoutField[] };
  * связь на ту же таблицу бэкенд создать не даст, колонка уже занята.
  */
 type LayoutRelation = {
+  id?: string;
   relation_table_slug?: string;
   relation_field_slug?: string;
   /** Стороны связи. Приезжают развёрнутыми, а не слагами. */
@@ -57,6 +58,8 @@ type LayoutTab = {
   id?: string;
   label?: string;
   type?: string;
+  /** Колонка `tab.relation_id`: по ней бэкенд и связывает вкладку. */
+  relation_id?: string;
   relation?: LayoutRelation;
   sections?: LayoutSection[];
   /**
@@ -70,6 +73,8 @@ type LayoutTab = {
 /** Вкладка связи в карточке записи — то, что от неё нужно наружу. */
 export type RelationTab = {
   id: string;
+  /** Связь, которую показывает вкладка. По ней её и заводят. */
+  relationId: string;
   label: string;
   /** Таблица, строки которой показывает вкладка. */
   tableSlug: string;
@@ -157,6 +162,35 @@ export function setHeading(
   };
 
   return { ...layout, tabs: (layout.tabs ?? []).map((item) => (item === tab ? next : item)) };
+}
+
+/**
+ * Layout с новой вкладкой связи.
+ *
+ * Вкладки бэкенд перезаписывает списком целиком (storage/postgres/
+ * layout.go:194 — bulk insert по всем `tabs`), поэтому добавить —
+ * это дописать элемент. Связь указывается идентификатором: остальное
+ * (таблицу, права, колонку-ссылку) он подставит сам, отдавая раскладку.
+ *
+ * id вкладки создаём мы: колонка `tab.id` приходит в теле и берётся
+ * как есть, своего бэкенд не выдаёт.
+ */
+export function addRelationTab(
+  layout: Layout,
+  tab: { id: string; label: string; relationId: string },
+): Layout {
+  return {
+    ...layout,
+    tabs: [
+      ...(layout.tabs ?? []),
+      { id: tab.id, label: tab.label, type: "relation", relation_id: tab.relationId },
+    ],
+  };
+}
+
+/** Layout без вкладки. Строки чужой таблицы при этом никуда не деваются. */
+export function removeTab(layout: Layout, tabId: string): Layout {
+  return { ...layout, tabs: (layout.tabs ?? []).filter((tab) => tab.id !== tabId) };
 }
 
 /**
@@ -261,6 +295,7 @@ export function relationTabs(layout: Layout | undefined): RelationTab[] {
     .filter((tab) => tab.type !== SECTION && tab.relation?.permission?.view_permission !== false)
     .map((tab) => ({
       id: tab.id ?? "",
+      relationId: tab.relation_id ?? tab.relation?.id ?? "",
       label: tab.label?.trim() || tab.relation?.title?.trim() || tab.relation?.relation_table_slug || "—",
       tableSlug: tab.relation?.relation_table_slug ?? "",
       fieldSlug: linkField(tab.relation),

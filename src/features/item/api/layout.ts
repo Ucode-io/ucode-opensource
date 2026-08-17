@@ -5,12 +5,14 @@ import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError } from "@/shared/lib/toast";
 import {
+  addRelationTab,
   fieldOrder,
   headingSlug,
   hiddenFields,
   moveField,
   relationTabs,
   sections,
+  removeTab,
   setHeading,
   setTabColumns,
   type Layout,
@@ -98,6 +100,18 @@ export function useDrawerLayout({
     /** Новый набор колонок у вкладки связи — тем же PUT раскладки. */
     setTabColumns: (tabId: string, columnIds: string[]) => {
       if (query.data) update.mutate(setTabColumns(query.data, tabId, columnIds));
+    },
+    /** Новая вкладка связи. id придумываем мы: своего бэкенд не выдаёт. */
+    addTab: (relationId: string, label: string) => {
+      if (query.data) {
+        update.mutate(
+          addRelationTab(query.data, { id: crypto.randomUUID(), label, relationId }),
+        );
+      }
+    },
+    /** Убрать вкладку. Строки чужой таблицы остаются на месте. */
+    removeTab: (tabId: string) => {
+      if (query.data) update.mutate(removeTab(query.data, tabId));
     },
   };
 }

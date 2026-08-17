@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { IconEye, IconEyeOff } from "@tabler/icons-react";
+import { IconEye, IconEyeOff, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import {
   DataGrid,
@@ -20,7 +20,7 @@ import {
 import { localized, useTableSchema } from "@/features/table";
 import { toast } from "@/shared/lib/toast";
 import { Icon } from "@/shared/ui/icon";
-import { Popover, PopoverItem } from "@/shared/ui/popover";
+import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
 import { columnKey, resolveColumnIds } from "../model/columns";
 
@@ -50,6 +50,7 @@ export function RelationView({
   language,
   canEdit,
   onColumns,
+  onRemove,
 }: {
   tab: RelationTab;
   /** guid открытой записи. По нему отбираются связанные строки. */
@@ -62,6 +63,8 @@ export function RelationView({
   canEdit?: boolean;
   /** Новый набор колонок вкладки. Не задан — настройка недоступна. */
   onColumns?: ((columnIds: string[]) => void) | undefined;
+  /** Убрать вкладку из карточки. Не задан — убирать нечем. */
+  onRemove?: (() => void) | undefined;
 }) {
   const { t } = useTranslation();
 
@@ -163,6 +166,7 @@ export function RelationView({
             shown={columns}
             language={language}
             onChange={onColumns}
+            {...(onRemove ? { onRemove } : {})}
           />
         )}
       </div>
@@ -276,11 +280,14 @@ function TabColumns({
   shown,
   language,
   onChange,
+  onRemove,
 }: {
   fields: Parameters<typeof resolveColumnIds>[1];
   shown: Parameters<typeof resolveColumnIds>[1];
   language: string;
   onChange: (columnIds: string[]) => void;
+  /** Убрать вкладку целиком. Не задан — пункта нет. */
+  onRemove?: (() => void) | undefined;
 }) {
   const { t } = useTranslation();
   const visible = new Set(shown.map((field) => field.id));
@@ -292,7 +299,7 @@ function TabColumns({
         <ToolButton icon={IconEye} label={t("view.columns")} open={open} onClick={toggle} />
       )}
     >
-      {() => (
+      {(close) => (
         <div className="max-h-72 w-64 overflow-y-auto">
           <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.tabColumnsHint")}</p>
 
@@ -322,6 +329,24 @@ function TabColumns({
               </PopoverItem>
             );
           })}
+
+          {/* Убрать вкладку — здесь же: заводят её в полосе вкладок,
+              а снимают там, где настраивают. */}
+          {onRemove && (
+            <>
+              <PopoverSeparator />
+              <PopoverItem
+                danger
+                icon={<Icon as={IconTrash} size={16} className="shrink-0" />}
+                onClick={() => {
+                  onRemove();
+                  close();
+                }}
+              >
+                {t("drawer.removeTab")}
+              </PopoverItem>
+            </>
+          )}
         </div>
       )}
     </Popover>

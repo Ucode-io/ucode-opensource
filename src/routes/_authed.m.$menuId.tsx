@@ -736,6 +736,9 @@ function MenuPage() {
           sections={drawerLayout.sections}
           heading={drawerLayout.heading}
           tabs={drawerLayout.relationTabs}
+          /* Вкладку заводит тот же, кто правит настройки: это раскладка
+             карточки, общая для всех, кто её откроет. */
+          {...(can.settings ? { onAddTab: drawerLayout.addTab } : {})}
           tab={search.tab ?? ""}
           onTab={(id) => setSearch({ tab: id || undefined })}
           tabContent={
@@ -750,6 +753,14 @@ function MenuPage() {
                 // Колонки вкладки лежат в раскладке карточки, и правит
                 // их тот же PUT, что и порядок полей.
                 onColumns={(columnIds) => drawerLayout.setTabColumns(relationTab.id, columnIds)}
+                {...(can.settings
+                  ? {
+                      onRemove: () => {
+                        drawerLayout.removeTab(relationTab.id);
+                        setSearch({ tab: undefined });
+                      },
+                    }
+                  : {})}
               />
             )
           }
