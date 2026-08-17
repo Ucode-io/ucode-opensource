@@ -35,6 +35,9 @@ import { useTablePermission } from "@/features/auth";
 import { IMPLEMENTED_TYPES, SidebarToggleButton, useMenu } from "@/features/sidebar";
 import {
   FieldEditor,
+  collapseLanguages,
+  baseSlug,
+  languageGroups,
   toDraft,
   useCreateField,
   useCreateRelation,
@@ -120,7 +123,9 @@ function MenuPage() {
   const menu = useMenu(menuId);
   // Язык ДАННЫХ — не локаль интерфейса: подписи вариантов и мультиязычных
   // полей хранятся на языках проекта, см. features/workspace.
-  const { languages, current: language } = useDataLanguages();
+  const { languages, current: language, setCurrent: setLanguage } = useDataLanguages();
+  /** Коды языков данных: по ним сводятся языковые колонки. */
+  const codes = useMemo(() => languages.map((item) => item.code), [languages]);
 
   const { views } = useMenuViews(menuId);
   const tabs = useMemo(() => tabViews(views), [views]);
@@ -136,7 +141,19 @@ function MenuPage() {
   // Колонки view — не только «что показать», но и «что грузить»:
   // настройки связей за пределами этого списка никому не нужны.
   const { schema, isLoading: schemaLoading } = useTableSchema(view?.tableSlug, view?.columnIds);
-  const columns = useMemo(() => resolveColumns(view, schema.fields), [view, schema.fields]);
+  /*
+   * Колонки view, а затем — сведённые языковые. Мультиязычное поле
+   * лежит в схеме НЕСКОЛЬКИМИ колонками (`title_en`, `title_cyr`),
+   * и без сведения таблица показывает их подряд с одинаковой подписью:
+   * какая из них узбекская, видно только по значению.
+   *
+   * Сводится после выбора колонок view: скрытая колонка остаётся
+   * скрытой на всех языках.
+   */
+  const columns = useMemo(
+    () => collapseLanguages(resolveColumns(view, schema.fields), codes, language),
+    [view, schema.fields, codes, language],
+  );
 
   /*
    * Порядок полей в drawer — свой, из раскладки пункта меню, и с колонками
@@ -408,6 +425,8 @@ function MenuPage() {
                   tableSlug={view.tableSlug}
                   columns={columns}
                   language={language}
+                  languages={languages}
+                  onLanguage={setLanguage}
                   sorts={sorts}
                   onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
                   filtersOpen={filtersVisible}
@@ -625,6 +644,7 @@ function MenuPage() {
           locale={i18n.language}
           language={language}
           languages={languages}
+          onLanguage={setLanguage}
           sections={drawerLayout.sections}
           heading={drawerLayout.heading}
           tabs={drawerLayout.relationTabs}
@@ -671,6 +691,7 @@ function MenuPage() {
           fields={schema.fields}
           relations={schema.relations}
           language={language}
+          languages={codes}
           anchor={fieldPanel.anchor}
           icon={fieldIcon}
           onClose={() => setFieldPanel(null)}
@@ -732,22 +753,43 @@ function MenuPage() {
             ? schema.relations.find((item) => item.id === deletingField.relationId)
             : undefined;
 
+          /*
+           * У мультиязычного поля уходит вся группа: в таблице оно одна
+           * колонка, а в схеме — по колонке на язык. Удалить только
+           * показанный вариант значит оставить `naming_cyr` невидимым
+           * мусором, который всплывёт при переключении языка.
+           */
+          const base = baseSlug(deletingField, codes);
+          const variants =
+            (base === null ? undefined : languageGroups(schema.fields, codes).get(base)) ??
+            [deletingField];
+
           const done = () => setDeletingField(null);
 
           return (
             <ConfirmDialog
               title={t("fieldForm.deleteTitle", { label: deletingField.label })}
-              description={t(
-                relation ? "fieldForm.deleteRelationDescription" : "fieldForm.deleteDescription",
-              )}
+              description={
+                relation
+                  ? t("fieldForm.deleteRelationDescription")
+                  : variants.length > 1
+                    ? t("fieldForm.deleteLanguagesDescription", { count: variants.length })
+                    : t("fieldForm.deleteDescription")
+              }
               confirmLabel={t("action.delete")}
               busy={relation ? deleteRelation.isPending : deleteField.isPending}
               onClose={done}
-              onConfirm={() =>
-                relation
-                  ? deleteRelation.mutate(relation, { onSuccess: done })
-                  : deleteField.mutate(deletingField, { onSuccess: done })
-              }
+              onConfirm={() => {
+                if (relation) {
+                  deleteRelation.mutate(relation, { onSuccess: done });
+                  return;
+                }
+
+                // Языковые колонки удаляются по одной: общей ручки нет.
+                void Promise.all(variants.map((field) => deleteField.mutateAsync(field)))
+                  .then(done)
+                  .catch(() => done());
+              }}
             />
           );
         })()}

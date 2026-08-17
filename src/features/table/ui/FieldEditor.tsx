@@ -64,6 +64,7 @@ export function FieldEditor({
   fields,
   relations,
   language,
+  languages,
   anchor,
   icon,
   onSubmit,
@@ -79,6 +80,8 @@ export function FieldEditor({
   /** Связи таблицы: по ним выбирается таблица агрегата у FORMULA. */
   relations: Relation[];
   language: string;
+  /** Коды языков ДАННЫХ проекта: по ним заводятся языковые колонки. */
+  languages: string[];
   anchor: DOMRect;
   /** Иконка типа. Параметром, а не импортом — см. TypeList. */
   icon: (type: string) => TablerIcon;
@@ -142,8 +145,19 @@ export function FieldEditor({
   const create = (type: string) => {
     if (slugError) return;
 
+    /*
+     * Мультиязычность выбирается ДО типа, потому что она работает только
+     * при создании: шлюз по ней заводит по полю на каждый язык проекта
+     * (handlers/v2/field.go:84 — SetTitlePrefix). У уже созданного поля
+     * тот же флаг только меняет колонку в базе, а языковых полей не
+     * появляется — включать его там нечем.
+     */
     const ready = newDraft(type, draft.label, fields);
-    onSubmit(slug && slugTouched ? { ...ready, slug } : ready);
+    onSubmit({
+      ...ready,
+      multilanguage: draft.multilanguage,
+      ...(slug && slugTouched ? { slug } : {}),
+    });
     onClose();
   };
 
@@ -340,6 +354,32 @@ export function FieldEditor({
               />
             )}
 
+            {/*
+              Мультиязычность спрашивается здесь, а не в настройках поля:
+              она действует только в момент создания — шлюз заводит по
+              колонке на каждый язык проекта и суффиксует слаг
+              (`title_en`, `title_cyr`). Позже включить её нечем: у поля
+              меняется флаг, а языковых колонок не появляется.
+
+              У проекта с одним языком спрашивать нечего.
+            */}
+            {!editing && languages.length > 1 && (
+              <label className="mx-1 mb-1 flex cursor-pointer items-start gap-2 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover">
+                <span className="pt-0.5">
+                  <Checkbox
+                    checked={draft.multilanguage}
+                    onChange={(event) => patch({ multilanguage: event.target.checked })}
+                  />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-sm text-fg">{t("fieldForm.multilanguage")}</span>
+                  <span className="text-2xs text-fg-subtle">
+                    {t("fieldForm.multilanguageHint", { languages: languages.join(", ") })}
+                  </span>
+                </span>
+              </label>
+            )}
+
             {/* Пока слаг занят или неправилен, клик по типу поле не создаёт
                 (create молча выходит) — без подписи это выглядит так, будто
                 панель сломалась. */}
@@ -433,11 +473,14 @@ export function FieldEditor({
                 />
 
                 {/*
-                  Мультиязычность. Только у текстовых типов — по этому же
-                  списку шлюз решает, заводить ли по колонке на каждый
-                  язык проекта (см. FieldDraft.multilanguage).
+                  Мультиязычность у существующего поля только СНИМАЕТСЯ.
+                  Включать её здесь нечем: языковые колонки шлюз заводит
+                  единственный раз, при создании (handlers/v2/field.go:84),
+                  а PUT их не создаёт — флаг встал бы, а полей `title_en`
+                  и `title_cyr` не появилось. Старая админка предлагала
+                  этот переключатель всем, и он молча не работал.
                 */}
-                {MULTILANGUAGE_TYPES.has(draft.type) && (
+                {MULTILANGUAGE_TYPES.has(draft.type) && draft.multilanguage && (
                   <Toggle
                     label={t("fieldForm.multilanguage")}
                     checked={draft.multilanguage}

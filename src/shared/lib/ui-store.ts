@@ -40,9 +40,20 @@ type UiState = {
    * и ни на что не влияет.
    */
   expandedMenus: string[];
+  /**
+   * Язык ДАННЫХ, на котором показаны значения и подписи. Не локаль
+   * интерфейса: язык интерфейса выбирает человек для себя, а этот —
+   * ось самих данных (см. CONTEXT, Data Language).
+   *
+   * Пусто — язык не выбирали: берётся первый язык проекта. Хранить
+   * приходится, потому что переключатель стоит и в карточке, и над
+   * таблицей, и выбор обязан пережить переход между ними.
+   */
+  dataLanguage: string;
   setTheme: (theme: Theme) => void;
   toggleSidebar: () => void;
   toggleMenu: (id: string) => void;
+  setDataLanguage: (code: string) => void;
   setSidebarWidth: (width: number) => void;
   setDrawerWidth: (width: number) => void;
   setDrawerMode: (mode: DrawerMode) => void;
@@ -94,7 +105,9 @@ export const useUi = create<UiState>()(
       tableLimits: {},
       tableFilters: {},
       expandedMenus: [],
+      dataLanguage: "",
       setTheme: (theme) => set({ theme }),
+      setDataLanguage: (dataLanguage) => set({ dataLanguage }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       toggleMenu: (id) =>
         set((s) => ({

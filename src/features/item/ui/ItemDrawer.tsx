@@ -11,7 +11,7 @@ import {
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import {
-  fieldsForLanguage,
+  collapseLanguages,
   hasMultilanguage,
   localized,
   baseSlug,
@@ -27,6 +27,7 @@ import {
   type DrawerMode,
 } from "@/shared/lib/ui-store";
 import { Icon } from "@/shared/ui/icon";
+import { LanguageTabs } from "@/shared/ui/language-tabs";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { ResizeHandle } from "@/shared/ui/resize-handle";
 import { cellKind, editorKind } from "../model/cell-kind";
@@ -68,6 +69,7 @@ export function ItemDrawer({
   tab,
   onTab,
   tabContent,
+  onLanguage,
   onEdit,
   onSettings,
   onReorder,
@@ -101,6 +103,8 @@ export function ItemDrawer({
   onTab?: ((id: string) => void) | undefined;
   /** Содержимое открытой вкладки связи. */
   tabContent?: ReactNode;
+  /** Сменить язык ДАННЫХ. Не задан — переключателя нет. */
+  onLanguage?: ((code: string) => void) | undefined;
   onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
   onSettings?: ((field: Field, anchor: DOMRect) => void) | undefined;
   /**
@@ -140,12 +144,16 @@ export function ItemDrawer({
    * строками с одинаковой подписью.
    */
   const codes = useMemo(() => languages.map((item) => item.code), [languages]);
-  const [dataLanguage, setDataLanguage] = useState(language);
   const multilingual = useMemo(() => hasMultilanguage(columns, codes), [columns, codes]);
 
+  /*
+   * Языковые колонки сводит вызывающая страница — тем же языком, что
+   * и таблица. Здесь остаётся сборка на случай, когда карточку открыли
+   * с полным набором полей: она идемпотентна.
+   */
   const fields = useMemo(
-    () => (multilingual ? fieldsForLanguage(columns, codes, dataLanguage) : columns),
-    [multilingual, columns, codes, dataLanguage],
+    () => (multilingual ? collapseLanguages(columns, codes, language) : columns),
+    [multilingual, columns, codes, language],
   );
 
   /*
@@ -301,23 +309,12 @@ export function ItemDrawer({
 
           {/* Переключатель языка ДАННЫХ — только когда есть что переключать.
               У таблицы без мультиязычных полей он не менял бы ничего. */}
-          {multilingual && (
-            <div className="ml-auto flex shrink-0 items-center gap-0.5">
-              {languages.map((item) => (
-                <button
-                  key={item.code}
-                  type="button"
-                  onClick={() => setDataLanguage(item.code)}
-                  title={item.nativeName}
-                  className={`h-6 rounded-md px-1.5 text-xs transition-colors ${
-                    dataLanguage === item.code
-                      ? "bg-accent-subtle text-accent-text"
-                      : "text-fg-subtle hover:bg-surface-hover hover:text-fg"
-                  }`}
-                >
-                  {item.code}
-                </button>
-              ))}
+          {/* Переключатель языка данных общий на всё приложение: он же
+              стоит над таблицей, и разъехавшись, они показывали бы
+              карточку и список на разных языках. */}
+          {multilingual && onLanguage && (
+            <div className="ml-auto">
+              <LanguageTabs languages={languages} value={language} onChange={onLanguage} />
             </div>
           )}
         </header>
@@ -352,7 +349,6 @@ export function ItemDrawer({
               field={title}
               candidates={rest}
               language={language}
-              dataLanguage={dataLanguage}
               codes={codes}
               onPick={onHeading}
               onOpen={open}
@@ -427,7 +423,7 @@ export function ItemDrawer({
                     <FieldLabel
                       label={stripLanguage(
                         localized(field.labels, language, field.label),
-                        multilingual ? dataLanguage : "",
+                        multilingual ? language : "",
                       )}
                       field={field}
                       draggable={Boolean(onReorder)}
@@ -555,7 +551,6 @@ function Heading({
   field,
   candidates,
   language,
-  dataLanguage,
   codes,
   children,
   onPick,
@@ -563,8 +558,8 @@ function Heading({
 }: {
   field: Field | undefined;
   candidates: Field[];
+  /** Язык ДАННЫХ: и подписи полей, и выбранный языковой вариант. */
   language: string;
-  dataLanguage: string;
   codes: string[];
   children: ReactNode;
   onPick: ((slug: string, variants: Record<string, string> | null) => void) | undefined;
@@ -618,7 +613,7 @@ function Heading({
               >
                 {stripLanguage(
                   localized(item.labels, language, item.label),
-                  codes.length ? dataLanguage : "",
+                  codes.length ? language : "",
                 )}
               </PopoverItem>
             ))}

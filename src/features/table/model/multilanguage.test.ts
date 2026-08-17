@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   baseSlug,
+  collapseLanguages,
   fieldLanguage,
   fieldsForLanguage,
   hasMultilanguage,
@@ -43,8 +44,13 @@ test("подчёркивание в слаге не делает поле язы
   expect(baseSlug(field("created_by", true), LANGS)).toBeNull();
 });
 
-test("поле без признака мультиязычности не разбирается вовсе", () => {
-  expect(baseSlug(field("title_en"), LANGS)).toBeNull();
+/*
+ * Признак — не флаг, а форма набора: object_builder не пишет
+ * enable_multilanguage при вставке (field.go:116), и у только что
+ * созданного языкового поля флаг всегда false.
+ */
+test("одиночное поле с языковым суффиксом языковой группой не считается", () => {
+  expect(baseSlug(field("title_en"), LANGS)).toBe("title");
   expect(hasMultilanguage([field("title_en"), field("price")], LANGS)).toBe(false);
 });
 
@@ -82,4 +88,43 @@ test("код языка убирается из подписи, честная �
   expect(stripLanguage("Название", "en")).toBe("Название");
   // «Регион» не должно стать «Реги» из-за случайного совпадения хвоста.
   expect(stripLanguage("Регион", "он")).toBe("Регион");
+});
+
+test("сведение языковых колонок снимает код языка с подписи", () => {
+  const named = (slug: string, label: string): Field => ({
+    ...field(slug, true),
+    label,
+    labels: { en: `${label}`, cyr: `${label}` },
+  });
+
+  const [title, price] = collapseLanguages(
+    [named("title_en", "Название (en)"), named("title_cyr", "Название (cyr)"), field("price")],
+    LANGS,
+    "cyr",
+  );
+
+  // Место — первого варианта, значение — активного языка, подпись — без кода.
+  expect(title?.slug).toBe("title_cyr");
+  expect(title?.label).toBe("Название");
+  expect(title?.labels["en"]).toBe("Название");
+  // Обычное поле проходит нетронутым.
+  expect(price?.slug).toBe("price");
+});
+
+test("сведение идемпотентно: повторный вызов ничего не меняет", () => {
+  const fields = [field("title_en", true), field("title_cyr", true)];
+  const once = collapseLanguages(fields, LANGS, "en");
+  const twice = collapseLanguages(once, LANGS, "en");
+
+  expect(twice.map((item) => item.slug)).toEqual(once.map((item) => item.slug));
+});
+
+test("пара без флага — всё равно языковая группа: флаг база не хранит", () => {
+  const fields = [field("naming_en"), field("naming_cyr"), field("price")];
+
+  expect(hasMultilanguage(fields, LANGS)).toBe(true);
+  expect(collapseLanguages(fields, LANGS, "cyr").map((item) => item.slug)).toEqual([
+    "naming_cyr",
+    "price",
+  ]);
 });

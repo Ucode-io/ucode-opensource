@@ -13,8 +13,10 @@ export { toDraft } from "./model/field-draft";
 export {
   baseSlug,
   fieldLanguage,
+  collapseLanguages,
   fieldsForLanguage,
   hasMultilanguage,
+  languageGroups,
   stripLanguage,
 } from "./model/multilanguage";
 export type { FieldDraft } from "./model/field-draft";

@@ -3,6 +3,7 @@ import { api, authApi } from "@/shared/api/client";
 import { session } from "@/shared/api/session";
 import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
+import { useUi } from "@/shared/lib/ui-store";
 import type { Company, DataLanguage, Environment, Project } from "../model/types";
 import type { CompaniesDto, EnvironmentsDto, ProjectDetailDto, ProjectsDto } from "./dto";
 
@@ -49,11 +50,15 @@ export function useProjects(companyId: string, enabled = true) {
  * полей и подписи вариантов — см. DataLanguage.
  *
  * Первый язык считается основным: так же его выбирает бэкенд, заводя
- * поле. Переключатель языка данных появится вместе с Drawer, и тогда же
- * выбор станет чем-то, что нужно хранить; до тех пор хранить нечего.
+ * поле. Выбранный человеком язык живёт в ui-store — переключатель стоит
+ * и над таблицей, и в карточке, и выбор обязан пережить переход между
+ * ними. Язык из хранилища проверяется по набору проекта: язык, убранный
+ * из настроек, иначе показывал бы пустые подписи навсегда.
  */
 export function useDataLanguages() {
   const projectId = useSession().getProjectId() ?? "";
+  const chosen = useUi((state) => state.dataLanguage);
+  const setDataLanguage = useUi((state) => state.setDataLanguage);
 
   const query = useQuery({
     queryKey: keys.workspace.languages(projectId),
@@ -72,8 +77,13 @@ export function useDataLanguages() {
   });
 
   const languages = query.data ?? [];
+  const known = languages.some((language) => language.code === chosen);
 
-  return { languages, current: languages[0]?.code ?? "" };
+  return {
+    languages,
+    current: (known ? chosen : languages[0]?.code) ?? "",
+    setCurrent: setDataLanguage,
+  };
 }
 
 export function useEnvironments(projectId: string, enabled = true) {
