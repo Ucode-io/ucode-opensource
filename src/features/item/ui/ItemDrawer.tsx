@@ -79,6 +79,7 @@ export function ItemDrawer({
   tabContent,
   onLanguage,
   onPdf,
+  actions,
   onEdit,
   onSettings,
   onReorder,
@@ -119,6 +120,12 @@ export function ItemDrawer({
    * (attributes.pdf_url); не задан — кнопки нет.
    */
   onPdf?: (() => void) | undefined;
+  /**
+   * Кнопки, которые карточка не рисует сама: действия таблицы над
+   * открытой строкой. Их набор знает вызывающая страница — карточке
+   * о функциях проекта знать незачем.
+   */
+  actions?: ReactNode;
   onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
   onSettings?: ((field: Field, anchor: DOMRect) => void) | undefined;
   /**
@@ -307,11 +314,6 @@ export function ItemDrawer({
             onClick={onClose}
           />
 
-          {/* PDF записи: адрес задан в настройках view, и печатная форма
-              нужна прямо здесь — с открытой карточкой, а не после
-              возврата в таблицу. */}
-          {onPdf && <IconButton icon={IconFileTypePdf} label={t("drawer.openPdf")} onClick={onPdf} />}
-
           <Popover
             trigger={({ toggle }) => (
               <IconButton
@@ -342,8 +344,15 @@ export function ItemDrawer({
             )}
           </Popover>
 
-          {/* Переключатель языка ДАННЫХ — только когда есть что переключать.
-              У таблицы без мультиязычных полей он не менял бы ничего. */}
+          {/* PDF записи: адрес задан в настройках view, и печатная форма
+              нужна прямо здесь — с открытой карточкой, а не после
+              возврата в таблицу. */}
+          {onPdf && <IconButton icon={IconFileTypePdf} label={t("drawer.openPdf")} onClick={onPdf} />}
+
+          {/* Действия над этой строкой. Слева от переключателя языка,
+              потому что это действие над записью, а не над показом. */}
+          {actions}
+
           {/* Переключатель языка данных общий на всё приложение: он же
               стоит над таблицей, и разъехавшись, они показывали бы
               карточку и список на разных языках. */}

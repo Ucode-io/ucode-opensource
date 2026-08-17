@@ -686,6 +686,19 @@ function MenuPage() {
           language={language}
           languages={languages}
           onLanguage={setLanguage}
+          /*
+           * Действия над открытой строкой: те же, что над выделением
+           * в таблице, только строка одна — та, которую видно.
+           */
+          actions={
+            <TableActions
+              tableSlug={view.tableSlug}
+              language={language}
+              languages={languages}
+              selected={[search.item]}
+              canEdit={can.settings}
+            />
+          }
           /* Печатная форма записи, если админ задал её адрес. */
           {...(view.pdfUrl && drawerRow
             ? { onPdf: () => openUrl(fillTemplate(view.pdfUrl, drawerRow)) }
