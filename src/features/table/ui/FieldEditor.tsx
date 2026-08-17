@@ -275,6 +275,7 @@ export function FieldEditor({
           <RelationForm
             draft={relation}
             target={editingRelation?.toSlug ?? ""}
+            language={language}
             onChange={setRelation}
             onBack={editingRelation ? onClose : () => {
               setRelation(null);
@@ -674,6 +675,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
 function RelationForm({
   draft,
   target,
+  language,
   onChange,
   onBack,
   onSubmit,
@@ -681,6 +683,8 @@ function RelationForm({
   draft: RelationDraft;
   /** Слаг целевой таблицы при правке. Пусто — связь заводится заново. */
   target: string;
+  /** Язык ДАННЫХ: на нём подписаны таблицы проекта. */
+  language: string;
   onChange: (draft: RelationDraft) => void;
   onBack: () => void;
   onSubmit: () => void;
@@ -743,7 +747,7 @@ function RelationForm({
           emptyText={t("relationForm.noTables")}
           items={tables.items.map((table) => ({
             value: table.slug,
-            label: table.label,
+            label: localized(table.labels, language, table.label),
             icon: table.icon,
           }))}
           selected={new Set(draft.toSlug ? [draft.toSlug] : [])}

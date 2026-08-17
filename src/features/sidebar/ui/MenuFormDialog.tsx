@@ -1,14 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/shared/ui/button";
 import { IconPicker } from "@/features/icons";
+import { useDataLanguages } from "@/features/workspace";
+import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/input";
 
 /**
  * Создание и переименование пункта — одна форма. В старом коде под каждый
  * тип была своя модалка; разница между ними только в заголовке.
  */
-export type MenuFormValue = { label: string; icon: string; href: string; slug: string };
+export type MenuFormValue = {
+  /** Подписи по языкам ДАННЫХ проекта: ключ — код языка. */
+  labels: Record<string, string>;
+  icon: string;
+  href: string;
+  slug: string;
+};
 
 export function MenuFormDialog({
   title,
@@ -30,11 +37,19 @@ export function MenuFormDialog({
 }) {
   const { t } = useTranslation();
   const [value, setValue] = useState(initial);
+  /*
+   * Языки ДАННЫХ проекта, а не локали интерфейса: подпись пункта живёт
+   * в attributes.label_<код языка проекта>, теми же ключами, что подписи
+   * полей и имена view.
+   */
+  const { languages } = useDataLanguages();
 
   // У ссылки адрес обязателен: пункт без него никуда не ведёт.
   const isLink = type === "LINK";
   const hrefValid = !isLink || isHttpUrl(value.href);
   const slugValid = !needsSlug || SLUG.test(value.slug.trim());
+  // Хотя бы одно имя: пункт без единой подписи в сайдбаре — пустая строка.
+  const named = Object.values(value.labels).some((label) => label.trim());
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -44,10 +59,9 @@ export function MenuFormDialog({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (value.label.trim() && hrefValid && slugValid) {
+    if (named && hrefValid && slugValid) {
       onSubmit({
         ...value,
-        label: value.label.trim(),
         href: value.href.trim(),
         slug: value.slug.trim(),
       });
@@ -66,15 +80,30 @@ export function MenuFormDialog({
       >
         <h2 className="text-base font-semibold">{title}</h2>
 
-        <Field label={t("menuForm.label")}>
-          {/* autoFocus здесь уместен: диалог открыт ради этого поля. */}
-          <Input
-            autoFocus
-            required
-            value={value.label}
-            onChange={(event) => setValue((v) => ({ ...v, label: event.target.value }))}
-          />
-        </Field>
+        {/* По полю на язык данных. Одного поля мало: имя, заданное только
+            на русском, оставляет узбекскую версию сайдбара со слагом. */}
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-fg-muted">{t("menuForm.label")}</span>
+
+          {languages.map((language, index) => (
+            <label key={language.code} className="flex items-center gap-2">
+              <span className="w-16 shrink-0 truncate text-2xs text-fg-subtle">
+                {language.nativeName}
+              </span>
+              <Input
+                /* autoFocus только на первом: диалог открыт ради имени. */
+                autoFocus={index === 0}
+                value={value.labels[language.code] ?? ""}
+                onChange={(event) =>
+                  setValue((v) => ({
+                    ...v,
+                    labels: { ...v.labels, [language.code]: event.target.value },
+                  }))
+                }
+              />
+            </label>
+          ))}
+        </div>
 
         {needsSlug && (
           <Field
@@ -123,7 +152,7 @@ export function MenuFormDialog({
           </Button>
           <Button
             type="submit"
-            disabled={busy || !value.label.trim() || !hrefValid || !slugValid}
+            disabled={busy || !named || !hrefValid || !slugValid}
           >
             {t("action.save")}
           </Button>

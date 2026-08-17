@@ -8,13 +8,29 @@ import type { MenuDto } from "./dto";
  */
 
 /**
- * Подпись берётся из attributes.label_<язык>, иначе из label.
- * Ключ динамический, поэтому разворачивается здесь, а не в компоненте.
+ * Подписи по языкам ДАННЫХ: attributes.label_<код>.
+ *
+ * Язык здесь тот же, что у полей и view, — из набора проекта, а не
+ * локаль интерфейса (см. CONTEXT, Data Language). Старая админка
+ * писала эти ключи, насильно переключив i18n на первый язык проекта,
+ * и потому у неё label_<локаль> случайно совпадал с label_<язык данных>.
  */
-function pickLabel(dto: MenuDto, locale: string): string {
-  const localized = dto.attributes?.[`label_${locale}`];
-  if (typeof localized === "string" && localized.trim()) return localized;
-  return dto.label?.trim() || "—";
+const LABEL_PREFIX = "label_";
+
+export function pickLabels(attributes: Record<string, unknown> | undefined): Record<string, string> {
+  const labels: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(attributes ?? {})) {
+    if (!key.startsWith(LABEL_PREFIX) || typeof value !== "string" || !value.trim()) continue;
+    labels[key.slice(LABEL_PREFIX.length)] = value;
+  }
+
+  return labels;
+}
+
+/** Подпись на языке данных, иначе базовая колонка label. */
+function pickLabel(dto: MenuDto, language: string): string {
+  return pickLabels(dto.attributes)[language]?.trim() || dto.label?.trim() || "—";
 }
 
 /**
@@ -68,13 +84,14 @@ function pickPermissions(dto: MenuDto) {
  * Поэтому позиция берётся из индекса в ответе, а клиент НИЧЕГО не
  * пересортировывает: любая своя сортировка здесь ломает серверную.
  */
-export function toMenuNode(dto: MenuDto, locale: string, index = 0): MenuNode {
+export function toMenuNode(dto: MenuDto, language: string, index = 0): MenuNode {
   const type = dto.type ?? "";
   const href = pickHref(dto);
 
   return {
     id: dto.id ?? "",
-    label: pickLabel(dto, locale),
+    label: pickLabel(dto, language),
+    labels: pickLabels(dto.attributes),
     icon: dto.icon ?? "",
     type,
     kind: kindOf(type),

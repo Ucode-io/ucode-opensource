@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
+import { useDataLanguages } from "@/features/workspace";
 import { api } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
@@ -24,7 +24,13 @@ export const ROOT_MENU_ID = SYSTEM_MENUS.ROOT;
  * отдельный запрос, и он уходит только когда папку раскрыли.
  */
 export function useMenuChildren(parentId: string, enabled = true) {
-  const { i18n } = useTranslation();
+  /*
+   * Язык ДАННЫХ, а не локаль интерфейса: подпись пункта лежит
+   * в attributes.label_<код языка проекта> — тех же кодах, что у полей
+   * и view. С локалью ru/en/uz эти ключи совпадают только случайно,
+   * и у проекта с языками en+cyr сайдбар показывал базовые подписи.
+   */
+  const { current: language } = useDataLanguages();
   const session = useSession();
   const projectId = session.getProjectId() ?? "";
   const envId = session.getEnvironmentId() ?? "";
@@ -36,18 +42,18 @@ export function useMenuChildren(parentId: string, enabled = true) {
     enabled: enabled && Boolean(projectId) && Boolean(parentId),
     // Меню меняет админ, а не пользователь — держим дольше общего правила.
     staleTime: 5 * 60_000,
-    select: (data) => toNodes(data.menus ?? [], i18n.language),
+    select: (data) => toNodes(data.menus ?? [], language),
   });
 
   return { items: query.data ?? [], isLoading: query.isLoading, error: query.error };
 }
 
-export function toNodes(menus: MenuDto[], locale: string): MenuNode[] {
+export function toNodes(menus: MenuDto[], language: string): MenuNode[] {
   // Порядок ответа сохраняем как есть: сервер уже отсортировал по "order",
   // а само поле до клиента не доезжает — сортировать нечем и незачем.
   return menus
     .filter((dto) => dto.id)
-    .map((dto, index) => toMenuNode(dto, locale, index))
+    .map((dto, index) => toMenuNode(dto, language, index))
     // Без права чтения пункт не показывается вовсе — так же, как в старой
     // версии. Показать пункт, который всё равно вернёт отказ, хуже, чем
     // не показать: человек будет думать, что сломалось.
@@ -59,7 +65,7 @@ export function toNodes(menus: MenuDto[], locale: string): MenuNode[] {
 
 /** Один пункт по id — для экрана. Дерево загружено не целиком, искать в нём нечего. */
 export function useMenu(menuId: string) {
-  const { i18n } = useTranslation();
+  const { current: language } = useDataLanguages();
   const session = useSession();
   const projectId = session.getProjectId() ?? "";
   const envId = session.getEnvironmentId() ?? "";
@@ -69,7 +75,7 @@ export function useMenu(menuId: string) {
     queryFn: () => api.get<MenuDto>(`/v3/menus/${menuId}`),
     enabled: Boolean(projectId) && Boolean(menuId),
     staleTime: 5 * 60_000,
-    select: (dto) => toMenuNode(dto, i18n.language),
+    select: (dto) => toMenuNode(dto, language),
   });
 
   return query.data;

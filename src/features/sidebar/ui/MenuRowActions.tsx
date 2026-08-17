@@ -54,13 +54,13 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
   const submitForm = (value: MenuFormValue) => {
     if (dialog?.kind === "edit") {
       update.mutate(
-        { node, label: value.label, icon: value.icon, ...linkAttributes(node.type, value) },
+        { node, labels: value.labels, icon: value.icon, ...linkAttributes(node.type, value) },
         { onSuccess: () => setDialog(null) },
       );
     } else if (dialog?.kind === "create") {
       create.mutate(
         {
-          label: value.label,
+          labels: value.labels,
           icon: value.icon,
           type: dialog.type,
           parentId: node.id,
@@ -108,7 +108,7 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
       {dialog?.kind === "edit" && (
         <MenuFormDialog
           title={t("menuForm.editTitle", { type: typeWord })}
-          initial={{ label: node.label, icon: node.icon, href: node.href ?? "", slug: "" }}
+          initial={{ labels: node.labels, icon: node.icon, href: node.href ?? "", slug: "" }}
           type={node.type}
           busy={update.isPending}
           onSubmit={submitForm}
@@ -119,7 +119,7 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
       {dialog?.kind === "create" && (
         <MenuFormDialog
           title={t(CREATE_TITLES[dialog.type])}
-          initial={{ label: "", icon: "", href: "", slug: "" }}
+          initial={{ labels: {}, icon: "", href: "", slug: "" }}
           type={dialog.type}
           needsSlug={dialog.type === "TABLE"}
           busy={create.isPending}

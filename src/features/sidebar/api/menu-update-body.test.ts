@@ -11,19 +11,20 @@ const table = toMenuNode(
     parent_id: "p1",
     table_id: "t1",
     layout_id: "l1",
-    attributes: { label_ru: "Заказы" },
+    attributes: { label_en: "Orders", label_cyr: "Заказы" },
   },
-  "ru",
+  "cyr",
 );
 
 test("переименование сохраняет всё, что PUT перезаписал бы пустотой", () => {
   // SQL пишет строку целиком: пропущенный type — отказ, пропущенный
   // table_id — таблица, отвязанная от своего пункта меню.
-  const body = menuUpdateBody(table, { label: "Заявки" }, "proj");
+  const body = menuUpdateBody(table, { labels: { en: "Requests", cyr: "Заявки" } }, "proj");
 
   expect(body).toMatchObject({
     id: "m1",
-    label: "Заявки",
+    // Колонка label — первое непустое имя: пустой она быть не может.
+    label: "Requests",
     type: "TABLE",
     table_id: "t1",
     layout_id: "l1",
@@ -44,5 +45,9 @@ test("attributes дополняются, а не заменяются", () => {
   // по языкам: бэкенд кладёт в колонку ровно то, что пришло.
   const body = menuUpdateBody(table, { attributes: { link: "https://a" } }, "proj");
 
-  expect(body.attributes).toEqual({ label_ru: "Заказы", link: "https://a" });
+  expect(body.attributes).toEqual({
+    label_en: "Orders",
+    label_cyr: "Заказы",
+    link: "https://a",
+  });
 });

@@ -5,8 +5,9 @@ import i18n from "@/shared/lib/i18n";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError, toast } from "@/shared/lib/toast";
 import { RELATION_DIRECTION, type RelationDraft } from "../model/relation-draft";
-import type { Relation } from "../model/types";
+import type { Labels, Relation } from "../model/types";
 import { invalidateSchema } from "./fields";
+import { pickLabels } from "./normalize";
 
 /** Одна таблица в списке. Кроме слага, подписи и значка отсюда ничего не нужно. */
 type TableDto = {
@@ -20,7 +21,14 @@ type TableDto = {
 
 type TablesResponseDto = { tables?: TableDto[]; count?: number };
 
-export type TableOption = { slug: string; label: string; icon: string };
+export type TableOption = {
+  slug: string;
+  /** Базовая подпись — колонка `label`. Показывать её напрямую нельзя. */
+  label: string;
+  /** Подписи по языкам ДАННЫХ: attributes.label_<код>. */
+  labels: Labels;
+  icon: string;
+};
 
 /** Строк на страницу в списках выбора. Одна прокрутка — одна страница. */
 const PAGE = 30;
@@ -60,6 +68,12 @@ export function useTables(search: string) {
     .map((dto) => ({
       slug: dto.slug!,
       label: dto.label?.trim() || dto.slug!,
+      /*
+       * Язык не входит в ключ кэша: имена лежат в ответе все сразу,
+       * и переключение языка данных не должно перезапрашивать список.
+       * Выбирает нужное вызывающий — через localized().
+       */
+      labels: pickLabels(dto.attributes),
       icon: dto.icon ?? "",
     }));
 

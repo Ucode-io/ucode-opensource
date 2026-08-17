@@ -42,7 +42,13 @@ export const IMPLEMENTED_TYPES = new Set<string>(["TABLE"]);
 
 export type MenuNode = {
   id: string;
+  /** Подпись на текущем языке ДАННЫХ, иначе базовая. Для показа. */
   label: string;
+  /**
+   * Подписи по языкам данных целиком. Нужны форме переименования: у неё
+   * по полю на язык, и показанной подписи для этого мало.
+   */
+  labels: Record<string, string>;
   /** Имя иконки от бэкенда. Может быть пустым — тогда берём по типу. */
   icon: string;
   type: string;

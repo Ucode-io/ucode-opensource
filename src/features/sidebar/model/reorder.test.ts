@@ -5,6 +5,7 @@ import type { MenuNode } from "./types";
 const node = (id: string, over: Partial<MenuNode> = {}): MenuNode => ({
   id,
   label: id,
+  labels: {},
   icon: "",
   type: "TABLE",
   kind: "leaf",

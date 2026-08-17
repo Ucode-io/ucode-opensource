@@ -13,6 +13,7 @@ const all: MenuPermissions = {
 const node = (over: Partial<MenuNode> = {}): MenuNode => ({
   id: "1",
   label: "X",
+  labels: {},
   icon: "",
   type: "TABLE",
   kind: "leaf",

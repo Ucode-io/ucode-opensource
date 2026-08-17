@@ -16,7 +16,7 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
     if (!type) return;
     create.mutate(
       {
-        label: value.label,
+        labels: value.labels,
         icon: value.icon,
         type,
         parentId,
@@ -83,7 +83,7 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
                 ? "menuForm.createLink"
                 : "menuForm.createTable",
           )}
-          initial={{ label: "", icon: "", href: "", slug: "" }}
+          initial={{ labels: {}, icon: "", href: "", slug: "" }}
           type={type}
           needsSlug={type === "TABLE"}
           busy={create.isPending}

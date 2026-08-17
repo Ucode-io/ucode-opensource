@@ -5,6 +5,7 @@ import type { MenuNode } from "../model/types";
 const node = (id: string): MenuNode => ({
   id,
   label: id,
+  labels: {},
   icon: "",
   type: "TABLE",
   kind: "leaf",
