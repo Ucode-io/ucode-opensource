@@ -35,6 +35,7 @@ import { useTablePermission } from "@/features/auth";
 import { IMPLEMENTED_TYPES, SidebarToggleButton, useMenu } from "@/features/sidebar";
 import {
   FieldEditor,
+  TableActions,
   collapseLanguages,
   baseSlug,
   languageGroups,
@@ -440,6 +441,20 @@ function MenuPage() {
                   onToggleFilters={() => setSearch({ filtersOpen: !filtersVisible }, true)}
                   search={search.search ?? ""}
                   onSearch={(next) => setSearch({ search: next || undefined, page: 1 }, true)}
+                />
+              )}
+
+              {/* Действия таблицы: функции проекта над отмеченными
+                  строками. Рядом с настройками, а не среди поиска
+                  и фильтра: это не способ посмотреть на список,
+                  а способ что-то с ним сделать. */}
+              {supportedView && (
+                <TableActions
+                  tableSlug={view.tableSlug}
+                  language={language}
+                  languages={languages}
+                  selected={[...selected]}
+                  canEdit={can.settings}
                 />
               )}
 

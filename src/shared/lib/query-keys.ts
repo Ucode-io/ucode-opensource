@@ -38,6 +38,14 @@ export const keys = {
     all: ["icons"] as const,
     search: (query: string) => [...keys.icons.all, query] as const,
   },
+  /**
+   * Действия таблицы (automation): что можно запустить над отмеченными
+   * строками. Живут при таблице, поэтому и ключ по слагу.
+   */
+  actions: {
+    all: ["actions"] as const,
+    byTable: (tableSlug: string) => [...keys.actions.all, tableSlug] as const,
+  },
   /** Функции проекта: их зовут поля-кнопки. Список один на окружение. */
   functions: {
     all: ["functions"] as const,
