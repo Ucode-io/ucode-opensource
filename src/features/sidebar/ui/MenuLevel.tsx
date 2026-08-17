@@ -1,5 +1,6 @@
-import { useState, type DragEvent } from "react";
+import { type DragEvent } from "react";
 import { Link } from "@tanstack/react-router";
+import { useUi } from "@/shared/lib/ui-store";
 import { useMenuChildren } from "../api/menus";
 import type { MenuNode } from "../model/types";
 import { positionIn, useDnd } from "./dnd-context";
@@ -56,8 +57,14 @@ function MenuRow({
   const parentId = path[path.length - 1] ?? "";
   const depth = path.length - 1;
   const dnd = useDnd();
-  const [open, setOpen] = useState(false);
   const expandable = node.kind === "group";
+  /*
+   * Раскрытие переживает перезагрузку — оно в ui-store (см. expandedMenus).
+   * Подписка селектором, а не всем стором: строк меню на экране десятки,
+   * и правка ширины сайдбара перерисовывала бы каждую.
+   */
+  const open = useUi((state) => state.expandedMenus.includes(node.id));
+  const toggleMenu = useUi((state) => state.toggleMenu);
 
   // Запрос уходит только когда папку раскрыли.
   const children = useMenuChildren(node.id, expandable && open);
@@ -131,7 +138,13 @@ function MenuRow({
   // и вместо строки меню он тащит URL — с собственным призраком поверх
   // нашего. Тащит только обёртка.
   const navigable = expandable ? (
-    <button type="button" onClick={() => setOpen((v) => !v)} className={inner_row} style={style}>
+    <button
+      type="button"
+      onClick={() => toggleMenu(node.id)}
+      aria-expanded={open}
+      className={inner_row}
+      style={style}
+    >
       {inner}
     </button>
   ) : node.kind === "link" && node.href ? (

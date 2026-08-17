@@ -6,6 +6,7 @@ import {
   DRAWER_MIN_WIDTH,
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
+  useUi,
 } from "./ui-store";
 
 describe("clampSidebarWidth", () => {
@@ -21,5 +22,18 @@ describe("clampDrawerWidth", () => {
     expect(clampDrawerWidth(10)).toBe(DRAWER_MIN_WIDTH);
     expect(clampDrawerWidth(9999)).toBe(DRAWER_MAX_WIDTH);
     expect(clampDrawerWidth(700.6)).toBe(701);
+  });
+});
+
+describe("toggleMenu", () => {
+  it("раскрывает и схлопывает папку, не трогая соседние", () => {
+    const { toggleMenu } = useUi.getState();
+
+    toggleMenu("orders");
+    toggleMenu("clients");
+    expect(useUi.getState().expandedMenus).toEqual(["orders", "clients"]);
+
+    toggleMenu("orders");
+    expect(useUi.getState().expandedMenus).toEqual(["clients"]);
   });
 });

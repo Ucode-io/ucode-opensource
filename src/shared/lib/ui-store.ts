@@ -27,8 +27,22 @@ type UiState = {
    * проверяется при чтении.
    */
   tableFilters: Record<string, unknown>;
+  /**
+   * Раскрытые папки меню — по id пункта.
+   *
+   * Раскрытие живёт здесь, а не в строке меню: уровень меню грузится
+   * своим запросом, и без памяти каждый рефреш схлопывал бы дерево
+   * до корня — вместе с путём к тому пункту, в котором человек работает.
+   *
+   * Список, а не карта: закрытая папка из него уходит, и вырасти он
+   * может только до числа одновременно раскрытых. ponytail: id
+   * удалённого пункта останется в списке навсегда, но стоит он строку
+   * и ни на что не влияет.
+   */
+  expandedMenus: string[];
   setTheme: (theme: Theme) => void;
   toggleSidebar: () => void;
+  toggleMenu: (id: string) => void;
   setSidebarWidth: (width: number) => void;
   setDrawerWidth: (width: number) => void;
   setDrawerMode: (mode: DrawerMode) => void;
@@ -79,8 +93,15 @@ export const useUi = create<UiState>()(
       drawerMode: "side",
       tableLimits: {},
       tableFilters: {},
+      expandedMenus: [],
       setTheme: (theme) => set({ theme }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      toggleMenu: (id) =>
+        set((s) => ({
+          expandedMenus: s.expandedMenus.includes(id)
+            ? s.expandedMenus.filter((item) => item !== id)
+            : [...s.expandedMenus, id],
+        })),
       setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
       setDrawerWidth: (width) => set({ drawerWidth: clampDrawerWidth(width) }),
       setDrawerMode: (drawerMode) => set({ drawerMode }),
