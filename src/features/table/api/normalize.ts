@@ -108,7 +108,7 @@ function pickLabel(dto: FieldDto): string {
  */
 const LABEL_PREFIX = "label_";
 
-function pickLabels(attributes: Record<string, unknown> | undefined): Labels {
+export function pickLabels(attributes: Record<string, unknown> | undefined): Labels {
   const labels: Labels = {};
   if (!attributes) return labels;
 

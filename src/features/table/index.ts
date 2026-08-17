@@ -19,5 +19,6 @@ export {
 } from "./model/multilanguage";
 export type { FieldDraft } from "./model/field-draft";
 export { FieldEditor } from "./ui/FieldEditor";
+export { TableSettings } from "./ui/TableSettings";
 export { EMPTY_SCHEMA, SEARCH_TYPES, STATUS_GROUPS, localized } from "./model/types";
 export type { Field, FieldOption, Labels, Relation, StatusGroup, TableSchema } from "./model/types";

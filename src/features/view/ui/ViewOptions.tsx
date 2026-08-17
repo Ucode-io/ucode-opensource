@@ -31,11 +31,12 @@ import {
   filterKind,
   type Filters,
 } from "@/features/item";
-import { localized, type Field } from "@/features/table";
+import { TableSettings, localized, type Field } from "@/features/table";
 import type { DataLanguage } from "@/features/workspace";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { toast } from "@/shared/lib/toast";
 import { Icon } from "@/shared/ui/icon";
+import { CommitInput } from "@/shared/ui/commit-input";
 import { Input } from "@/shared/ui/input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
@@ -57,10 +58,11 @@ import { viewIcon } from "./view-icon";
  *   при этом не теряются, они лежат в `raw` и уходят обратно нетронутыми.
  *   Переключатель, который ничего не меняет, хуже отсутствующего.
  *
- *   Настройки самой ТАБЛИЦЫ (в старой админке они звались «General»:
- *   слаг, таблица входа, кэш, мягкое удаление) — это настройки не view,
- *   а таблицы, и живут они в конструкторе. Строка «Тип» здесь называется
- *   типом, а не «Общими», чтобы имя не было занято.
+ *   Настройки самой ТАБЛИЦЫ (в старой админке они звались «General»)
+ *   лежат отдельной страницей в секции «Данные», за строкой «Таблица»:
+ *   это настройки не view, а хранилища, и меняют они поведение всех
+ *   view сразу. Строка «Тип» здесь называется типом, а не «Общими»,
+ *   чтобы имя не было занято.
  *
  *   Настройки Timeline и Calendar — этих типов у нас нет вовсе.
  *
@@ -172,6 +174,7 @@ type PanelPage =
   | "quickFilters"
   | "fixed"
   | "fields"
+  | "table"
   | null;
 
 function Panel({
@@ -247,9 +250,10 @@ function Panel({
           {languages.map((item) => (
             <label key={item.code} className="flex flex-col gap-0.5">
               <span className="px-0.5 text-2xs text-fg-subtle">{item.nativeName}</span>
-              <NameInput
+              <CommitInput
                 value={view.names[item.code] ?? ""}
                 placeholder={typeLabel}
+                label={t("view.name")}
                 onCommit={(name) => handlers.onRename(name, item.code)}
               />
             </label>
@@ -435,6 +439,19 @@ function Panel({
     );
   }
 
+  if (page === "table") {
+    /*
+     * Настройки хранилища, а не показа: имя таблицы, кэш, мягкое
+     * удаление, вход. Действуют во всех view сразу — об этом говорит
+     * и подсказка, и то, что страница лежит в секции «Данные».
+     */
+    return (
+      <Subpage title={t("tableSettings.title")} busy={busy} onBack={back} hint={t("tableSettings.hint")}>
+        <TableSettings tableSlug={view.tableSlug} languages={languages} />
+      </Subpage>
+    );
+  }
+
   if (page === "fields") {
     /*
      * Поля ТАБЛИЦЫ, а не колонки view: строка ведёт в редактор поля
@@ -496,9 +513,10 @@ function Panel({
             </span>
             {/* Placeholder — тип, а не пустота: у большинства view имени нет,
                 и пустая строка ввода читается как «настройка сломалась». */}
-            <NameInput
+            <CommitInput
               value={view.names[language] ?? view.name}
               placeholder={typeLabel}
+              label={t("view.name")}
               onCommit={(name) => handlers.onRename(name, language)}
             />
           </div>
@@ -598,13 +616,23 @@ function Panel({
       <PopoverSeparator />
       <p className="px-2 py-1 text-2xs text-fg-subtle">{t("view.dataSection")}</p>
 
-      {/* Таблица показана, но не выбирается: слаг задаётся при создании
-          пункта меню и меняет смысл всего экрана, а не вид одного view. */}
-      <div className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-fg">
-        <Icon as={IconTable} size={16} className="shrink-0 text-fg-muted" />
-        <span className="flex-1 truncate">{t("view.source")}</span>
-        <span className="max-w-[9rem] truncate text-fg-subtle">{view.tableSlug}</span>
-      </div>
+      {/* Таблица не ВЫБИРАЕТСЯ — слаг задаётся при создании пункта меню
+          и меняет смысл всего экрана, — но настраивается: строка ведёт
+          в настройки самой таблицы. */}
+      {can.settings ? (
+        <Row
+          icon={IconTable}
+          label={t("view.source")}
+          value={view.tableSlug}
+          onClick={() => open("table")}
+        />
+      ) : (
+        <div className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-fg">
+          <Icon as={IconTable} size={16} className="shrink-0 text-fg-muted" />
+          <span className="flex-1 truncate">{t("view.source")}</span>
+          <span className="max-w-[9rem] truncate text-fg-subtle">{view.tableSlug}</span>
+        </div>
+      )}
 
       {can.settings && (
         <Row
@@ -935,45 +963,6 @@ function matching(fields: Field[], query: string, language: string): Field[] {
     (field) =>
       localized(field.labels, language, field.label).toLowerCase().includes(needle) ||
       field.slug.toLowerCase().includes(needle),
-  );
-}
-
-/**
- * Имя view. Применяется по Enter и по уходу фокуса — как правка ячейки:
- * запрос на каждую букву превратил бы переименование в десяток PUT'ов.
- */
-function NameInput({
-  value,
-  placeholder,
-  onCommit,
-}: {
-  value: string;
-  placeholder: string;
-  onCommit: (name: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [name, setName] = useState(value);
-
-  const commit = () => {
-    const next = name.trim();
-    if (next && next !== value) onCommit(next);
-  };
-
-  return (
-    <Input
-      value={name}
-      onChange={(event) => setName(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          commit();
-          event.currentTarget.blur();
-        }
-      }}
-      placeholder={placeholder}
-      aria-label={t("view.name")}
-    />
   );
 }
 
