@@ -153,12 +153,19 @@ export function useUpdateAction(tableSlug: string | undefined) {
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: ({ action, draft }: { action: Action; draft: ActionDraft }) =>
-      api.put<unknown>(`/v2/collections/${slug}/automation`, {
+    mutationFn: ({ action, draft }: { action: Action; draft: ActionDraft }) => {
+      const body = toBody(draft, slug);
+      const previous = (action.raw["attributes"] as Record<string, unknown> | undefined) ?? {};
+
+      return api.put<unknown>(`/v2/collections/${slug}/automation`, {
         ...action.raw,
-        ...toBody(draft, slug),
+        ...body,
         id: action.id,
-      }),
+        // Attributes дописываются, а не заменяются: в них лежит
+        // additional_parameters, которого мы не показываем.
+        attributes: { ...previous, ...(body["attributes"] as Record<string, unknown>) },
+      });
+    },
     onError: (error) => reportError(error, "common.saveFailed"),
     onSuccess: async () => {
       toast.success(i18n.t("actions.saved"));

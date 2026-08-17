@@ -38,6 +38,13 @@ import { ActiveCell } from "./CellEditor";
 import { fieldIcon } from "./field-icon";
 
 /**
+ * Открытые карточки в порядке появления. Верхняя — последняя.
+ * Модуль, а не контекст: знать друг о друге карточкам больше незачем,
+ * а провайдер ради одного массива — это провайдер ради одного массива.
+ */
+const DRAWER_STACK: object[] = [];
+
+/**
  * Строка целиком, сбоку от таблицы.
  *
  * Таблица показывает строку поперёк: сорок колонок по 180 пикселей,
@@ -167,14 +174,30 @@ export function ItemDrawer({
    * Escape закрывает drawer — но только когда поверх него ничего нет.
    * У открытого редактора свой Escape («отменить правку»), и одно
    * нажатие не должно делать оба действия сразу.
+   *
+   * Карточек на экране бывает две: связанная строка раскрывается
+   * поверх вкладки связи. Закрывается верхняя — иначе одно нажатие
+   * уносило бы обе, а человек хотел вернуться к списку. Отсюда стопка:
+   * слушателей два, но действует тот, кто в ней последний.
    */
   useEffect(() => {
+    const self = {};
+    DRAWER_STACK.push(self);
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !active) onClose();
+      if (event.key !== "Escape" || active) return;
+      if (DRAWER_STACK[DRAWER_STACK.length - 1] !== self) return;
+
+      onClose();
     };
 
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      const at = DRAWER_STACK.indexOf(self);
+      if (at !== -1) DRAWER_STACK.splice(at, 1);
+    };
   }, [active, onClose]);
 
   const guid = typeof row?.guid === "string" ? row.guid : undefined;

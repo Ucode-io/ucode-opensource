@@ -65,7 +65,16 @@ export function RelationView({
 }) {
   const { t } = useTranslation();
 
-  const { schema, isLoading: schemaLoading } = useTableSchema(tab.tableSlug, tab.columnIds);
+  /*
+   * Настройки связей запрашиваются по показанным колонкам. У вкладки
+   * без своих колонок показаны ВСЕ поля, поэтому и список ограничивать
+   * нечем: иначе колонка-связь во вкладке осталась бы пустой — её
+   * view_fields никто бы не загрузил.
+   */
+  const { schema, isLoading: schemaLoading } = useTableSchema(
+    tab.tableSlug,
+    tab.columnIds.length ? tab.columnIds : undefined,
+  );
   /*
    * Колонки вкладки. Пустой список — обычное дело: бэкенд заводит вкладку
    * вместе со связью и колонок в неё не кладёт. Пустая вкладка ничего
