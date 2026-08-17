@@ -9,6 +9,7 @@ import {
   orderColumns,
   sections,
   setHeading,
+  setTabColumns,
   type Layout,
 } from "./layout";
 
@@ -193,4 +194,21 @@ test("вкладка без колонки-ссылки пропускается
   ]);
 
   expect(relationTabs(next)).toEqual([]);
+});
+
+test("колонки вкладки правятся только у своей вкладки", () => {
+  const layout = {
+    tabs: [
+      { id: "s", type: "section", sections: [] },
+      { id: "t1", relation: { relation_table_slug: "orders", columns: ["a"] } },
+      { id: "t2", relation: { relation_table_slug: "clients", columns: ["b"] } },
+    ],
+  };
+
+  const next = setTabColumns(layout, "t1", ["a", "c"]);
+
+  expect(next.tabs?.[1]?.relation?.columns).toEqual(["a", "c"]);
+  // Соседняя вкладка не трогается: PUT перезаписывает раскладку целиком.
+  expect(next.tabs?.[2]?.relation?.columns).toEqual(["b"]);
+  expect(next.tabs?.[0]).toBe(layout.tabs[0]);
 });

@@ -29,18 +29,25 @@ type LayoutField = { slug?: string; attributes?: { field_hide_layout?: boolean }
 /** У секции есть имя: в старой админке она рисуется заголовком над группой полей. */
 type LayoutSection = { label?: string; fields?: LayoutField[] };
 /**
- * Связь, которую показывает вкладка. Здесь лежит всё, что нужно вкладке:
- * чужая таблица, КОЛОНКА-ссылка в ней, колонки для показа и права роли.
+ * Связь, которую показывает вкладка: чужая таблица, колонка-ссылка в ней,
+ * колонки для показа и права роли.
  *
- * `relation_field_slug` важнее всего: это настоящее имя колонки-ссылки.
- * Старая админка его не читала и собирала имя сама — `<слаг родительской
- * таблицы>_id`. Совпадает это далеко не всегда: у двух связей на одну
- * таблицу вторая колонка называется иначе, и вкладка показывала чужие
- * строки или ничего.
+ * Колонку-ссылку приходится выводить. `relation_field_slug` — настоящее
+ * её имя, но в ответе layout его чаще всего нет вовсе: приезжают только
+ * стороны связи (`table_from`, `table_to`) и `relation_table_slug`.
+ * Тогда имя собирается по правилу, по которому его завёл бэкенд:
+ * колонка в table_from называется `<слаг table_to>_id`
+ * (pkg/helper/relation.go — `fieldFrom = data.TableTo + "_id"`).
+ *
+ * Это не угадывание: другого имени у колонки быть не может — вторую
+ * связь на ту же таблицу бэкенд создать не даст, колонка уже занята.
  */
 type LayoutRelation = {
   relation_table_slug?: string;
   relation_field_slug?: string;
+  /** Стороны связи. Приезжают развёрнутыми, а не слагами. */
+  table_from?: { slug?: string };
+  table_to?: { slug?: string };
   columns?: string[];
   title?: string;
   permission?: { view_permission?: boolean; create_permission?: boolean };
@@ -153,6 +160,27 @@ export function setHeading(
 }
 
 /**
+ * Layout с новым набором колонок у вкладки связи.
+ *
+ * Колонки вкладки живут в самой раскладке (`tabs[].relation.columns`),
+ * а не в отдельном view: у вкладки нет ни своего адреса, ни своих
+ * фильтров, и заводить ради списка колонок вторую сущность незачем.
+ *
+ * Вкладка, которой в раскладке нет, возвращается как есть: значит
+ * раскладку успели перезапросить, и правка относилась к прежней.
+ */
+export function setTabColumns(layout: Layout, tabId: string, columnIds: string[]): Layout {
+  return {
+    ...layout,
+    tabs: (layout.tabs ?? []).map((tab) =>
+      tab.id === tabId && tab.relation
+        ? { ...tab, relation: { ...tab.relation, columns: columnIds } }
+        : tab,
+    ),
+  };
+}
+
+/**
  * Колонки в порядке карточки. Поля, которых в layout нет, встают в конец
  * в своём порядке — сортировка устойчивая, и ранг у всех неизвестных один.
  */
@@ -235,11 +263,29 @@ export function relationTabs(layout: Layout | undefined): RelationTab[] {
       id: tab.id ?? "",
       label: tab.label?.trim() || tab.relation?.title?.trim() || tab.relation?.relation_table_slug || "—",
       tableSlug: tab.relation?.relation_table_slug ?? "",
-      fieldSlug: tab.relation?.relation_field_slug ?? "",
+      fieldSlug: linkField(tab.relation),
       columnIds: tab.relation?.columns ?? [],
       canCreate: tab.relation?.permission?.create_permission !== false,
     }))
     .filter((tab) => tab.id && tab.tableSlug && tab.fieldSlug);
+}
+
+/**
+ * Колонка-ссылка на НАШУ запись в чужой таблице.
+ *
+ * Готовое имя, если бэкенд его прислал; иначе — по правилу создания
+ * связи: колонка в table_from называется `<слаг table_to>_id`. Наша
+ * сторона — та, которая не `relation_table_slug`.
+ */
+function linkField(relation: LayoutRelation | undefined): string {
+  if (!relation) return "";
+  if (relation.relation_field_slug) return relation.relation_field_slug;
+
+  const from = relation.table_from?.slug ?? "";
+  const to = relation.table_to?.slug ?? "";
+  const own = relation.relation_table_slug === from ? to : from;
+
+  return own ? `${own}_id` : "";
 }
 
 const SECTION = "section";

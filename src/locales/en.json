@@ -124,6 +124,7 @@
   "drawer.relationMore": "Showing {{shown}} of {{total}}",
   "drawer.resize": "Resize panel",
   "drawer.sidePeek": "Side peek",
+  "drawer.tabColumnsHint": "Tab columns. The setting is shared by everyone who opens this card.",
   "fieldForm.addOption": "Add option",
   "fieldForm.created": "Field “{{label}}” created",
   "fieldForm.deleteDescription": "The column and all of its values in every row will be gone. This cannot be undone.",

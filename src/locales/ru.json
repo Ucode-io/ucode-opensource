@@ -124,6 +124,7 @@
   "drawer.relationMore": "Показаны {{shown}} из {{total}}",
   "drawer.resize": "Изменить ширину панели",
   "drawer.sidePeek": "Сбоку",
+  "drawer.tabColumnsHint": "Колонки вкладки. Настройка общая для всех, кто открывает эту карточку.",
   "fieldForm.addOption": "Добавить вариант",
   "fieldForm.created": "Поле «{{label}}» создано",
   "fieldForm.deleteDescription": "Колонка исчезнет вместе со всеми значениями во всех строках. Отменить это будет нельзя.",

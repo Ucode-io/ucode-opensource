@@ -1,19 +1,28 @@
 import { useMemo, useState } from "react";
+import { IconEye, IconEyeOff } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import {
   DataGrid,
+  FilterBar,
   GridFooter,
   GridSkeleton,
+  ItemDrawer,
+  TableToolbar,
+  activeFilterCount,
   nextSorts,
   useCreateItem,
   useItems,
   useUpdateItem,
+  type Filters,
   type RelationTab,
   type Sort,
 } from "@/features/item";
-import { useTableSchema } from "@/features/table";
+import { localized, useTableSchema } from "@/features/table";
 import { toast } from "@/shared/lib/toast";
-import { resolveColumnIds } from "../model/columns";
+import { Icon } from "@/shared/ui/icon";
+import { Popover, PopoverItem } from "@/shared/ui/popover";
+import { ToolButton } from "@/shared/ui/tool-button";
+import { columnKey, resolveColumnIds } from "../model/columns";
 
 /**
  * Вкладка связи в карточке записи: строки ЧУЖОЙ таблицы, относящиеся
@@ -29,17 +38,18 @@ import { resolveColumnIds } from "../model/columns";
  * (item → view) замкнул бы фичи в кольцо — ViewOptions уже импортирует
  * features/item.
  *
- * Сортировка и страница — своё состояние, а не адрес: адрес занят
- * основной таблицей, и второй набор тех же параметров в нём означал бы
- * либо префиксы у каждого ключа, либо путаницу «чья это страница».
- * Ссылка открывает вкладку с начала — это и есть та цена.
+ * Сортировка, страница, поиск и отбор — своё состояние, а не адрес:
+ * адрес занят основной таблицей, и второй набор тех же параметров
+ * в нём означал бы либо префиксы у каждого ключа, либо путаницу «чья
+ * это страница». Ссылка открывает вкладку с начала — это и есть та цена.
  */
 export function RelationView({
   tab,
   parentGuid,
   locale,
   language,
-  onOpenRow,
+  canEdit,
+  onColumns,
 }: {
   tab: RelationTab;
   /** guid открытой записи. По нему отбираются связанные строки. */
@@ -48,30 +58,47 @@ export function RelationView({
   locale: string;
   /** Язык данных: подписи полей и вариантов. */
   language: string;
-  /** Раскрыть связанную строку. Нет — строки только читаются на месте. */
-  onOpenRow?: ((guid: string) => void) | undefined;
+  /** Право настраивать раскладку: без него колонки вкладки не правятся. */
+  canEdit?: boolean;
+  /** Новый набор колонок вкладки. Не задан — настройка недоступна. */
+  onColumns?: ((columnIds: string[]) => void) | undefined;
 }) {
   const { t } = useTranslation();
 
   const { schema, isLoading: schemaLoading } = useTableSchema(tab.tableSlug, tab.columnIds);
+  /*
+   * Колонки вкладки. Пустой список — обычное дело: бэкенд заводит вкладку
+   * вместе со связью и колонок в неё не кладёт. Пустая вкладка ничего
+   * не сообщает, поэтому по умолчанию показываются все поля чужой
+   * таблицы, а сузить их можно настройкой вкладки.
+   */
   const columns = useMemo(
-    () => resolveColumnIds(tab.columnIds, schema.fields),
+    () =>
+      tab.columnIds.length ? resolveColumnIds(tab.columnIds, schema.fields) : schema.fields,
     [tab.columnIds, schema.fields],
   );
 
   const [sorts, setSorts] = useState<Sort[]>([]);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(LIMIT);
+  const [search, setSearch] = useState("");
+  const [own, setOwn] = useState<Filters>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  /** Раскрытая связанная строка. Пусто — открыт список. */
+  const [openGuid, setOpenGuid] = useState<string | null>(null);
 
   /*
    * `contains` — не поиск подстроки, а форма записи: в теле get-list это
    * голое значение рядом со слагом (`{author_id: "<guid>"}`), и ровно так
    * его шлёт старая админка. Отдельной операции «равно строке» в наших
    * фильтрах нет: `equals` занят булевыми.
+   *
+   * Отбор человека домешивается сверху, но связь с открытой записью
+   * перекрыть нельзя: вкладка без неё показала бы чужую таблицу целиком.
    */
   const filters = useMemo(
-    () => ({ [tab.fieldSlug]: { op: "contains" as const, values: [parentGuid] } }),
-    [tab.fieldSlug, parentGuid],
+    () => ({ ...own, [tab.fieldSlug]: { op: "contains" as const, values: [parentGuid] } }),
+    [own, tab.fieldSlug, parentGuid],
   );
 
   const { page: rows, isLoading } = useItems(parentGuid ? tab.tableSlug : undefined, {
@@ -79,6 +106,7 @@ export function RelationView({
     page,
     sorts,
     filters,
+    search,
   });
 
   const update = useUpdateItem(tab.tableSlug);
@@ -94,8 +122,64 @@ export function RelationView({
   if (schemaLoading || isLoading) return <GridSkeleton columns={columns.length || 4} />;
   if (!columns.length) return <p className="p-6 text-sm text-fg-muted">{t("table.noColumns")}</p>;
 
+  const openRow = rows.rows.find((item) => item.guid === openGuid);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/*
+        Своя панель инструментов: у вкладки свой список, и искать в нём
+        приходится ровно так же, как в основной таблице. Переключателя
+        языка здесь нет — он один на экран и стоит над таблицей.
+      */}
+      <div className="flex h-9 shrink-0 items-center justify-end gap-0.5 border-b border-border px-2">
+        <TableToolbar
+          tableSlug={tab.tableSlug}
+          columns={columns}
+          language={language}
+          languages={[]}
+          onLanguage={() => {}}
+          sorts={sorts}
+          onSorts={(next) => {
+            setSorts(next);
+            setPage(1);
+          }}
+          filtersOpen={filtersOpen}
+          filterCount={activeFilterCount(own)}
+          onToggleFilters={() => setFiltersOpen((value) => !value)}
+          search={search}
+          onSearch={(next) => {
+            setSearch(next);
+            setPage(1);
+          }}
+        />
+
+        {onColumns && canEdit && (
+          <TabColumns
+            fields={schema.fields}
+            shown={columns}
+            language={language}
+            onChange={onColumns}
+          />
+        )}
+      </div>
+
+      {filtersOpen && (
+        <FilterBar
+          columns={columns}
+          language={language}
+          filters={own}
+          sorts={sorts}
+          onFilters={(next) => {
+            setOwn(next);
+            setPage(1);
+          }}
+          onSorts={(next) => {
+            setSorts(next);
+            setPage(1);
+          }}
+        />
+      )}
+
       <DataGrid
         tableSlug={tab.tableSlug}
         columns={columns}
@@ -111,7 +195,10 @@ export function RelationView({
           setPage(1);
         }}
         onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
-        {...(onOpenRow ? { onOpenRow } : {})}
+        // Связанная строка раскрывается на месте, поверх вкладки:
+        // у чужой таблицы своего экрана в этом меню нет, а посмотреть
+        // на неё целиком нужно чаще, чем перейти в её таблицу.
+        onOpenRow={setOpenGuid}
         /*
          * Ссылка на открытую запись проставляется сама: связанную строку
          * заводят ИЗ карточки, и заполнять её вручную значит предложить
@@ -147,7 +234,93 @@ export function RelationView({
         }}
         onDeleteSelected={() => {}}
       />
+
+      {/*
+        Карточка связанной строки. Раскладки у чужой таблицы в этом меню
+        нет, поэтому поля идут списком в порядке колонок вкладки —
+        и это честнее, чем показать её раскладку из другого меню.
+      */}
+      {openRow && (
+        <ItemDrawer
+          key={openGuid}
+          tableSlug={tab.tableSlug}
+          columns={columns}
+          row={openRow}
+          relations={schema.relations}
+          locale={locale}
+          language={language}
+          languages={[]}
+          sections={[]}
+          heading=""
+          onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
+          onClose={() => setOpenGuid(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Колонки вкладки. Хранятся в раскладке карточки, поэтому и правятся
+ * ею же — отдельного view у вкладки нет.
+ *
+ * Список полей — ВСЕ поля чужой таблицы: скрытую колонку иначе неоткуда
+ * вернуть.
+ */
+function TabColumns({
+  fields,
+  shown,
+  language,
+  onChange,
+}: {
+  fields: Parameters<typeof resolveColumnIds>[1];
+  shown: Parameters<typeof resolveColumnIds>[1];
+  language: string;
+  onChange: (columnIds: string[]) => void;
+}) {
+  const { t } = useTranslation();
+  const visible = new Set(shown.map((field) => field.id));
+
+  return (
+    <Popover
+      align="end"
+      trigger={({ open, toggle }) => (
+        <ToolButton icon={IconEye} label={t("view.columns")} open={open} onClick={toggle} />
+      )}
+    >
+      {() => (
+        <div className="max-h-72 w-64 overflow-y-auto">
+          <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.tabColumnsHint")}</p>
+
+          {fields.map((field) => {
+            const on = visible.has(field.id);
+
+            return (
+              <PopoverItem
+                key={field.id}
+                active={on}
+                icon={
+                  <Icon
+                    as={on ? IconEye : IconEyeOff}
+                    size={16}
+                    className={`shrink-0 ${on ? "" : "text-fg-subtle"}`}
+                  />
+                }
+                onClick={() =>
+                  onChange(
+                    on
+                      ? shown.filter((item) => item.id !== field.id).map(columnKey)
+                      : [...shown, field].map(columnKey),
+                  )
+                }
+              >
+                {localized(field.labels, language, field.label)}
+              </PopoverItem>
+            );
+          })}
+        </div>
+      )}
+    </Popover>
   );
 }
 

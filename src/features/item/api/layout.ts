@@ -12,6 +12,7 @@ import {
   relationTabs,
   sections,
   setHeading,
+  setTabColumns,
   type Layout,
 } from "../model/layout";
 
@@ -93,6 +94,10 @@ export function useDrawerLayout({
      */
     setHeading: (slug: string, variants: Record<string, string> | null) => {
       if (query.data) update.mutate(setHeading(query.data, slug, variants));
+    },
+    /** Новый набор колонок у вкладки связи — тем же PUT раскладки. */
+    setTabColumns: (tabId: string, columnIds: string[]) => {
+      if (query.data) update.mutate(setTabColumns(query.data, tabId, columnIds));
     },
   };
 }

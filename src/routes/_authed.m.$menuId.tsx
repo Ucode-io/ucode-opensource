@@ -703,6 +703,10 @@ function MenuPage() {
                 parentGuid={search.item}
                 locale={i18n.language}
                 language={language}
+                canEdit={can.settings}
+                // Колонки вкладки лежат в раскладке карточки, и правит
+                // их тот же PUT, что и порядок полей.
+                onColumns={(columnIds) => drawerLayout.setTabColumns(relationTab.id, columnIds)}
               />
             )
           }

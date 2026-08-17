@@ -124,6 +124,7 @@
   "drawer.relationMore": "{{total}} tadan {{shown}} tasi",
   "drawer.resize": "Panel kengligini o'zgartirish",
   "drawer.sidePeek": "Yon panel",
+  "drawer.tabColumnsHint": "Ilova ustunlari. Sozlama bu kartani ochadigan hamma uchun umumiy.",
   "fieldForm.addOption": "Variant qo‘shish",
   "fieldForm.created": "«{{label}}» maydoni yaratildi",
   "fieldForm.deleteDescription": "Ustun va uning barcha qatorlardagi qiymatlari yo‘qoladi. Buni ortga qaytarib bo‘lmaydi.",
