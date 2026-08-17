@@ -250,6 +250,7 @@
   "table.deleteDescription": "{{count}} rows will be deleted permanently. This cannot be undone.",
   "table.deleteSelected": "Delete ({{count}})",
   "table.deleteTitle": "Delete selected rows?",
+  "table.fillRequired": "{{count}} field(s) left to fill",
   "table.filter": "Filter",
   "table.filterActions": "Filter actions",
   "table.filterChoose": "Select one or more options…",

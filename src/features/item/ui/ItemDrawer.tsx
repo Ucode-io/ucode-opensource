@@ -80,6 +80,8 @@ export function ItemDrawer({
   onLanguage,
   onPdf,
   actions,
+  titlePlaceholder,
+  footer,
   onEdit,
   onSettings,
   onReorder,
@@ -126,6 +128,18 @@ export function ItemDrawer({
    * о функциях проекта знать незачем.
    */
   actions?: ReactNode;
+  /**
+   * Чем подписать карточку, у которой заголовка нет: у новой записи
+   * это «Новая запись», а не «Без заголовка» — заголовок ей ещё
+   * неоткуда взять.
+   */
+  titlePlaceholder?: string;
+  /**
+   * Полоса внизу карточки: у новой записи это «Создать». У открытой
+   * строки её нет вовсе — правка ячейки уезжает сразу, и кнопка
+   * «сохранить» обещала бы, что без неё ничего не сохранилось.
+   */
+  footer?: ReactNode;
   onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
   onSettings?: ((field: Field, anchor: DOMRect) => void) | undefined;
   /**
@@ -394,6 +408,7 @@ export function ItemDrawer({
               candidates={rest}
               language={language}
               codes={codes}
+              placeholder={titlePlaceholder ?? t("drawer.noHeading")}
               onPick={onHeading}
               onOpen={open}
             >
@@ -524,6 +539,13 @@ export function ItemDrawer({
           </div>
         )}
 
+        {/* Полоса действий внизу: у новой записи — «Создать». */}
+        {footer && (
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-4 py-3">
+            {footer}
+          </div>
+        )}
+
         {active && activeField && row && (
           <ActiveCell
             key={active.slug}
@@ -596,6 +618,7 @@ function Heading({
   candidates,
   language,
   codes,
+  placeholder,
   children,
   onPick,
   onOpen,
@@ -605,6 +628,8 @@ function Heading({
   /** Язык ДАННЫХ: и подписи полей, и выбранный языковой вариант. */
   language: string;
   codes: string[];
+  /** Что показать вместо значения. У новой записи это её имя. */
+  placeholder: string;
   children: ReactNode;
   onPick: ((slug: string, variants: Record<string, string> | null) => void) | undefined;
   onOpen: (field: Field, element: HTMLElement) => void;
@@ -685,7 +710,7 @@ function Heading({
         </button>
       ) : (
         <span className="flex-1 px-2 py-1.5 text-2xl leading-8 font-semibold text-fg-subtle">
-          {t("drawer.noHeading")}
+          {placeholder}
         </span>
       )}
 

@@ -250,6 +250,7 @@
   "table.deleteDescription": "Строк будет удалено безвозвратно: {{count}}. Отменить это нельзя.",
   "table.deleteSelected": "Удалить ({{count}})",
   "table.deleteTitle": "Удалить отмеченные строки?",
+  "table.fillRequired": "Не заполнено полей: {{count}}",
   "table.filter": "Фильтр",
   "table.filterActions": "Действия с фильтром",
   "table.filterChoose": "Выберите один или несколько…",

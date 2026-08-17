@@ -28,8 +28,10 @@ import {
   filtersSchema,
   fromConditions,
   parseFilters,
+  rowErrors,
   toConditions,
   type Filters,
+  type Item,
 } from "@/features/item";
 import { useTablePermission } from "@/features/auth";
 import { IMPLEMENTED_TYPES, SidebarToggleButton, useMenu } from "@/features/sidebar";
@@ -326,6 +328,13 @@ function MenuPage() {
     search.filtersOpen ?? (activeFilterCount(filters) > 0 || sorts.length > 0);
 
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  /*
+   * Новая запись, которую заполняют в карточке. Своё состояние, а не
+   * адрес: полузаполненный черновик в ссылке бессмыслен — переслать
+   * его нельзя, а восстановить нечем.
+   */
+  const [draft, setDraft] = useState<Item | null>(null);
+  const [showErrors, setShowErrors] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const remove = useDeleteItems(view?.tableSlug);
   const update = useUpdateItem(view?.tableSlug);
@@ -376,6 +385,12 @@ function MenuPage() {
     if (field) updateField.mutate({ field, draft, language });
     else createField.mutate({ draft, language });
   };
+
+  /** Незаполненные обязательные и непрошедшие проверку поля черновика. */
+  const draftErrors = useMemo(
+    () => (draft ? rowErrors(drawerColumns, draft) : new Map()),
+    [draft, drawerColumns],
+  );
 
   const supported = menu ? IMPLEMENTED_TYPES.has(menu.type) : true;
 
@@ -430,8 +445,6 @@ function MenuPage() {
                   tableSlug={view.tableSlug}
                   columns={columns}
                   language={language}
-                  languages={languages}
-                  onLanguage={setLanguage}
                   sorts={sorts}
                   onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
                   filtersOpen={filtersVisible}
@@ -456,6 +469,23 @@ function MenuPage() {
                   selected={[...selected]}
                   canEdit={can.settings}
                 />
+              )}
+
+              {/* «Новая запись» карточкой, а не строкой в таблице:
+                  у таблицы в сорок колонок заполнять запись вбок —
+                  это горизонтальная прокрутка на каждое поле. Строкой
+                  она по-прежнему заводится тоже, в подвале таблицы. */}
+              {supportedView && can.write && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowErrors(false);
+                    setDraft({ guid: crypto.randomUUID() });
+                  }}
+                  className="mr-1 h-7 shrink-0 rounded-md bg-accent-solid px-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
+                >
+                  {t("table.addRow")}
+                </button>
               )}
 
               {/* Настройки — последними в ряду: это не действие над строками,
@@ -730,6 +760,74 @@ function MenuPage() {
           // кто правит настройки view.
           {...(can.settings ? { onHeading: drawerLayout.setHeading } : {})}
           onClose={() => setSearch({ item: undefined, tab: undefined })}
+        />
+      )}
+
+      {/*
+        Новая запись в карточке: те же поля и тот же порядок, что
+        у открытой строки, — но пустые, а правки копятся в черновике
+        и уезжают одним запросом по кнопке.
+      */}
+      {draft && view && (
+        <ItemDrawer
+          tableSlug={view.tableSlug}
+          columns={drawerColumns}
+          row={draft}
+          relations={schema.relations}
+          locale={i18n.language}
+          language={language}
+          languages={languages}
+          onLanguage={setLanguage}
+          sections={drawerLayout.sections}
+          heading=""
+          titlePlaceholder={t("table.addRow")}
+          onEdit={(_guid, slug, value) =>
+            setDraft((current) => (current ? { ...current, [slug]: value } : current))
+          }
+          footer={
+            <>
+              {showErrors && draftErrors.size > 0 && (
+                <span className="mr-auto text-xs text-danger">
+                  {t("table.fillRequired", { count: draftErrors.size })}
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setDraft(null)}
+                className="h-8 rounded-md px-3 text-sm text-fg-muted transition-colors hover:bg-surface-hover"
+              >
+                {t("action.cancel")}
+              </button>
+
+              <button
+                type="button"
+                disabled={create.isPending}
+                onClick={() => {
+                  /*
+                   * Проверка перед отправкой: колонка с NOT NULL ответит
+                   * пятисоткой с текстом драйвера, а регулярное выражение
+                   * бэкенд не смотрит вовсе.
+                   */
+                  if (draftErrors.size) {
+                    setShowErrors(true);
+                    return;
+                  }
+
+                  create.mutate(draft, {
+                    onSuccess: () => {
+                      setDraft(null);
+                      toast.success(t("table.rowCreated"));
+                    },
+                  });
+                }}
+                className="h-8 rounded-md bg-accent-solid px-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {t("action.create")}
+              </button>
+            </>
+          }
+          onClose={() => setDraft(null)}
         />
       )}
 

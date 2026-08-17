@@ -135,18 +135,13 @@ export function RelationView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/*
-        Своя панель инструментов: у вкладки свой список, и искать в нём
-        приходится ровно так же, как в основной таблице. Переключателя
-        языка здесь нет — он один на экран и стоит над таблицей.
-      */}
+      {/* Своя панель инструментов: у вкладки свой список, и искать
+          в нём приходится ровно так же, как в основной таблице. */}
       <div className="flex h-9 shrink-0 items-center justify-end gap-0.5 border-b border-border px-2">
         <TableToolbar
           tableSlug={tab.tableSlug}
           columns={columns}
           language={language}
-          languages={[]}
-          onLanguage={() => {}}
           sorts={sorts}
           onSorts={(next) => {
             setSorts(next);

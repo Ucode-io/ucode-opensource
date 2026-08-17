@@ -250,6 +250,7 @@
   "table.deleteDescription": "{{count}} ta qator butunlay oʻchiriladi. Buni bekor qilib boʻlmaydi.",
   "table.deleteSelected": "Oʻchirish ({{count}})",
   "table.deleteTitle": "Tanlangan qatorlar oʻchirilsinmi?",
+  "table.fillRequired": "To'ldirilmagan maydonlar: {{count}}",
   "table.filter": "Filtr",
   "table.filterActions": "Filtr amallari",
   "table.filterChoose": "Bir yoki bir nechtasini tanlang…",

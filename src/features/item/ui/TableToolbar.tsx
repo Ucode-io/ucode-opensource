@@ -16,7 +16,6 @@ import {
   type Field,
 } from "@/features/table";
 import { Icon } from "@/shared/ui/icon";
-import { LanguageTabs } from "@/shared/ui/language-tabs";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
 import type { Sort } from "../model/query";
@@ -37,8 +36,6 @@ export function TableToolbar({
   tableSlug,
   columns,
   language,
-  languages,
-  onLanguage,
   sorts,
   onSorts,
   filtersOpen,
@@ -50,9 +47,6 @@ export function TableToolbar({
   tableSlug: string;
   columns: Field[];
   language: string;
-  /** Языки ДАННЫХ проекта. Меньше двух — переключателя нет. */
-  languages: { code: string; nativeName: string }[];
-  onLanguage: (code: string) => void;
   sorts: Sort[];
   onSorts: (sorts: Sort[]) => void;
   filtersOpen: boolean;
@@ -65,12 +59,6 @@ export function TableToolbar({
 
   return (
     <div className="flex items-center gap-0.5">
-      {/* Язык ДАННЫХ, а не интерфейса: он решает, какой языковой вариант
-          мультиязычной колонки показан и на каком языке подписаны поля
-          и варианты выбора. Стоит здесь же, потому что замечают это
-          именно в таблице. */}
-      <LanguageTabs languages={languages} value={language} onChange={onLanguage} />
-
       <SearchBox
         value={search}
         onChange={onSearch}

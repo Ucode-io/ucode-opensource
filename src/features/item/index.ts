@@ -22,6 +22,8 @@ export {
 } from "./model/query";
 export type { Filter, FilterOperator, Filters, ItemsQuery, Sort, SortDirection } from "./model/query";
 export type { Item } from "./model/types";
+export { rowErrors } from "./model/validate";
+export type { CellError } from "./model/validate";
 export { DataGrid, GridSkeleton } from "./ui/DataGrid";
 export { fieldIcon } from "./ui/field-icon";
 export { FilterBar } from "./ui/FilterBar";
