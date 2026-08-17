@@ -34,6 +34,21 @@ export const keys = {
     /** Языки данных проекта — не локали интерфейса, см. features/workspace. */
     languages: (projectId: string) => [...keys.workspace.all, "languages", projectId] as const,
   },
+  /**
+   * Настройки: профиль человека и его сессии, настройки проекта
+   * и справочники (языки, часовые пояса). Профиль живёт на сервере
+   * авторизации, проект — на шлюзе; ключ один, потому что показывают
+   * их в одном окне.
+   */
+  settings: {
+    all: ["settings"] as const,
+    profile: (userId: string) => [...keys.settings.all, "profile", userId] as const,
+    sessions: (userId: string) => [...keys.settings.all, "sessions", userId] as const,
+    project: (projectId: string) => [...keys.settings.all, "project", projectId] as const,
+    /** Справочник: LANGUAGE, TIMEZONE, CURRENCY. Общий на проект. */
+    options: (projectId: string, type: string) =>
+      [...keys.settings.all, "options", projectId, type] as const,
+  },
   icons: {
     all: ["icons"] as const,
     search: (query: string) => [...keys.icons.all, query] as const,

@@ -71,6 +71,15 @@ export const session = {
     return localStorage.getItem(USER_KEY) || readClaim(accessToken, "user_id");
   },
 
+  /**
+   * Тип клиента текущего входа. Живёт только в токене: в ответе логина
+   * его нет, а ручки профиля без него отвечают «client type id is an
+   * invalid uuid» (auth_service, user_v2.go:191).
+   */
+  getClientTypeId(): string {
+    return readClaim(accessToken, "client_type_id");
+  },
+
   getProfile(): Profile | null {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (!raw) return null;

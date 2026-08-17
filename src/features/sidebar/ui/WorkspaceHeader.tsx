@@ -8,8 +8,9 @@ import {
   IconSettings,
   IconSun,
 } from "@tabler/icons-react";
-import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SettingsDialog } from "@/features/settings";
 import { WorkspaceSwitcher } from "@/features/workspace";
 import { useSession } from "@/shared/api/use-session";
 import { LOCALES, setLocale, type Locale } from "@/shared/lib/i18n";
@@ -25,6 +26,11 @@ import { LogoutButton } from "./LogoutButton";
  * роль и название проекта. Отдельного запроса за профилем нет.
  */
 export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
+  /*
+   * Окно настроек живёт здесь, а не в поповере: поповер закрывается
+   * щелчком по своей же кнопке, и окно исчезло бы вместе с ним.
+   */
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { t } = useTranslation();
   const profile = useSession().getProfile();
 
@@ -32,6 +38,7 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
   const letter = (title[0] ?? "U").toUpperCase();
 
   return (
+    <>
     <Popover
       trigger={({ open, toggle }) => (
         <div className="flex items-center gap-1">
@@ -81,14 +88,19 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
             </div>
 
             <div className="flex gap-1 px-1 pb-1">
-              <Link
-                to="/settings"
-                onClick={close}
+              {/* Настройки открываются окном, а не страницей: человек
+                  возвращается туда же, откуда пришёл. */}
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  setSettingsOpen(true);
+                }}
                 className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-sm text-fg transition-colors hover:bg-surface-hover"
               >
                 <Icon as={IconSettings} size={14} />
                 {t("workspace.settings")}
-              </Link>
+              </button>
 
               <LanguageButton />
             </div>
@@ -107,6 +119,9 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
         </div>
       )}
     </Popover>
+
+    {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+    </>
   );
 }
 
