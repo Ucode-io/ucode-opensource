@@ -4,6 +4,7 @@ import {
   IconChevronRight,
   IconDotsVertical,
   IconEye,
+  IconExternalLink,
   IconEyeOff,
   IconFileExport,
   IconFileImport,
@@ -41,6 +42,7 @@ import { Input } from "@/shared/ui/input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
 import { columnKey, moveBefore } from "../model/columns";
+import { hasUrl, type UrlTemplate } from "../model/url-template";
 import { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES, viewName, type View } from "../model/types";
 import { viewIcon } from "./view-icon";
 
@@ -87,6 +89,12 @@ export type ViewOptionsHandlers = {
   onFixedColumns: (columnIds: string[]) => void;
   /** Отбор, с которым таблица открывается. Пустой — отбора нет. */
   onDefaultFilters: (filters: Filters) => void;
+  /** Куда уводит щелчок по строке. Пустой адрес — открывается карточка. */
+  onNavigate: (template: UrlTemplate) => void;
+  /** Куда ведёт «новая запись». Пустой адрес — строка заводится в таблице. */
+  onObjectUrl: (template: UrlTemplate) => void;
+  /** Адрес PDF записи. Пусто — кнопки в карточке нет. */
+  onPdfUrl: (url: string) => void;
   /** Настроить поле: открывает ту же панель, что и меню колонки. */
   onEditField: (field: Field, anchor: DOMRect) => void;
   /** Удалить поле из ТАБЛИЦЫ, а не из view. Спрашивает подтверждение вызывающий. */
@@ -175,6 +183,7 @@ type PanelPage =
   | "fixed"
   | "fields"
   | "table"
+  | "navigation"
   | null;
 
 function Panel({
@@ -452,6 +461,49 @@ function Panel({
     );
   }
 
+  if (page === "navigation") {
+    /*
+     * Адреса, которыми экран подменяется чужим: щелчок по строке уводит
+     * на страницу проекта, «новая запись» — на его же форму, а PDF
+     * открывается кнопкой в карточке.
+     *
+     * `{{$слаг}}` в адресе подставляется значением поля строки — та же
+     * запись, что и в старой админке, чтобы уже настроенные адреса
+     * работали как работали.
+     */
+    return (
+      <Subpage title={t("view.navigation")} busy={busy} onBack={back} hint={t("view.navigationHint")}>
+        <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto p-1">
+          <UrlSetting
+            label={t("view.navigateUrl")}
+            hint={t("view.navigateUrlHint")}
+            template={view.navigate}
+            onChange={handlers.onNavigate}
+          />
+
+          <UrlSetting
+            label={t("view.objectUrl")}
+            hint={t("view.objectUrlHint")}
+            template={view.objectUrl}
+            onChange={handlers.onObjectUrl}
+          />
+
+          <label className="flex flex-col gap-0.5">
+            <span className="px-0.5 text-2xs text-fg-muted">{t("view.pdfUrl")}</span>
+            <CommitInput
+              value={view.pdfUrl}
+              placeholder={URL_PLACEHOLDER}
+              label={t("view.pdfUrl")}
+              allowEmpty
+              onCommit={handlers.onPdfUrl}
+            />
+            <span className="px-0.5 text-2xs text-fg-subtle">{t("view.pdfUrlHint")}</span>
+          </label>
+        </div>
+      </Subpage>
+    );
+  }
+
   if (page === "fields") {
     /*
      * Поля ТАБЛИЦЫ, а не колонки view: строка ведёт в редактор поля
@@ -500,6 +552,9 @@ function Panel({
 
   const title = viewName(view, language);
   const defaultCount = activeFilterCount(defaultFilters);
+  /* Сколько адресов задано: строка настроек молчит, пока их нет. */
+  const navigationCount = [hasUrl(view.navigate), hasUrl(view.objectUrl), Boolean(view.pdfUrl)]
+    .filter(Boolean).length;
 
   return (
     <div className="w-80">
@@ -532,6 +587,12 @@ function Panel({
             label={t("view.viewSettings")}
             value={title}
             onClick={() => open("view")}
+          />
+          <Row
+            icon={IconExternalLink}
+            label={t("view.navigation")}
+            value={navigationCount ? String(navigationCount) : ""}
+            onClick={() => open("navigation")}
           />
 
           <PopoverSeparator />
@@ -1035,4 +1096,91 @@ function toggleColumn(view: View, field: Field, visible: boolean): string[] {
   const rest = view.columnIds.filter((id) => !keys.has(id));
 
   return visible ? [...rest, columnKey(field)] : rest;
+}
+
+/** Плейсхолдер один на все три адреса: запись подстановки у них общая. */
+const URL_PLACEHOLDER = "/order/{{$guid}}";
+
+/**
+ * Адрес и его параметры запроса.
+ *
+ * Параметры — отдельным списком, а не строкой после «?», потому что
+ * так их хранит бэкенд и так их правит старая админка: ключ и значение
+ * порознь, оба — шаблоны.
+ *
+ * Правка уходит целиком: адрес и параметры — одно значение в attributes,
+ * и отправлять их по одному значило бы дважды перезаписывать соседа.
+ */
+function UrlSetting({
+  label,
+  hint,
+  template,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  template: UrlTemplate;
+  onChange: (template: UrlTemplate) => void;
+}) {
+  const { t } = useTranslation();
+
+  const setParam = (index: number, patch: Partial<{ key: string; value: string }>) =>
+    onChange({
+      ...template,
+      params: template.params.map((param, at) => (at === index ? { ...param, ...patch } : param)),
+    });
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="px-0.5 text-2xs text-fg-muted">{label}</span>
+
+      {/* Пустой адрес — это значение: «открывать карточку, как обычно». */}
+      <CommitInput
+        value={template.url}
+        placeholder={URL_PLACEHOLDER}
+        label={label}
+        allowEmpty
+        onCommit={(url) => onChange({ ...template, url })}
+      />
+
+      <span className="px-0.5 text-2xs text-fg-subtle">{hint}</span>
+
+      {template.params.map((param, index) => (
+        <div key={index} className="flex items-center gap-1">
+          <CommitInput
+            value={param.key}
+            placeholder={t("view.paramKey")}
+            label={t("view.paramKey")}
+            onCommit={(key) => setParam(index, { key })}
+          />
+          <CommitInput
+            value={param.value}
+            placeholder={t("view.paramValue")}
+            label={t("view.paramValue")}
+            allowEmpty
+            onCommit={(value) => setParam(index, { value })}
+          />
+
+          <button
+            type="button"
+            onClick={() =>
+              onChange({ ...template, params: template.params.filter((_, at) => at !== index) })
+            }
+            aria-label={t("action.delete")}
+            title={t("action.delete")}
+            className="grid size-7 shrink-0 place-items-center rounded text-fg-subtle transition-colors hover:bg-danger-subtle hover:text-danger"
+          >
+            <Icon as={IconTrash} size={14} />
+          </button>
+        </div>
+      ))}
+
+      {/* Пустая строка добавляется на месте и уезжает только заполненной:
+          параметр без ключа отбрасывается при записи. */}
+      <BulkButton
+        label={t("view.addParam")}
+        onClick={() => onChange({ ...template, params: [...template.params, { key: "", value: "" }] })}
+      />
+    </div>
+  );
 }

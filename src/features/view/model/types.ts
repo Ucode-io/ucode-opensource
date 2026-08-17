@@ -1,3 +1,5 @@
+import type { UrlTemplate } from "./url-template";
+
 /**
  * View — как показан набор строк: таблица, доска, календарь. Набор view
  * принадлежит пункту меню (GET /v3/menus/{menuId}/views), а не таблице:
@@ -85,6 +87,18 @@ export type View = {
    * Разбирается в фильтры один раз, в api; см. fromConditions.
    */
   defaultFilters: Record<string, unknown>;
+  /**
+   * Куда уводит щелчок по строке (`attributes.navigate`). Пустой адрес —
+   * открывается карточка, как обычно.
+   */
+  navigate: UrlTemplate;
+  /**
+   * Куда ведёт «новая запись» (`attributes.url_object`). Пустой адрес —
+   * строка заводится на месте, в таблице.
+   */
+  objectUrl: UrlTemplate;
+  /** Адрес PDF записи (`attributes.pdf_url`). Пусто — кнопки нет. */
+  pdfUrl: string;
   /**
    * View, как его отдал бэкенд. Нужен для записи: PUT перезаписывает
    * строку целиком, причём calendar_from_slug, calendar_to_slug,

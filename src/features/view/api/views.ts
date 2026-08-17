@@ -6,6 +6,7 @@ import i18n from "@/shared/lib/i18n";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError, toast } from "@/shared/lib/toast";
 import type { View } from "../model/types";
+import { toUrlTemplate, type UrlTemplate } from "../model/url-template";
 
 /** Сырой view. Наружу не выходит. */
 type ViewDto = {
@@ -215,6 +216,12 @@ export type ViewEdit = {
   fixedColumns?: string[];
   /** Отбор по умолчанию: карта «слаг → условие», как её ждёт get-list. */
   defaultFilters?: Record<string, unknown>;
+  /** Адрес, куда уводит щелчок по строке. */
+  navigate?: UrlTemplate;
+  /** Адрес, куда ведёт «новая запись». */
+  objectUrl?: UrlTemplate;
+  /** Адрес PDF записи. */
+  pdfUrl?: string;
 };
 
 /**
@@ -239,6 +246,9 @@ export function toUpdateBody({
   quickFilters,
   fixedColumns,
   defaultFilters,
+  navigate,
+  objectUrl,
+  pdfUrl,
 }: ViewEdit): Record<string, unknown> {
   const raw = view.raw;
   const trimmed = name?.trim();
@@ -261,6 +271,15 @@ export function toUpdateBody({
       ? {}
       : { fixedColumns: Object.fromEntries(fixedColumns.map((id) => [id, true])) }),
     ...(defaultFilters === undefined ? {} : { default_filters: defaultFilters }),
+    /*
+     * Адреса пишутся объектом `{url, params}` — так их читает и пишет
+     * старая админка. Пустой адрес отправляется тоже: иначе стёртый
+     * руками адрес возвращался бы из прежних attributes (тело собирается
+     * поверх них), и щелчок по строке продолжал бы уводить со страницы.
+     */
+    ...(navigate === undefined ? {} : { navigate: toUrlAttribute(navigate) }),
+    ...(objectUrl === undefined ? {} : { url_object: toUrlAttribute(objectUrl) }),
+    ...(pdfUrl === undefined ? {} : { pdf_url: pdfUrl.trim() }),
   };
 
   return {
@@ -269,6 +288,19 @@ export function toUpdateBody({
     attributes,
     ...(trimmed === undefined ? {} : { name: trimmed }),
     ...(type === undefined ? {} : { type }),
+  };
+}
+
+/**
+ * Адрес → attributes. Параметры без ключа отбрасываются: это строки,
+ * которые добавили и не заполнили.
+ */
+function toUrlAttribute(template: UrlTemplate): Record<string, unknown> {
+  return {
+    url: template.url.trim(),
+    params: template.params
+      .filter((param) => param.key.trim())
+      .map((param) => ({ key: param.key.trim(), value: param.value.trim() })),
   };
 }
 
@@ -331,6 +363,9 @@ export function toView(dto: ViewDto): View {
     columnIds: dto.columns ?? [],
     fixedColumnIds: toFixedColumnIds(dto.attributes),
     defaultFilters: toDefaultFilters(dto.attributes),
+    navigate: toUrlTemplate(dto.attributes?.["navigate"]),
+    objectUrl: toUrlTemplate(dto.attributes?.["url_object"]),
+    pdfUrl: typeof dto.attributes?.["pdf_url"] === "string" ? dto.attributes["pdf_url"] : "",
     raw: { ...dto },
   };
 }

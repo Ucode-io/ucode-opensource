@@ -135,6 +135,7 @@ export function DataGrid({
   onOpenRow,
   onEdit,
   onCreate,
+  onAddRow,
   creating,
 }: {
   /** Слаг таблицы: ячейка-связь пишет не только в свою строку. */
@@ -160,6 +161,12 @@ export function DataGrid({
   columnActions?: ColumnActions;
   /** Раскрыть строку целиком. Нет — кнопка в строке не появляется. */
   onOpenRow?: (guid: string) => void;
+  /**
+   * Своё действие вместо строки-черновика: админ мог задать view адрес
+   * собственной формы создания (attributes.url_object). Не задан —
+   * строка заводится на месте.
+   */
+  onAddRow?: (() => void) | undefined;
   /** Без обработчика таблица только читается: ячейка раскрывается, но не правится. */
   onEdit?: (guid: string, slug: string, value: unknown) => void;
   /**
@@ -629,7 +636,7 @@ export function DataGrid({
               <td colSpan={span} className="border-b border-border p-0">
                 <button
                   type="button"
-                  onClick={startDraft}
+                  onClick={onAddRow ?? startDraft}
                   /* Кнопка липнет к левому краю: у таблицы шире экрана
                      она иначе уезжает из виду вместе с первой колонкой. */
                   className="sticky left-0 flex h-row items-center gap-1.5 px-3 text-sm text-fg-subtle transition-colors group-hover/add:text-fg"

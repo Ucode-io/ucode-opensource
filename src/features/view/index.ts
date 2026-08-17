@@ -4,6 +4,8 @@ export { columnKey, pickView, resolveColumnIds, resolveColumns, tabViews } from 
 export { RelationView } from "./ui/RelationView";
 export { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES, isTabView, viewName } from "./model/types";
 export type { View, ViewType } from "./model/types";
+export { EMPTY_URL_TEMPLATE, fillTemplate, fillUrl, hasUrl, isExternal } from "./model/url-template";
+export type { UrlTemplate } from "./model/url-template";
 export { ExcelImportDialog } from "./ui/ExcelImportDialog";
 export { ViewCreateButton } from "./ui/ViewCreateButton";
 export { ViewOptions } from "./ui/ViewOptions";

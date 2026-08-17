@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import {
   IconCheck,
   IconChevronsRight,
+  IconFileTypePdf,
   IconGripVertical,
   IconHeading,
   IconLayoutSidebarRightExpand,
@@ -70,6 +71,7 @@ export function ItemDrawer({
   onTab,
   tabContent,
   onLanguage,
+  onPdf,
   onEdit,
   onSettings,
   onReorder,
@@ -105,6 +107,11 @@ export function ItemDrawer({
   tabContent?: ReactNode;
   /** Сменить язык ДАННЫХ. Не задан — переключателя нет. */
   onLanguage?: ((code: string) => void) | undefined;
+  /**
+   * Открыть PDF записи. Адрес задаёт админ в настройках view
+   * (attributes.pdf_url); не задан — кнопки нет.
+   */
+  onPdf?: (() => void) | undefined;
   onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
   onSettings?: ((field: Field, anchor: DOMRect) => void) | undefined;
   /**
@@ -276,6 +283,11 @@ export function ItemDrawer({
             label={t("action.close")}
             onClick={onClose}
           />
+
+          {/* PDF записи: адрес задан в настройках view, и печатная форма
+              нужна прямо здесь — с открытой карточкой, а не после
+              возврата в таблицу. */}
+          {onPdf && <IconButton icon={IconFileTypePdf} label={t("drawer.openPdf")} onClick={onPdf} />}
 
           <Popover
             trigger={({ toggle }) => (

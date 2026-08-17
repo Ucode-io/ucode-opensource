@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { Field } from "@/features/table";
 import { moveBefore, pickView, resolveColumns, tabViews } from "./columns";
+import { EMPTY_URL_TEMPLATE } from "./url-template";
 import type { View } from "./types";
 
 const field = (id: string, over: Partial<Field> = {}): Field => ({
@@ -34,6 +35,9 @@ const view = (columnIds: string[]): View => ({
   columnIds,
   fixedColumnIds: [],
   defaultFilters: {},
+  navigate: EMPTY_URL_TEMPLATE,
+  objectUrl: EMPTY_URL_TEMPLATE,
+  pdfUrl: "",
   raw: { columns: columnIds },
 });
 

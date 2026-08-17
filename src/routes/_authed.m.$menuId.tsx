@@ -65,6 +65,10 @@ import {
   useExportExcel,
   useMenuViews,
   useUpdateView,
+  fillTemplate,
+  fillUrl,
+  hasUrl,
+  isExternal,
   type View,
 } from "@/features/view";
 import { useDataLanguages } from "@/features/workspace";
@@ -466,6 +470,9 @@ function MenuPage() {
                   onFixedColumns: (fixedColumns) => updateView.mutate({ view, fixedColumns }),
                   onDefaultFilters: (next) =>
                     updateView.mutate({ view, defaultFilters: toConditions(next) }),
+                  onNavigate: (navigate) => updateView.mutate({ view, navigate }),
+                  onObjectUrl: (objectUrl) => updateView.mutate({ view, objectUrl }),
+                  onPdfUrl: (pdfUrl) => updateView.mutate({ view, pdfUrl }),
                   onEditField: (field, anchor) => setFieldPanel({ field, anchor }),
                   // Тот же диалог подтверждения, что и у меню колонки:
                   // удаление поля сносит его во всех view вместе с данными.
@@ -593,9 +600,28 @@ function MenuPage() {
                 })
               }
               creating={create.isPending}
-              // Вкладка связи сбрасывается вместе со строкой: у другой
-              // записи набор вкладок тот же, а открытая — уже не та.
-              onOpenRow={(guid) => setSearch({ item: guid, tab: undefined })}
+              /*
+               * «Новая запись» ведёт на свою форму проекта, когда админ
+               * задал её адрес (attributes.url_object). Иначе строка
+               * заводится на месте, в таблице.
+               */
+              {...(hasUrl(view.objectUrl)
+                ? { onAddRow: () => openUrl(fillUrl(view.objectUrl, {})) }
+                : {})}
+              /*
+               * Щелчок по строке открывает карточку — если админ не задал
+               * своего адреса. Задал (attributes.navigate) — уводим туда:
+               * у проекта своя страница заказа, и карточка ей не замена.
+               *
+               * Вкладка связи сбрасывается вместе со строкой: у другой
+               * записи набор вкладок тот же, а открытая — уже не та.
+               */
+              onOpenRow={(guid) => {
+                const row = rows.rows.find((item) => item.guid === guid);
+                if (row && openRowUrl(view, row)) return;
+
+                setSearch({ item: guid, tab: undefined });
+              }}
               onAddField={(anchor) => setFieldPanel({ field: null, anchor })}
               columnActions={{
                 // Переименование — единственная правка схемы, которую
@@ -645,6 +671,10 @@ function MenuPage() {
           language={language}
           languages={languages}
           onLanguage={setLanguage}
+          /* Печатная форма записи, если админ задал её адрес. */
+          {...(view.pdfUrl && drawerRow
+            ? { onPdf: () => openUrl(fillTemplate(view.pdfUrl, drawerRow)) }
+            : {})}
           sections={drawerLayout.sections}
           heading={drawerLayout.heading}
           tabs={drawerLayout.relationTabs}
@@ -813,6 +843,31 @@ function MenuPage() {
       )}
     </div>
   );
+}
+
+/**
+ * Адрес, заданный админу вместо карточки. Вернул true — переход состоялся,
+ * и карточку открывать не нужно.
+ */
+function openRowUrl(view: View, row: Record<string, unknown>): boolean {
+  if (!hasUrl(view.navigate)) return false;
+
+  openUrl(fillUrl(view.navigate, row));
+  return true;
+}
+
+/**
+ * Переход по адресу из настроек.
+ *
+ * Чужой сайт открывается новой вкладкой, свой — заменяет страницу.
+ * `noopener` обязателен: без него открытая страница получает доступ
+ * к нашему window через opener.
+ */
+function openUrl(url: string) {
+  if (!url) return;
+
+  if (isExternal(url)) window.open(url, "_blank", "noopener,noreferrer");
+  else window.location.assign(url);
 }
 
 /**
