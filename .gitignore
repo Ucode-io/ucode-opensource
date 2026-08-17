@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+src/routeTree.gen.ts
+src/shared/api/schema.d.ts
+.DS_Store
+tsconfig.tsbuildinfo
+.tanstack

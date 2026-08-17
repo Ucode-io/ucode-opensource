@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(~/Documents/workspace/IT/udevs/ucode/ucode_backend/**)",
+      "Write(~/Documents/workspace/IT/udevs/ucode/ucode_backend/**)",
+      "Edit(~/Documents/workspace/IT/udevs/ucode-frontend/**)",
+      "Write(~/Documents/workspace/IT/udevs/ucode-frontend/**)"
+    ]
+  }
+}

@@ -1,0 +1,298 @@
+@import "tailwindcss";
+
+/* Тема переключается классом на <html>, но по умолчанию слушает систему. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * ЕДИНСТВЕННОЕ МЕСТО, ГДЕ ЖИВУТ ЦВЕТА, РАЗМЕРЫ И ТЕНИ.
+ *
+ * Ни один компонент — включая ячейки грида — не пишет цвет напрямую.
+ * Захардкоженный #fff ломает тёмную тему ровно там, где его написали,
+ * и находится потом руками.
+ *
+ * Значения по умолчанию = светлая тема. Тёмная переопределяет их ниже.
+ */
+@theme {
+  /* ── Поверхности ─────────────────────────────────────────────── */
+  --color-bg: #fbfbfa;           /* фон приложения и сайдбара */
+  --color-surface: #ffffff;      /* контент, карточки, поповеры */
+  --color-surface-hover: #f4f4f3;
+  --color-surface-active: #ededec;
+  --color-overlay: #00000059;    /* затемнение под модалкой */
+
+  /* ── Границы ─────────────────────────────────────────────────── */
+  --color-border: #eaeae8;       /* волосяная линия: таблица, разделители */
+  --color-border-strong: #dcdcd9; /* поля ввода, обводка кнопок */
+
+  /* ── Текст ───────────────────────────────────────────────────── */
+  --color-fg: #1b1b18;           /* основной */
+  --color-fg-muted: #6f6e6b;     /* подписи, заголовки колонок, иконки */
+  --color-fg-subtle: #9b9a96;    /* плейсхолдеры, «Empty» */
+
+  /* ── Бренд ───────────────────────────────────────────────────── */
+  /* Одна шкала (206°, S=100%), три роли. Белый текст требует 4.5:1,
+     а сам бренд даёт с белым только 2.40:1 — поэтому заливка кнопки
+     берётся с тёмной ступени той же шкалы, а не с бренда.
+       500 #45aeff  бренд: на тёмном 7.33:1, фокус, выделение
+       800 #0075cf  заливка: белый текст 4.72:1
+       850 #0068ba  наведение: белый текст 5.69:1 */
+  --color-accent: #45aeff;         /* опознавательный цвет: фокус, активное */
+  --color-accent-solid: #0075cf;   /* заливка кнопок под белый текст */
+  --color-accent-solid-hover: #0068ba;
+  --color-accent-fg: #ffffff;      /* текст поверх заливки */
+  --color-accent-subtle: #eaf6ff;  /* мягкий фон: выделенная строка, бейдж */
+  --color-accent-text: #0a6fc0;    /* ссылки и акцентный текст на светлом */
+
+  /* Единственный градиент в системе — фон панели входа.
+     Границы подобраны так, что белый текст проходит и на САМОЙ СВЕТЛОЙ
+     точке: #0075cf даёт 4.72:1. Градиент, у которого светлый конец
+     не проходит, запрещён — контраст на нём становится диапазоном,
+     а не значением, и проверить его нельзя. */
+  --color-brand-gradient-from: #062033;
+  --color-brand-gradient-via: #0d4373;
+  --color-brand-gradient-to: #0075cf;
+
+  /* ── Смысловые ───────────────────────────────────────────────── */
+  --color-success: #2f855a;
+  --color-success-subtle: #e6f4ea;
+  --color-warning: #b45309;
+  --color-warning-subtle: #fdf3e3;
+  --color-danger: #c53030;
+  --color-danger-subtle: #fdecec;
+
+  /* ── Палитра чипов ───────────────────────────────────────────── */
+  /* Для Status и Multiselect. Пользователь выбирает оттенок, а не HEX,
+     поэтому набор фиксирован и одинаково читается в обеих темах. */
+  --color-chip-gray-bg: #ecebe9;
+  --color-chip-gray-fg: #3c3b38;
+  --color-chip-blue-bg: #dfeefc;
+  --color-chip-blue-fg: #1b4f78;
+  --color-chip-green-bg: #dff0e4;
+  --color-chip-green-fg: #1f4f33;
+  --color-chip-yellow-bg: #faeecd;
+  --color-chip-yellow-fg: #5c451a;
+  --color-chip-orange-bg: #fbe6d5;
+  --color-chip-orange-fg: #6b3a1a;
+  --color-chip-red-bg: #fadedd;
+  --color-chip-red-fg: #6e2a2a;
+  --color-chip-purple-bg: #ebe4f8;
+  --color-chip-purple-fg: #46316e;
+  --color-chip-pink-bg: #fadeee;
+  --color-chip-pink-fg: #6e2a55;
+  --color-chip-brown-bg: #eee5dd;
+  --color-chip-brown-fg: #503b2b;
+
+  /* ── Типографика ─────────────────────────────────────────────── */
+  /*
+   * Системный стек, как в интерфейсе Notion: ноль сетевых запросов
+   * за шрифтом и мгновенный первый рендер. На macOS это SF Pro,
+   * на Windows — Segoe UI, на Android и Linux — Roboto.
+   *
+   * Порядок не косметика:
+   *   ui-sans-serif           — системный шрифт интерфейса, если браузер его знает
+   *   -apple-system,
+   *   BlinkMacSystemFont      — SF Pro на macOS и iOS
+   *   Segoe UI Variable Text  — Windows 11, переменное начертание
+   *   Segoe UI                — Windows 10 и старше
+   *   Roboto, Helvetica, Arial — Android, Linux, глубокий запас
+   *   *Emoji, *Symbol         — обязательны в конце: без них эмодзи
+   *                             на Windows берутся из чужого шрифта
+   *                             и сбивают высоту строки
+   */
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol";
+
+  /* Моноширинный — для id, дат и чисел в колонках. */
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-2xs: 0.6875rem;  /* 11px — метки секций в сайдбаре */
+  --text-xs: 0.75rem;     /* 12px — заголовки колонок, подписи */
+  --text-sm: 0.8125rem;   /* 13px — БАЗОВЫЙ размер интерфейса */
+  --text-base: 0.875rem;  /* 14px — текст в drawer */
+  --text-lg: 1rem;        /* 16px — заголовки секций */
+  --text-xl: 1.25rem;     /* 20px — заголовок страницы */
+  --text-2xl: 1.5rem;     /* 24px — заголовок записи в drawer */
+
+  /* ── Скругления ──────────────────────────────────────────────── */
+  --radius-sm: 4px;   /* чипы, мелкие кнопки */
+  --radius-md: 6px;   /* кнопки, поля ввода */
+  --radius-lg: 8px;   /* поповеры, меню */
+  --radius-xl: 12px;  /* модалки, drawer */
+
+  /* ── Тени ────────────────────────────────────────────────────── */
+  /* Плоские зоны разделяются границей, тень — только у всплывающего. */
+  --shadow-popover: 0 1px 2px #0000000d, 0 4px 12px #0000001a;
+  --shadow-modal: 0 8px 32px #00000026, 0 2px 8px #0000001a;
+  --shadow-raised: 0 1px 2px #0000000f;
+
+  /* ── Движение ────────────────────────────────────────────────── */
+  /* Всплывающий сайдбар выезжает из-за края: без этого он «мигает»
+     на месте, и непонятно, откуда он взялся. */
+  --animate-peek: peek 160ms ease-out;
+
+  /* ── Высоты управляющих элементов ────────────────────────────── */
+  --spacing-row: 36px;      /* строка таблицы — плотно, но не тесно */
+  --spacing-control: 32px;  /* кнопка, строка меню */
+  --spacing-input: 36px;    /* поле ввода */
+  --spacing-header: 44px;   /* шапка страницы */
+}
+
+@keyframes peek {
+  from {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+/* Кому движение мешает — тому его нет. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/*
+ * Тёмная тема. Переопределяются ТОЛЬКО значения — ни одной новой
+ * переменной. Если токен объявлен только здесь, светлая тема сломается.
+ */
+@layer base {
+  .dark {
+    --color-bg: #191919;
+    --color-surface: #202020;
+    --color-surface-hover: #2a2a2a;
+    --color-surface-active: #313131;
+    --color-overlay: #00000099;
+
+    --color-border: #2e2e2e;
+    --color-border-strong: #3d3d3d;
+
+    --color-fg: #ededed;
+    --color-fg-muted: #9b9b9b;
+    --color-fg-subtle: #6f6f6f;
+
+    /* На тёмном бренд читается сам по себе — 7.33:1, поэтому он и есть
+       акцентный текст. Заливка остаётся тёмной ступенью: белый текст
+       на ней 4.72:1 в любой теме. */
+    --color-accent: #45aeff;
+    --color-accent-solid: #0075cf;
+    --color-accent-solid-hover: #0086ed;
+    --color-accent-fg: #ffffff;
+    --color-accent-subtle: #45aeff1f;
+    --color-accent-text: #45aeff;
+
+    --color-success: #4dab6d;
+    --color-success-subtle: #4dab6d26;
+    --color-warning: #d99a3f;
+    --color-warning-subtle: #d99a3f26;
+    --color-danger: #e5646a;
+    --color-danger-subtle: #e5646a26;
+
+    --color-chip-gray-bg: #373737;
+    --color-chip-gray-fg: #d4d4d4;
+    --color-chip-blue-bg: #2c4a63;
+    --color-chip-blue-fg: #cfe6f9;
+    --color-chip-green-bg: #2b4a38;
+    --color-chip-green-fg: #cfead9;
+    --color-chip-yellow-bg: #574626;
+    --color-chip-yellow-fg: #f5e3bd;
+    --color-chip-orange-bg: #5b3c25;
+    --color-chip-orange-fg: #f7dcc4;
+    --color-chip-red-bg: #5c3134;
+    --color-chip-red-fg: #f7d2d3;
+    --color-chip-purple-bg: #453764;
+    --color-chip-purple-fg: #e0d5f5;
+    --color-chip-pink-bg: #5c3149;
+    --color-chip-pink-fg: #f7d2e7;
+    --color-chip-brown-bg: #4a3b30;
+    --color-chip-brown-fg: #e6d8cb;
+
+    --shadow-popover: 0 1px 2px #00000040, 0 4px 12px #00000059;
+    --shadow-modal: 0 8px 32px #00000073, 0 2px 8px #00000059;
+    --shadow-raised: 0 1px 2px #00000040;
+  }
+
+  /*
+   * Полосы прокрутки — тонкие и одного цвета во всём приложении.
+   * Системная полоса macOS в Chrome занимает 15px и режет колонку
+   * таблицы; здесь она 8px и красится токенами, то есть переживает
+   * смену темы. Правило одно на всё: * ловит и вложенные области
+   * прокрутки, которых в гриде и поповерах много.
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  /* Safari и старый Chrome scrollbar-width не понимают. */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--color-border-strong);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-fg-subtle);
+  }
+
+  /* Угол между двумя полосами иначе остаётся белым в тёмной теме. */
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Автозаполнение Chrome красит поле собственным голубым фоном и чёрным
+   * текстом — мимо токенов, и в тёмной теме получается чёрным по голубому.
+   * background-color через inset-тень: сам фон Chrome переопределить нельзя.
+   */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    box-shadow: 0 0 0 1000px var(--color-surface) inset;
+    -webkit-text-fill-color: var(--color-fg);
+    caret-color: var(--color-fg);
+    transition: background-color 9999s;
+  }
+
+  /*
+   * Иконки из данных приходят с чужой геометрией: одна обводка 2, другая
+   * 1, третья вовсе заливная. Приводим контурные к нашей толщине.
+   *
+   * vector-effect обязателен: stroke-width задаётся в единицах viewBox,
+   * а он у чужих иконок то 16, то 24 — без него одна и та же цифра даёт
+   * разную видимую толщину. non-scaling-stroke считает её в пикселях экрана.
+   */
+  .icon-normalized :where(svg *) {
+    stroke-width: 1.6;
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* Фокус виден всегда и одинаково — доступность не опция. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+}

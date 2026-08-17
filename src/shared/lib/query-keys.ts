@@ -1,0 +1,89 @@
+/**
+ * Ключи кэша — только отсюда. В старом ucode одни и те же строки таблицы
+ * лежали под четырьмя именами (GET_OBJECT_LIST, GET_OBJECTS_LIST,
+ * GET_OBJECT_LIST_ALL, GET_OBJECTS_LIST_WITH_RELATIONS) — четыре копии
+ * одних данных в памяти и четыре запроса вместо одного.
+ *
+ * Опечатка в строковом ключе создаёт второй кэш молча. Опечатка здесь —
+ * ошибка компиляции.
+ */
+export const keys = {
+  tables: {
+    all: ["tables"] as const,
+    list: (projectId: string) => [...keys.tables.all, projectId] as const,
+    detail: (tableSlug: string) => [...keys.tables.all, "detail", tableSlug] as const,
+    /** Схема: поля и связи. Два запроса, потому что бэкенд отдаёт их порознь. */
+    fields: (tableSlug: string) => [...keys.tables.all, "fields", tableSlug] as const,
+    relations: (tableSlug: string) => [...keys.tables.all, "relations", tableSlug] as const,
+    /**
+     * Какие поля участвуют в общем поиске. Отдельный запрос, потому что
+     * флаг is_search отдаёт только POST /v1/table-details — в ответе
+     * GET /v2/fields его нет вовсе.
+     */
+    searchFields: (tableSlug: string) => [...keys.tables.all, "search-fields", tableSlug] as const,
+    /** Настройки одной связи: поля показа лежат только в ней. */
+    relation: (tableSlug: string, relationId: string) =>
+      [...keys.tables.all, "relations", tableSlug, relationId] as const,
+  },
+  workspace: {
+    all: ["workspace"] as const,
+    companies: (ownerId: string) => [...keys.workspace.all, "companies", ownerId] as const,
+    projects: (companyId: string) => [...keys.workspace.all, "projects", companyId] as const,
+    environments: (projectId: string) =>
+      [...keys.workspace.all, "environments", projectId] as const,
+    /** Языки данных проекта — не локали интерфейса, см. features/workspace. */
+    languages: (projectId: string) => [...keys.workspace.all, "languages", projectId] as const,
+  },
+  icons: {
+    all: ["icons"] as const,
+    search: (query: string) => [...keys.icons.all, query] as const,
+  },
+  /** Функции проекта: их зовут поля-кнопки. Список один на окружение. */
+  functions: {
+    all: ["functions"] as const,
+    list: (envId: string) => [...keys.functions.all, envId] as const,
+  },
+  /**
+   * В ключ входит и окружение: меню в prod и dev разное, и без него
+   * данные двух окружений делили бы одну ячейку кэша. Заодно это и есть
+   * то, что перезапрашивает сайдбар после переключения — меняется ключ.
+   */
+  menus: {
+    all: ["menus"] as const,
+    /** Дети одного уровня: бэкенд отдаёт меню только по parent_id. */
+    children: (projectId: string, envId: string, parentId: string) =>
+      [...keys.menus.all, projectId, envId, "children", parentId] as const,
+    detail: (projectId: string, envId: string, menuId: string) =>
+      [...keys.menus.all, projectId, envId, "detail", menuId] as const,
+  },
+  views: {
+    all: ["views"] as const,
+    /**
+     * Набор view принадлежит пункту меню, а не таблице: два пункта могут
+     * показывать одну таблицу разными наборами. Окружение в ключе по той
+     * же причине, что и у меню — настройки view в prod и dev разные.
+     */
+    byMenu: (envId: string, menuId: string) => [...keys.views.all, envId, "menu", menuId] as const,
+    detail: (tableSlug: string, viewId: string) =>
+      [...keys.views.all, tableSlug, viewId] as const,
+  },
+  /**
+   * Раскладка карточки записи — порядок полей в drawer. Своя у каждого
+   * пункта меню и не имеет отношения к колонкам view: таблица и drawer
+   * показывают одну строку по-разному, и порядок у них разный.
+   */
+  layouts: {
+    all: ["layouts"] as const,
+    byMenu: (envId: string, tableSlug: string, menuId: string) =>
+      [...keys.layouts.all, envId, tableSlug, menuId] as const,
+  },
+  items: {
+    all: ["items"] as const,
+    /** Все страницы и отборы одной таблицы: после импорта устаревают все. */
+    table: (tableSlug: string) => [...keys.items.all, tableSlug] as const,
+    list: (tableSlug: string, params: Record<string, unknown>) =>
+      [...keys.items.all, tableSlug, params] as const,
+    detail: (tableSlug: string, id: string) =>
+      [...keys.items.all, tableSlug, "detail", id] as const,
+  },
+} as const;

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Границы и типы проверяются до коммита, а не на ревью.
+# Обойти: git commit --no-verify (и объяснить в описании, зачем).
+set -e
+pnpm run lint
+pnpm run typecheck

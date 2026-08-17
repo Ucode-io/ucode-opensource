@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ucode</title>
+    <script>
+      /*
+       * Тема ставится ДО загрузки бандла — иначе страница успевает
+       * мигнуть светлым и только потом стать тёмной, а при медленной
+       * сети выглядит так, будто выбор темы не сохранился.
+       *
+       * Единственное место вне React, которое читает ucode.ui. Ключ
+       * и формат совпадают с zustand persist в shared/lib/ui-store.ts.
+       */
+      (function () {
+        try {
+          var raw = localStorage.getItem("ucode.ui");
+          var theme = raw ? JSON.parse(raw).state.theme : "system";
+          var dark =
+            theme === "dark" ||
+            (theme === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* Испорченное значение — просто оставляем светлую тему. */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
