@@ -5,18 +5,22 @@ import type {
   Connection,
   ConnectionSelection,
   Credentials,
+  Invite,
   LoginContext,
   LoginResult,
+  RecoveryStart,
   Registration,
 } from "../model/types";
 import type {
   ConnectionDto,
   DefaultLoginDto,
+  ForgotPasswordDto,
   LoginResponseDto,
   RegisterCompanyDto,
+  VerifyEmailDto,
 } from "./dto";
 import { storePermissions } from "../model/permissions";
-import { toConnection, toPermission, toSession } from "./normalize";
+import { toConnection, toPermission, toRecoveryStart, toSession } from "./normalize";
 
 /**
  * Единственное место в приложении, где объявлены запросы авторизации.
@@ -27,6 +31,11 @@ const DEFAULT_LOGIN = "/v3/multicompany/default-login";
 const LOGIN = "/v2/login";
 const REFRESH = "/v2/refresh";
 const REGISTER_COMPANY = "/company";
+const REGISTER_USER = "/v2/register";
+const FORGOT_PASSWORD = "/v2/forgot-password";
+const SET_EMAIL = "/v2/set-email/send-code";
+const VERIFY_EMAIL = "/v2/verify-only-email";
+const RESET_PASSWORD = "/v2/reset-password";
 
 function storeTokens(dto: LoginResponseDto, projectId: string, companyName = "") {
   if (!dto.token) throw new Error("Бэкенд не вернул токен");
@@ -170,6 +179,122 @@ async function register(input: Registration): Promise<void> {
   await authApi.post<unknown>(REGISTER_COMPANY, body);
 }
 
+/**
+ * Восстановление пароля — четыре шага, и все четыре у бэкенда свои:
+ *
+ *   1. forgot-password        нашли логин, отправили код на почту;
+ *   2. set-email/send-code    почты у пользователя не было — задаём её
+ *                             и отправляем код уже туда;
+ *   3. verify-only-email      проверяем код;
+ *   4. reset-password         записываем новый пароль.
+ *
+ * Токена ни один из них не требует: мидлвар auth-сервиса пропускает
+ * запрос без заголовка Authorization (handlers/middleware.go:41).
+ */
+async function startRecovery(login: string): Promise<RecoveryStart> {
+  const data = await authApi.post<ForgotPasswordDto>(FORGOT_PASSWORD, { login: login.trim() });
+  return toRecoveryStart(data);
+}
+
+async function sendCodeToEmail(input: { userId: string; email: string }): Promise<RecoveryStart> {
+  const data = await authApi.put<ForgotPasswordDto>(SET_EMAIL, {
+    user_id: input.userId,
+    email: input.email.trim(),
+  });
+
+  return {
+    kind: "sent",
+    userId: data.user_id || input.userId,
+    smsId: data.sms_id ?? "",
+    email: data.email || input.email.trim(),
+  };
+}
+
+/**
+ * Проверка кода из письма. `register_type` бэкенд требует, и для
+ * восстановления это всегда «default» — так его шлёт и старая админка.
+ *
+ * Ответ `verified: false` — это не ошибка запроса, а неверный код,
+ * поэтому наружу отдаётся булево, а не исключение.
+ */
+async function verifyCode(input: { smsId: string; otp: string }): Promise<boolean> {
+  const data = await authApi.post<VerifyEmailDto>(VERIFY_EMAIL, {
+    sms_id: input.smsId,
+    otp: input.otp.trim(),
+    register_type: "default",
+  });
+
+  return data.verified === true;
+}
+
+async function setPassword(input: { userId: string; password: string }): Promise<void> {
+  await authApi.put<unknown>(RESET_PASSWORD, {
+    user_id: input.userId,
+    password: input.password,
+  });
+}
+
+/**
+ * Регистрация по приглашению: пользователь заводится сразу в проекте,
+ * с ролью из ссылки, и тут же входит.
+ *
+ * Тело — `{data: {...}}`: бэкенд читает из него `type`, `client_type_id`
+ * и `role_id` приведением типа без проверки (register_v2.go:408), и
+ * запрос без любого из них роняет обработчик. Проект и окружение
+ * кладём туда же, а не только в адрес и заголовок: из тела он берёт их
+ * первыми, а адрес читает лишь как запасной вариант.
+ *
+ * Вход после регистрации — через /v2/login с идентификаторами проекта:
+ * приглашённый пользователь живёт в конкретном окружении, и
+ * multicompany-вход про него ничего не знает.
+ */
+async function acceptInvite(input: {
+  credentials: Credentials;
+  invite: Invite;
+}): Promise<LoginResult> {
+  const { invite } = input;
+  const login = input.credentials.username.trim();
+
+  await authApi.post<unknown>(
+    REGISTER_USER,
+    {
+      data: {
+        type: "login",
+        login,
+        password: input.credentials.password,
+        role_id: invite.roleId,
+        client_type_id: invite.clientTypeId,
+        project_id: invite.projectId,
+        environment_id: invite.environmentId,
+      },
+    },
+    {
+      params: { "project-id": invite.projectId },
+      headers: { "Environment-Id": invite.environmentId },
+    },
+  );
+
+  const response = await authApi.post<LoginResponseDto>(
+    LOGIN,
+    {
+      username: login,
+      password: input.credentials.password,
+      tables: [],
+      client_type: invite.clientTypeId,
+      project_id: invite.projectId,
+      environment_id: invite.environmentId,
+    },
+    { headers: { "Environment-Id": invite.environmentId } },
+  );
+
+  storeTokens(response, invite.projectId);
+
+  return {
+    kind: "session",
+    session: { ...toSession(response), projectId: invite.projectId },
+  };
+}
+
 export function useLogin() {
   return useMutation({ mutationFn: login });
 }
@@ -184,6 +309,26 @@ export function useRegister() {
 
 export function useLoginWithConnections() {
   return useMutation({ mutationFn: loginWithConnections });
+}
+
+export function useStartRecovery() {
+  return useMutation({ mutationFn: startRecovery });
+}
+
+export function useSendCodeToEmail() {
+  return useMutation({ mutationFn: sendCodeToEmail });
+}
+
+export function useVerifyCode() {
+  return useMutation({ mutationFn: verifyCode });
+}
+
+export function useSetPassword() {
+  return useMutation({ mutationFn: setPassword });
+}
+
+export function useAcceptInvite() {
+  return useMutation({ mutationFn: acceptInvite });
 }
 
 export function logout() {

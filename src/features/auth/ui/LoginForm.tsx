@@ -79,7 +79,17 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           />
         </Field>
 
-        <Field label={t("auth.password")}>
+        <Field
+          label={t("auth.password")}
+          /* Ссылка рядом с подписью поля, а не под кнопкой: её ищут
+             в тот момент, когда пароль не вспомнился, — то есть глядя
+             на это поле. */
+          action={
+            <Link to="/recover" className="text-xs text-fg-muted hover:text-fg">
+              {t("auth.forgotPassword")}
+            </Link>
+          }
+        >
           <PasswordInput
             autoComplete="current-password"
             required

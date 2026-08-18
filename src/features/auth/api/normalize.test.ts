@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toConnection, toSession } from "./normalize";
+import { toConnection, toRecoveryStart, toSession } from "./normalize";
 
 test("сессия собирается из вложенных полей ответа", () => {
   const session = toSession({
@@ -80,4 +80,24 @@ test("без подписи опция показывает свой id, а не
     { id: "o1", label: "o1" },
     { id: "o2", label: "o2" },
   ]);
+});
+
+/*
+ * Восстановление пароля: у первого шага три исхода, и все три приходят
+ * со статусом 200. Отличить их можно только по паре полей, поэтому
+ * разбор здесь, а не в форме.
+ */
+test("первый шаг восстановления: код ушёл, почты нет, логина нет", () => {
+  expect(
+    toRecoveryStart({ user_id: "u1", email_found: true, sms_id: "s1", email: "a@b.c" }),
+  ).toEqual({ kind: "sent", userId: "u1", smsId: "s1", email: "a@b.c" });
+
+  // Логин нашли, почты у пользователя нет — её сначала спрашивают.
+  expect(toRecoveryStart({ user_id: "u1", email_found: false })).toEqual({
+    kind: "noEmail",
+    userId: "u1",
+  });
+
+  // Пустой user_id — такого логина нет; ошибки бэкенд при этом не отдаёт.
+  expect(toRecoveryStart({ email_found: false })).toEqual({ kind: "unknown" });
 });

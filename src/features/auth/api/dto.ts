@@ -94,3 +94,22 @@ export type RegisterCompanyDto = {
     phone?: string;
   };
 };
+
+/**
+ * Ответ первого шага восстановления пароля (`ForgotPasswordResponse`
+ * в auth-сервисе, api/models/user_v2.go).
+ *
+ * `email_found: false` при непустом `user_id` — это не отказ: логин нашли,
+ * но почты у пользователя нет, и её сначала надо задать.
+ */
+export type ForgotPasswordDto = {
+  user_id?: string;
+  email_found?: boolean;
+  sms_id?: string;
+  email?: string;
+};
+
+/** Ответ проверки кода из письма. */
+export type VerifyEmailDto = {
+  verified?: boolean;
+};

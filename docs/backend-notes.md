@@ -75,6 +75,27 @@ layout_id, type, order, icon, relation_id, attributes, view_type`
 «у связи есть view» ничего не отсеивает, а `relation.title` в списке
 связей у таких пуст.
 
+## Авторизация
+
+**Восстановление пароля — четыре ручки, и одной из них нет в исходниках.**
+`POST /v2/forgot-password`, `PUT /v2/set-email/send-code`
+и `PUT /v2/reset-password` лежат в `ucode_go_auth_service/api/api.go`,
+а `POST /v2/verify-only-email` — нет: его зовёт старая админка
+(`services/auth/authService.js`), и он отвечает на том же хосте, но
+в наших четырёх репозиториях его нет. Контракт взят из старого клиента:
+тело `{sms_id, otp, register_type: "default"}`, ответ `{verified}`.
+
+**Отказа на первом шаге не бывает.** Все три исхода приходят со статусом
+200: код ушёл (`email_found: true`), почты у пользователя нет
+(`email_found: false` при непустом `user_id`) и логина нет вовсе
+(пустой `user_id`). Различать их приходится по полям.
+
+**Регистрация по приглашению падает на пустом поле.**
+`POST /v2/register` читает `type`, `client_type_id` и `role_id`
+приведением типа без проверки (`register_v2.go:408` —
+`body.Data["type"].(string)`), поэтому тело без любого из них роняет
+обработчик, а не возвращает 400.
+
 ## Действия (automation)
 
 **Поле называется `disable`, без «d» на конце.**

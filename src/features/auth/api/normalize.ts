@@ -1,5 +1,10 @@
-import type { AuthSession, Connection, Permission } from "../model/types";
-import type { ConnectionDto, LoginResponseDto, PermissionDto } from "./dto";
+import type { AuthSession, Connection, Permission, RecoveryStart } from "../model/types";
+import type {
+  ConnectionDto,
+  ForgotPasswordDto,
+  LoginResponseDto,
+  PermissionDto,
+} from "./dto";
 
 /**
  * Единственное место, где сырые имена бэкенда превращаются в доменные.
@@ -62,4 +67,20 @@ export function toConnection(dto: ConnectionDto): Connection {
       return { id, label: typeof label === "string" && label ? label : id };
     }),
   };
+}
+
+/**
+ * Ответ первого шага восстановления → что показывать дальше.
+ *
+ * Три исхода, и все три приезжают со статусом 200: отказа здесь нет
+ * вовсе. Логин не нашли — приходит пустой `user_id`; нашли, но почты
+ * у пользователя нет — `email_found: false` при непустом `user_id`
+ * (handlers/session_v2.go, ForgotPassword).
+ */
+export function toRecoveryStart(dto: ForgotPasswordDto): RecoveryStart {
+  if (!dto.user_id) return { kind: "unknown" };
+
+  return dto.email_found
+    ? { kind: "sent", userId: dto.user_id, smsId: dto.sms_id ?? "", email: dto.email ?? "" }
+    : { kind: "noEmail", userId: dto.user_id };
 }

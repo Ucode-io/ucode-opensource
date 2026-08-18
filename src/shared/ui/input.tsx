@@ -14,15 +14,21 @@ export function Select({ className = "", ...props }: ComponentProps<"select">) {
 export function Field({
   label,
   hint,
+  action,
   children,
 }: {
   label: string;
   hint?: string;
+  /** Ссылка или кнопка в одной строке с подписью, у правого края. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-fg-muted">{label}</span>
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-fg-muted">{label}</span>
+        {action}
+      </span>
       {children}
       {hint && <span className="text-xs text-fg-subtle">{hint}</span>}
     </label>

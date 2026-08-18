@@ -92,3 +92,30 @@ export type Registration = {
   email: string;
   password: string;
 };
+
+/**
+ * Чем закончился первый шаг восстановления пароля.
+ *
+ *   sent    код ушёл на почту, дальше он вводится;
+ *   noEmail логин нашли, но почты у пользователя нет — её надо задать,
+ *           и код уйдёт уже на неё;
+ *   unknown такого логина нет.
+ */
+export type RecoveryStart =
+  | { kind: "sent"; userId: string; smsId: string; email: string }
+  | { kind: "noEmail"; userId: string }
+  | { kind: "unknown" };
+
+/**
+ * Приглашение в проект: всё, кроме логина и пароля, приходит ссылкой.
+ *
+ * Ключи адреса именно такие, с дефисом в `project-id`: их читает
+ * приглашающая сторона, и переименовать их нельзя, не сломав старые
+ * письма.
+ */
+export type Invite = {
+  projectId: string;
+  environmentId: string;
+  roleId: string;
+  clientTypeId: string;
+};
