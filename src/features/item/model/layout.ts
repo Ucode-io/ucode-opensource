@@ -29,29 +29,34 @@ type LayoutField = { slug?: string; attributes?: { field_hide_layout?: boolean }
 /** У секции есть имя: в старой админке она рисуется заголовком над группой полей. */
 type LayoutSection = { label?: string; fields?: LayoutField[] };
 /**
- * Связь, которую показывает вкладка: чужая таблица, колонка-ссылка в ней,
- * колонки для показа и права роли.
+ * Связь вкладки, как её отдаёт ручка раскладки.
  *
- * Колонку-ссылку приходится выводить. `relation_field_slug` — настоящее
- * её имя, но в ответе layout его чаще всего нет вовсе: приезжают только
- * стороны связи (`table_from`, `table_to`) и `relation_table_slug`.
- * Тогда имя собирается по правилу, по которому его завёл бэкенд:
- * колонка в table_from называется `<слаг table_to>_id`
- * (pkg/helper/relation.go — `fieldFrom = data.TableTo + "_id"`).
+ * Здесь она урезана до неузнаваемости: `GetRelation` (storage/postgres/
+ * layout.go:1628) выбирает только `id`, `type`, `view_fields` и стороны,
+ * а `relation_field_slug`, права и колонки не приходят ВООБЩЕ. Поэтому
+ * настоящая связь берётся не отсюда, а из ручки связей таблицы
+ * (GET /v2/relations/{slug}) — она уже загружена ради колонок-ссылок,
+ * и в ней есть и `field_from`, и `relation_field_slug`.
  *
- * Это не угадывание: другого имени у колонки быть не может — вторую
- * связь на ту же таблицу бэкенд создать не даст, колонка уже занята.
+ * Остаются два применения: `permission` — на случай, если бэкенд
+ * когда-нибудь начнёт его отдавать, и `columns` — прочитать колонки
+ * у вкладок, заведённых до переезда настроек в `attributes`.
  */
 type LayoutRelation = {
   id?: string;
-  relation_table_slug?: string;
-  relation_field_slug?: string;
-  /** Стороны связи. Приезжают развёрнутыми, а не слагами. */
-  table_from?: { slug?: string };
-  table_to?: { slug?: string };
   columns?: string[];
   title?: string;
   permission?: { view_permission?: boolean; create_permission?: boolean };
+};
+
+/** Настройки вкладки-секции. Вкладки связей живут не здесь — см. features/view. */
+type TabAttributes = {
+  /**
+   * `layout_heading` — слаг поля, которое служит заголовком карточки.
+   * У мультиязычной таблицы это не слаг, а карта «код языка → слаг»:
+   * заголовок у каждого языка свой.
+   */
+  layout_heading?: string | Record<string, string>;
 };
 
 type LayoutTab = {
@@ -62,36 +67,7 @@ type LayoutTab = {
   relation_id?: string;
   relation?: LayoutRelation;
   sections?: LayoutSection[];
-  /**
-   * `layout_heading` — слаг поля, которое служит заголовком карточки.
-   * У мультиязычной таблицы это не слаг, а карта «код языка → слаг»:
-   * заголовок у каждого языка свой.
-   */
-  attributes?: { layout_heading?: string | Record<string, string> };
-};
-
-/** Вкладка связи в карточке записи — то, что от неё нужно наружу. */
-export type RelationTab = {
-  id: string;
-  /** Связь, которую показывает вкладка. По ней её и заводят. */
-  relationId: string;
-  label: string;
-  /** Таблица, строки которой показывает вкладка. */
-  tableSlug: string;
-  /**
-   * Колонка-ссылка. ГДЕ она лежит, говорит `direction`:
-   *
-   *   incoming — в чужой таблице, и в ней наш guid: строки отбираются
-   *              по ней, новая строка ею же и привязывается;
-   *   outgoing — в НАШЕЙ строке, и в ней guid чужой: вкладка показывает
-   *              ровно одну строку, ту, на которую мы ссылаемся.
-   */
-  fieldSlug: string;
-  direction: "incoming" | "outgoing";
-  /** Колонки вкладки: id полей, как в `view.columns`. */
-  columnIds: string[];
-  /** Можно ли создавать связанные строки. */
-  canCreate: boolean;
+  attributes?: TabAttributes;
 };
 
 /** Остальное тело layout не разбирается: оно уходит обратно в PUT как есть. */
@@ -173,56 +149,6 @@ export function setHeading(
 }
 
 /**
- * Layout с новой вкладкой связи.
- *
- * Вкладки бэкенд перезаписывает списком целиком (storage/postgres/
- * layout.go:194 — bulk insert по всем `tabs`), поэтому добавить —
- * это дописать элемент. Связь указывается идентификатором: остальное
- * (таблицу, права, колонку-ссылку) он подставит сам, отдавая раскладку.
- *
- * id вкладки создаём мы: колонка `tab.id` приходит в теле и берётся
- * как есть, своего бэкенд не выдаёт.
- */
-export function addRelationTab(
-  layout: Layout,
-  tab: { id: string; label: string; relationId: string },
-): Layout {
-  return {
-    ...layout,
-    tabs: [
-      ...(layout.tabs ?? []),
-      { id: tab.id, label: tab.label, type: "relation", relation_id: tab.relationId },
-    ],
-  };
-}
-
-/** Layout без вкладки. Строки чужой таблицы при этом никуда не деваются. */
-export function removeTab(layout: Layout, tabId: string): Layout {
-  return { ...layout, tabs: (layout.tabs ?? []).filter((tab) => tab.id !== tabId) };
-}
-
-/**
- * Layout с новым набором колонок у вкладки связи.
- *
- * Колонки вкладки живут в самой раскладке (`tabs[].relation.columns`),
- * а не в отдельном view: у вкладки нет ни своего адреса, ни своих
- * фильтров, и заводить ради списка колонок вторую сущность незачем.
- *
- * Вкладка, которой в раскладке нет, возвращается как есть: значит
- * раскладку успели перезапросить, и правка относилась к прежней.
- */
-export function setTabColumns(layout: Layout, tabId: string, columnIds: string[]): Layout {
-  return {
-    ...layout,
-    tabs: (layout.tabs ?? []).map((tab) =>
-      tab.id === tabId && tab.relation
-        ? { ...tab, relation: { ...tab.relation, columns: columnIds } }
-        : tab,
-    ),
-  };
-}
-
-/**
  * Колонки в порядке карточки. Поля, которых в layout нет, встают в конец
  * в своём порядке — сортировка устойчивая, и ранг у всех неизвестных один.
  */
@@ -280,104 +206,6 @@ export function moveField(
     ...layout,
     tabs: (layout.tabs ?? []).map((item) => (item === tab ? { ...tab, sections } : item)),
   };
-}
-
-/**
- * Вкладки связей карточки: связанные строки рядом с полями записи.
- *
- * Источник — раскладка, а не список view пункта меню, хотя relation view
- * там тоже лежат. В раскладке у вкладки есть всё нужное разом: имя
- * колонки-ссылки, права роли на просмотр и создание, колонки для показа.
- * В списке view нет ни колонки-ссылки, ни прав.
- *
- * Права читаются строго: право есть, пока его явно не отняли. Блок
- * `permission` приходит не отовсюду, и его отсутствие означает «прав
- * не настраивали», а не «нельзя» — иначе вкладки исчезли бы у всех
- * проектов, где матрицу прав не трогали.
- *
- * Вкладка без чужой таблицы или без колонки-ссылки пропускается:
- * отбирать строки нечем, и она показала бы всю таблицу целиком.
- */
-export function relationTabs(layout: Layout | undefined, tableSlug: string): RelationTab[] {
-  return (layout?.tabs ?? [])
-    .filter((tab) => tab.type !== SECTION && tab.relation?.permission?.view_permission !== false)
-    .map((tab) => {
-      const side = sideOf(tab.relation, tableSlug);
-
-      return {
-        id: tab.id ?? "",
-        relationId: tab.relation_id ?? tab.relation?.id ?? "",
-        label:
-          tab.label?.trim() || tab.relation?.title?.trim() || side.tableSlug || "—",
-        tableSlug: side.tableSlug,
-        fieldSlug: side.fieldSlug,
-        direction: side.direction,
-        columnIds: tab.relation?.columns ?? [],
-        /*
-         * Создавать можно только там, где ссылка лежит в чужой строке:
-         * тогда новая строка привязывается тем же полем, которым
-         * отбирается. У обратного направления привязка — это правка
-         * НАШЕЙ строки, и делать её от имени «создать связанную»
-         * значит менять запись, которую человек открыл смотреть.
-         */
-        canCreate:
-          side.direction === "incoming" &&
-          tab.relation?.permission?.create_permission !== false,
-      };
-    })
-    .filter((tab) => tab.id && tab.tableSlug && tab.fieldSlug);
-}
-
-/**
- * Какую таблицу показывает вкладка, где лежит колонка-ссылка и в какую
- * сторону она смотрит.
- *
- * Колонка-ссылка ВСЕГДА живёт в `table_from` и называется
- * `<слаг table_to>_id` (pkg/helper/relation.go). Отсюда две стороны
- * одной связи:
- *
- *   мы — table_to    чужие строки ссылаются на нас, колонка у них;
- *   мы — table_from  мы ссылаемся на чужую строку, колонка у нас.
- *
- * `relation_table_slug` для этого не годится: у стороны, с которой связь
- * заводили, он равен НАШЕЙ таблице. Вкладка тогда показывала бы ту же
- * таблицу, из которой открыта, и «создать связанную строку» вписывало бы
- * в чужую колонку наш guid — база отвечала на это нарушением внешнего
- * ключа (fk_<таблица>_<колонка>).
- */
-function sideOf(
-  relation: LayoutRelation | undefined,
-  tableSlug: string,
-): { tableSlug: string; fieldSlug: string; direction: "incoming" | "outgoing" } {
-  const empty = { tableSlug: "", fieldSlug: "", direction: "incoming" as const };
-  if (!relation) return empty;
-
-  const from = relation.table_from?.slug ?? "";
-  const to = relation.table_to?.slug ?? "";
-
-  /*
-   * Стороны известны — решаем по ним. Recursive (обе стороны — мы)
-   * считается входящей: чужая колонка с нашим guid у неё есть.
-   */
-  if (from && to) {
-    const incoming = to === tableSlug;
-
-    return {
-      tableSlug: incoming ? from : to,
-      fieldSlug: relation.relation_field_slug || `${to}_id`,
-      direction: incoming ? "incoming" : "outgoing",
-    };
-  }
-
-  // Сторон в ответе нет — остаётся то, что бэкенд назвал чужой таблицей.
-  const other = relation.relation_table_slug ?? "";
-  return other && other !== tableSlug
-    ? {
-        tableSlug: other,
-        fieldSlug: relation.relation_field_slug || `${tableSlug}_id`,
-        direction: "incoming",
-      }
-    : empty;
 }
 
 const SECTION = "section";

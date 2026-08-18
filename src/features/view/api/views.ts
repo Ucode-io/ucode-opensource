@@ -16,6 +16,11 @@ type ViewDto = {
   menu_id?: string;
   order?: number;
   is_relation_view?: boolean;
+  /** Таблица вкладки связи и сама связь — см. View.relationTableSlug. */
+  relation_table_slug?: string;
+  relation_id?: string;
+  /** Подпись таблицы из relation_table_slug: её подставляет запрос списка. */
+  table_label?: string;
   /** Имя вкладки. Пустая строка встречается чаще, чем непустая. */
   name?: string;
   /** Строка, а не число: в настройках это свободное поле ввода. */
@@ -40,7 +45,10 @@ export function useMenuViews(menuId: string) {
     enabled: Boolean(menuId),
     // Настройки view меняет админ, а не пользователь при работе со строками.
     staleTime: 5 * 60_000,
-    select: (data) => (data.views ?? []).filter((dto) => dto.id).map(toView),
+    // Постоянная ссылка: со стрелкой на месте react-query гоняет select
+    // на каждый рендер и отдаёт новый массив — а на нём висят вкладки
+    // экрана и вкладки карточки.
+    select: toViews,
   });
 
   return { views: query.data ?? [], isLoading: query.isLoading, error: query.error };
@@ -81,17 +89,28 @@ export function useCreateView({
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: ({ name, language }: { name: string; language: string }) =>
+    mutationFn: ({ name, language, relation }: NewView) =>
       api.post<ViewDto>(`/v2/views/${slug}`, {
         table_slug: slug,
         menu_id: menuId,
         type: "TABLE",
         order,
-        is_relation_view: false,
         // Имя пишется дважды: в колонку и в attributes на языке данных.
         // Старая админка читает только attributes, мы — сначала их же.
         name: name.trim(),
         attributes: { [`name_${language}`]: name.trim() },
+        /*
+         * Вкладка карточки — это view со связью, и ровно так её заводит
+         * старая админка: `is_relation_view` плюс слаг ЧУЖОЙ таблицы
+         * (useViewCreatePopupProps.jsx). `relation_id` она не шлёт, и
+         * вкладка потом ищет свою связь по слагу — с двумя связями
+         * на одну таблицу это лотерея. Мы шлём: колонка в базе есть,
+         * и по ней связь находится однозначно.
+         */
+        is_relation_view: Boolean(relation),
+        ...(relation
+          ? { relation_table_slug: relation.tableSlug, relation_id: relation.id }
+          : {}),
       }),
 
     onError: (error) => reportError(error, "common.createFailed"),
@@ -189,6 +208,14 @@ export function useUpdateView({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }
+
+/** Что нужно новому view. `relation` — только у вкладки карточки. */
+export type NewView = {
+  name: string;
+  /** Язык ДАННЫХ для имени. */
+  language: string;
+  relation?: { id: string; tableSlug: string };
+};
 
 export type ViewEdit = {
   view: View;
@@ -348,6 +375,10 @@ function toNames(attributes: Record<string, unknown> | undefined): Record<string
   return names;
 }
 
+function toViews(data: ViewsResponseDto): View[] {
+  return (data.views ?? []).filter((dto) => dto.id).map(toView);
+}
+
 export function toView(dto: ViewDto): View {
   return {
     id: dto.id ?? "",
@@ -360,6 +391,9 @@ export function toView(dto: ViewDto): View {
     defaultLimit: toLimit(dto.default_limit),
     quickFilterIds: toQuickFilterIds(dto.attributes),
     isRelationView: dto.is_relation_view ?? false,
+    relationTableSlug: dto.relation_table_slug ?? "",
+    relationId: dto.relation_id ?? "",
+    tableLabel: dto.table_label?.trim() ?? "",
     columnIds: dto.columns ?? [],
     fixedColumnIds: toFixedColumnIds(dto.attributes),
     defaultFilters: toDefaultFilters(dto.attributes),

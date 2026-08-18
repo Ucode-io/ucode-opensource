@@ -4,6 +4,7 @@ import { IconPicker } from "@/features/icons";
 import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/input";
+import { LanguageInput } from "@/shared/ui/language-input";
 
 /**
  * Создание и переименование пункта — одна форма. В старом коде под каждый
@@ -80,29 +81,22 @@ export function MenuFormDialog({
       >
         <h2 className="text-base font-semibold">{title}</h2>
 
-        {/* По полю на язык данных. Одного поля мало: имя, заданное только
-            на русском, оставляет узбекскую версию сайдбара со слагом. */}
-        <div className="flex flex-col gap-2">
+        {/* Имя на каждом языке данных — одним полем с переключателем:
+            заданное только на русском оставляет узбекский сайдбар
+            со слагом, а столбик из полей на четыре языка выглядит
+            формой, которую обязаны заполнить целиком. */}
+        <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-fg-muted">{t("menuForm.label")}</span>
 
-          {languages.map((language, index) => (
-            <label key={language.code} className="flex items-center gap-2">
-              <span className="w-16 shrink-0 truncate text-2xs text-fg-subtle">
-                {language.nativeName}
-              </span>
-              <Input
-                /* autoFocus только на первом: диалог открыт ради имени. */
-                autoFocus={index === 0}
-                value={value.labels[language.code] ?? ""}
-                onChange={(event) =>
-                  setValue((v) => ({
-                    ...v,
-                    labels: { ...v.labels, [language.code]: event.target.value },
-                  }))
-                }
-              />
-            </label>
-          ))}
+          <LanguageInput
+            autoFocus
+            languages={languages}
+            values={value.labels}
+            label={t("menuForm.label")}
+            onChange={(code, label) =>
+              setValue((v) => ({ ...v, labels: { ...v.labels, [code]: label } }))
+            }
+          />
         </div>
 
         {needsSlug && (

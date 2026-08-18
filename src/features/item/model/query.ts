@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { Field } from "@/features/table";
+import { emptyFilter, filterKind } from "./filter-kind";
 
 /**
  * Что показываем: страница, сортировка, фильтры, поиск. Всё это живёт
@@ -286,4 +288,30 @@ export function formatSorts(sorts: Sort[]): string | undefined {
 /** Сколько фильтров заполнено. Добавленные, но пустые не считаются. */
 export function activeFilterCount(filters: Filters | undefined): number {
   return Object.values(filters ?? {}).filter(isFilterSet).length;
+}
+
+/**
+ * Подсказка админа → пустые чипы в подшапке. Поля ищутся по тем же двум
+ * ключам, что и колонки: у связей во view лежит id связи, а не поля.
+ *
+ * Живёт здесь, а не на странице: тем же набором открывается и вкладка
+ * связи в карточке — у неё свои предложенные поля.
+ */
+export function seedFilters(ids: string[], fields: Field[]): Filters {
+  if (!ids.length) return {};
+
+  const index = new Map<string, Field>();
+  for (const field of fields) {
+    index.set(field.id, field);
+    if (field.relationId) index.set(field.relationId, field);
+  }
+
+  const seeded: Filters = {};
+  for (const id of ids) {
+    const field = index.get(id);
+    const kind = field && filterKind(field);
+    if (field && kind) seeded[field.slug] = emptyFilter(kind);
+  }
+
+  return seeded;
 }

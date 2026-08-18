@@ -3,7 +3,7 @@ import { IconLoader2 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { Checkbox } from "@/shared/ui/checkbox";
-import { CommitInput } from "@/shared/ui/commit-input";
+import { LanguageInput } from "@/shared/ui/language-input";
 import { Icon } from "@/shared/ui/icon";
 import {
   LOGIN_STRATEGIES,
@@ -80,23 +80,19 @@ export function TableSettings({
     /* Прокрутка своя: у таблицы входа страница длиннее экрана, и без
        неё нижние настройки уезжали за нижний край окна. */
     <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto p-2">
-      <div className="flex flex-col gap-1.5">
-        {languages.map((language) => (
-          <label key={language.code} className="flex flex-col gap-0.5">
-            <span className="px-0.5 text-2xs text-fg-subtle">{language.nativeName}</span>
-            <CommitInput
-              value={table.labels[language.code] ?? ""}
-              placeholder={table.label || table.slug}
-              label={t("tableSettings.name")}
-              onCommit={(name) =>
-                update.mutate({
-                  table,
-                  labels: { ...table.labels, [language.code]: name },
-                })
-              }
-            />
-          </label>
-        ))}
+      {/* Имя таблицы на каждом языке данных — одним полем: языки
+          переключаются кнопкой внутри, как в старой админке. */}
+      <div className="flex flex-col gap-0.5">
+        <span className="px-0.5 text-2xs text-fg-subtle">{t("tableSettings.name")}</span>
+        <LanguageInput
+          languages={languages}
+          values={table.labels}
+          label={t("tableSettings.name")}
+          placeholder={table.label || table.slug}
+          onCommit={(code, name) =>
+            update.mutate({ table, labels: { ...table.labels, [code]: name } })
+          }
+        />
       </div>
 
       {/* Слаг — не поле ввода: его этой ручкой не сменить (см. выше).

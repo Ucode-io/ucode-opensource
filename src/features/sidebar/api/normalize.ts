@@ -28,9 +28,28 @@ export function pickLabels(attributes: Record<string, unknown> | undefined): Rec
   return labels;
 }
 
-/** Подпись на языке данных, иначе базовая колонка label. */
-function pickLabel(dto: MenuDto, language: string): string {
-  return pickLabels(dto.attributes)[language]?.trim() || dto.label?.trim() || "—";
+/**
+ * Подпись пункта: первый язык из списка, на котором она заполнена,
+ * иначе базовая колонка `label`.
+ *
+ * Список, а не один язык, потому что осей две. Имя пункта — это надпись
+ * в сайдбаре, то есть интерфейс, и переключение языка интерфейса обязано
+ * её менять: так это работает в старой админке
+ * (LayoutSidebar/AppSidebarComponentV2.jsx:168 — `label_${i18n.language}`).
+ * Но хранится она ключом `label_<код языка ПРОЕКТА>`, а коды проекта
+ * с ru/en/uz совпадают не всегда — у проекта на en+cyr локали `ru` там
+ * нет вовсе. Тогда подпись берётся на языке данных, и пункт остаётся
+ * подписанным, а не откатывается к базовой колонке.
+ */
+function pickLabel(dto: MenuDto, languages: string[]): string {
+  const labels = pickLabels(dto.attributes);
+
+  for (const code of languages) {
+    const label = labels[code]?.trim();
+    if (label) return label;
+  }
+
+  return dto.label?.trim() || "—";
 }
 
 /**
@@ -84,13 +103,17 @@ function pickPermissions(dto: MenuDto) {
  * Поэтому позиция берётся из индекса в ответе, а клиент НИЧЕГО не
  * пересортировывает: любая своя сортировка здесь ломает серверную.
  */
-export function toMenuNode(dto: MenuDto, language: string, index = 0): MenuNode {
+export function toMenuNode(
+  dto: MenuDto,
+  languages: string | string[],
+  index = 0,
+): MenuNode {
   const type = dto.type ?? "";
   const href = pickHref(dto);
 
   return {
     id: dto.id ?? "",
-    label: pickLabel(dto, language),
+    label: pickLabel(dto, typeof languages === "string" ? [languages] : languages),
     labels: pickLabels(dto.attributes),
     icon: dto.icon ?? "",
     type,

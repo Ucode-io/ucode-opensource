@@ -7,6 +7,7 @@ import {
   hasMultilanguage,
   stripLanguage,
 } from "./multilanguage";
+import { localized } from "./types";
 import type { Field } from "./types";
 
 const LANGS = ["en", "cyr"];
@@ -127,4 +128,18 @@ test("пара без флага — всё равно языковая груп
     "naming_cyr",
     "price",
   ]);
+});
+
+/*
+ * Подпись читается по двум осям: локаль интерфейса, затем язык данных.
+ * Тест держит именно порядок — из-за него переключение языка интерфейса
+ * и переводит колонки, и не ломает проекты с кодами вне ru/en/uz.
+ */
+test("подпись: локаль интерфейса, потом язык данных, потом запасная", () => {
+  // i18n в тестах стартует на ru (см. shared/lib/i18n).
+  expect(localized({ ru: "Заказы", cyr: "Буюртмалар" }, "cyr", "orders")).toBe("Заказы");
+  expect(localized({ cyr: "Буюртмалар" }, "cyr", "orders")).toBe("Буюртмалар");
+  expect(localized({}, "cyr", "orders")).toBe("orders");
+  // Пустая строка — не подпись: у половины полей лежит `label_ru: ""`.
+  expect(localized({ ru: "  " }, "cyr", "orders")).toBe("orders");
 });

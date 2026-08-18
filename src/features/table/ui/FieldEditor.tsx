@@ -13,6 +13,7 @@ import { Anchored } from "@/shared/ui/anchored";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { CHIP_COLORS, Chip } from "@/shared/ui/chip";
 import { Icon } from "@/shared/ui/icon";
+import { LanguageInput } from "@/shared/ui/language-input";
 import { SelectMenu } from "@/shared/ui/select-menu";
 import { isValidSlug, slugify } from "@/shared/lib/slug";
 import {
@@ -80,8 +81,11 @@ export function FieldEditor({
   /** Связи таблицы: по ним выбирается таблица агрегата у FORMULA. */
   relations: Relation[];
   language: string;
-  /** Коды языков ДАННЫХ проекта: по ним заводятся языковые колонки. */
-  languages: string[];
+  /**
+   * Языки ДАННЫХ проекта: на них пишется подпись поля, и по ним же
+   * шлюз заводит языковые колонки мультиязычного поля.
+   */
+  languages: { code: string; nativeName: string }[];
   anchor: DOMRect;
   /** Иконка типа. Параметром, а не импортом — см. TypeList. */
   icon: (type: string) => TablerIcon;
@@ -155,7 +159,15 @@ export function FieldEditor({
     const ready = newDraft(type, draft.label, fields);
     onSubmit({
       ...ready,
-      multilanguage: draft.multilanguage,
+      labels: draft.labels,
+      /*
+       * Флаг едет только с текстовым типом: шлюз разводит поле
+       * по языковым колонкам ровно для SINGLE_LINE и MULTI_LINE
+       * (handlers/v2/field.go:84), а у остальных молча заводит одну
+       * колонку. Тип выбирается последним, поэтому проверка здесь,
+       * а не у самого переключателя.
+       */
+      multilanguage: draft.multilanguage && MULTILANGUAGE_TYPES.has(type),
       ...(slug && slugTouched ? { slug } : {}),
     });
     onClose();
@@ -315,23 +327,38 @@ export function FieldEditor({
                 <Icon as={icon(draft.type)} size={14} />
               </span>
 
-              <input
-                autoFocus
-                value={draft.label}
-                placeholder={t("fieldForm.namePlaceholder")}
-                aria-label={t("fieldForm.label")}
-                onChange={(event) => {
-                  const label = event.target.value;
-                  patch({ label, ...(slugTouched || editing ? {} : { slug: slugify(label) }) });
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  if (editing) close();
-                  else create(draft.type);
-                }}
-                className="h-8 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg outline-none focus:border-accent"
-              />
+              {/*
+                Подпись на каждом языке ДАННЫХ — одним полем с
+                переключателем внутри, как в старой админке
+                (TextFieldWithMultiLanguage в FieldCreateModal). Пока
+                правился только активный язык, поле, названное по-русски,
+                оставалось `title` в узбекском интерфейсе.
+
+                Слаг подсказывается по подписи на АКТИВНОМ языке: имя
+                колонки в базе одно, и собирать его из четырёх языков
+                нечем.
+              */}
+              <span className="flex min-w-0 flex-1 items-center">
+                <LanguageInput
+                  autoFocus
+                  languages={languages}
+                  values={{ ...draft.labels, [language]: draft.label }}
+                  placeholder={t("fieldForm.namePlaceholder")}
+                  label={t("fieldForm.label")}
+                  onChange={(code, label) =>
+                    patch({
+                      labels: { ...draft.labels, [code]: label },
+                      ...(code === language
+                        ? {
+                            label,
+                            ...(slugTouched || editing ? {} : { slug: slugify(label) }),
+                          }
+                        : {}),
+                    })
+                  }
+                  onEnter={() => (editing ? close() : create(draft.type))}
+                />
+              </span>
             </div>
 
             {/*
@@ -361,6 +388,11 @@ export function FieldEditor({
               (`title_en`, `title_cyr`). Позже включить её нечем: у поля
               меняется флаг, а языковых колонок не появляется.
 
+              Работает она только у текстовых типов, и подпись об этом
+              говорит: тип здесь выбирают последним щелчком, поэтому
+              спрятать переключатель по типу нельзя — с чужим типом
+              флаг просто не уедет (см. create).
+
               У проекта с одним языком спрашивать нечего.
             */}
             {!editing && languages.length > 1 && (
@@ -374,7 +406,9 @@ export function FieldEditor({
                 <span className="flex min-w-0 flex-col">
                   <span className="text-sm text-fg">{t("fieldForm.multilanguage")}</span>
                   <span className="text-2xs text-fg-subtle">
-                    {t("fieldForm.multilanguageHint", { languages: languages.join(", ") })}
+                    {t("fieldForm.multilanguageHint", {
+                      languages: languages.map((item) => item.code).join(", "),
+                    })}
                   </span>
                 </span>
               </label>

@@ -1,4 +1,6 @@
+import { useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useDataLanguages } from "@/features/workspace";
 import { api } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
@@ -8,6 +10,25 @@ import { SYSTEM_MENUS, isSystemMenu } from "../model/system-menus";
 import type { MenuNode } from "../model/types";
 import type { MenuDto, MenusResponseDto } from "./dto";
 import { toMenuNode } from "./normalize";
+
+/**
+ * Языки подписи пункта, в порядке предпочтения: локаль ИНТЕРФЕЙСА,
+ * затем язык ДАННЫХ.
+ *
+ * Обе оси нужны. Имя пункта — надпись в сайдбаре, и переключение языка
+ * интерфейса обязано её менять; хранится она при этом ключом
+ * `label_<код языка проекта>`, а коды проекта с ru/en/uz совпадают
+ * не всегда (см. pickLabel).
+ *
+ * useTranslation здесь не ради перевода, а ради подписки: без неё смена
+ * локали не перерисовывает сайдбар — данные-то в кэше те же.
+ */
+function useLabelLanguages(): string[] {
+  const { i18n } = useTranslation();
+  const { current: dataLanguage } = useDataLanguages();
+
+  return useMemo(() => [i18n.language, dataLanguage], [i18n.language, dataLanguage]);
+}
 
 /**
  * Корень дерева меню. UUID захардкожен в SQL бэкенда
@@ -24,13 +45,7 @@ export const ROOT_MENU_ID = SYSTEM_MENUS.ROOT;
  * отдельный запрос, и он уходит только когда папку раскрыли.
  */
 export function useMenuChildren(parentId: string, enabled = true) {
-  /*
-   * Язык ДАННЫХ, а не локаль интерфейса: подпись пункта лежит
-   * в attributes.label_<код языка проекта> — тех же кодах, что у полей
-   * и view. С локалью ru/en/uz эти ключи совпадают только случайно,
-   * и у проекта с языками en+cyr сайдбар показывал базовые подписи.
-   */
-  const { current: language } = useDataLanguages();
+  const languages = useLabelLanguages();
   const session = useSession();
   const projectId = session.getProjectId() ?? "";
   const envId = session.getEnvironmentId() ?? "";
@@ -42,18 +57,23 @@ export function useMenuChildren(parentId: string, enabled = true) {
     enabled: enabled && Boolean(projectId) && Boolean(parentId),
     // Меню меняет админ, а не пользователь — держим дольше общего правила.
     staleTime: 5 * 60_000,
-    select: (data) => toNodes(data.menus ?? [], language),
+    // Постоянная ссылка: со стрелкой на месте дерево пересобиралось
+    // на каждый рендер, и сайдбар перерисовывался вместе с ним.
+    select: useCallback(
+      (data: MenusResponseDto) => toNodes(data.menus ?? [], languages),
+      [languages],
+    ),
   });
 
   return { items: query.data ?? [], isLoading: query.isLoading, error: query.error };
 }
 
-export function toNodes(menus: MenuDto[], language: string): MenuNode[] {
+export function toNodes(menus: MenuDto[], languages: string | string[]): MenuNode[] {
   // Порядок ответа сохраняем как есть: сервер уже отсортировал по "order",
   // а само поле до клиента не доезжает — сортировать нечем и незачем.
   return menus
     .filter((dto) => dto.id)
-    .map((dto, index) => toMenuNode(dto, language, index))
+    .map((dto, index) => toMenuNode(dto, languages, index))
     // Без права чтения пункт не показывается вовсе — так же, как в старой
     // версии. Показать пункт, который всё равно вернёт отказ, хуже, чем
     // не показать: человек будет думать, что сломалось.
@@ -65,7 +85,7 @@ export function toNodes(menus: MenuDto[], language: string): MenuNode[] {
 
 /** Один пункт по id — для экрана. Дерево загружено не целиком, искать в нём нечего. */
 export function useMenu(menuId: string) {
-  const { current: language } = useDataLanguages();
+  const languages = useLabelLanguages();
   const session = useSession();
   const projectId = session.getProjectId() ?? "";
   const envId = session.getEnvironmentId() ?? "";
@@ -75,7 +95,7 @@ export function useMenu(menuId: string) {
     queryFn: () => api.get<MenuDto>(`/v3/menus/${menuId}`),
     enabled: Boolean(projectId) && Boolean(menuId),
     staleTime: 5 * 60_000,
-    select: (dto) => toMenuNode(dto, language),
+    select: useCallback((dto: MenuDto) => toMenuNode(dto, languages), [languages]),
   });
 
   return query.data;

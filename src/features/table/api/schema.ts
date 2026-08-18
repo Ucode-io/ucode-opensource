@@ -1,4 +1,5 @@
-import { useQueries } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import { keys } from "@/shared/lib/query-keys";
 import { EMPTY_SCHEMA, type Field, type Relation, type TableSchema } from "../model/types";
@@ -27,6 +28,13 @@ import { toField, toRelation } from "./normalize";
  */
 const SCHEMA_STALE = 5 * 60_000;
 
+type FieldsQueries = [
+  UseQueryResult<FieldsResponseDto, Error>,
+  UseQueryResult<RelationsResponseDto, Error>,
+];
+
+type RelationQueries = UseQueryResult<RelationDto, Error>[];
+
 export function useTableSchema(tableSlug: string | undefined, columnIds?: string[]) {
   const slug = tableSlug ?? "";
 
@@ -45,11 +53,14 @@ export function useTableSchema(tableSlug: string | undefined, columnIds?: string
         staleTime: SCHEMA_STALE,
       },
     ],
-    combine: ([fields, relations]) => ({
-      schema: toSchema(fields.data, relations.data, slug),
-      isLoading: fields.isLoading || relations.isLoading,
-      error: fields.error ?? relations.error,
-    }),
+    combine: useCallback(
+      ([fields, relations]: FieldsQueries) => ({
+        schema: toSchema(fields.data, relations.data, slug),
+        isLoading: fields.isLoading || relations.isLoading,
+        error: fields.error ?? relations.error,
+      }),
+      [slug],
+    ),
   });
 
   /*
@@ -70,22 +81,35 @@ export function useTableSchema(tableSlug: string | undefined, columnIds?: string
       queryFn: () => api.get<RelationDto>(`/v2/relations/${slug}/${relation.id}`),
       staleTime: SCHEMA_STALE,
     })),
-    // Список из ответов → словарь настроек. Связь без ответа (ещё едет
-    // или отказ) остаётся с тем, что дал общий список.
-    combine: (results) =>
-      new Map(
-        results
-          .map((result) => result.data)
-          .filter((dto): dto is RelationDto => Boolean(dto?.id))
-          .map((dto) => [dto.id!, toRelation(dto, slug)] as const),
-      ),
+    /*
+     * Список из ответов → словарь настроек. Связь без ответа (ещё едет
+     * или отказ) остаётся с тем, что дал общий список.
+     *
+     * Ссылка постоянная: react-query пересобирает результат `combine`
+     * при смене его identity, то есть со стрелкой на месте — каждый
+     * рендер, и схема таблицы каждый раз оказывалась новым объектом.
+     */
+    combine: useCallback(
+      (results: RelationQueries) =>
+        new Map(
+          results
+            .map((result) => result.data)
+            .filter((dto): dto is RelationDto => Boolean(dto?.id))
+            .map((dto) => [dto.id!, toRelation(dto, slug)] as const),
+        ),
+      [slug],
+    ),
   });
 
-  return {
-    schema: withDetails(base.schema, details),
-    isLoading: base.isLoading,
-    error: base.error,
-  };
+  /*
+   * Ссылка на схему держится, пока не приехали новые данные. Без этого
+   * `relations` пересобирались на каждый рендер, а на них завязаны
+   * вкладки карточки и колонки-ссылки: useMemo у вызывающих не спасал —
+   * зависимость менялась вместе с рендером.
+   */
+  const schema = useMemo(() => withDetails(base.schema, details), [base.schema, details]);
+
+  return { schema, isLoading: base.isLoading, error: base.error };
 }
 
 /** Настройки связи поверх её короткой формы из списка. */

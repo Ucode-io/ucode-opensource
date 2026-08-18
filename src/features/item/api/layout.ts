@@ -5,16 +5,12 @@ import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError } from "@/shared/lib/toast";
 import {
-  addRelationTab,
   fieldOrder,
   headingSlug,
   hiddenFields,
   moveField,
-  relationTabs,
   sections,
-  removeTab,
   setHeading,
-  setTabColumns,
   type Layout,
 } from "../model/layout";
 
@@ -76,6 +72,8 @@ export function useDrawerLayout({
   });
 
   return {
+    /** Идёт запись раскладки: панели настроек показывают это спиннером. */
+    saving: update.isPending,
     /** Слаги полей в порядке карточки. */
     order: useMemo(() => fieldOrder(query.data), [query.data]),
     /** Слаги полей, спрятанных из карточки (`field_hide_layout`). */
@@ -84,11 +82,6 @@ export function useDrawerLayout({
     sections: useMemo(() => sections(query.data), [query.data]),
     /** Слаг поля-заголовка карточки. Пусто — заголовка нет. */
     heading: useMemo(() => headingSlug(query.data, language), [query.data, language]),
-    /** Вкладки связей: связанные строки рядом с полями записи. */
-    relationTabs: useMemo(
-      () => relationTabs(query.data, tableSlug),
-      [query.data, tableSlug],
-    ),
     /** Поле `moved` встаёт рядом с `target` — до него или после. */
     reorder: (moved: string, target: string, after: boolean) => {
       if (query.data) update.mutate(moveField(query.data, moved, target, after));
@@ -99,22 +92,6 @@ export function useDrawerLayout({
      */
     setHeading: (slug: string, variants: Record<string, string> | null) => {
       if (query.data) update.mutate(setHeading(query.data, slug, variants));
-    },
-    /** Новый набор колонок у вкладки связи — тем же PUT раскладки. */
-    setTabColumns: (tabId: string, columnIds: string[]) => {
-      if (query.data) update.mutate(setTabColumns(query.data, tabId, columnIds));
-    },
-    /** Новая вкладка связи. id придумываем мы: своего бэкенд не выдаёт. */
-    addTab: (relationId: string, label: string) => {
-      if (query.data) {
-        update.mutate(
-          addRelationTab(query.data, { id: crypto.randomUUID(), label, relationId }),
-        );
-      }
-    },
-    /** Убрать вкладку. Строки чужой таблицы остаются на месте. */
-    removeTab: (tabId: string) => {
-      if (query.data) update.mutate(removeTab(query.data, tabId));
     },
   };
 }

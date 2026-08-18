@@ -164,11 +164,36 @@ export function toUpdateBody(
     ...toColumnSettings(draft),
     attributes: {
       ...withoutOptions(field.attributes),
-      [`label_${language}`]: label,
+      ...labelAttributes(draft, language, label),
       ...toSettingsAttributes(draft),
       ...options,
     },
   };
+}
+
+/**
+ * Подписи по языкам: `label_<код>` за каждый заполненный язык.
+ *
+ * Активный язык берётся из `label` — это то, что человек видит в поле
+ * ввода, и оно же уходит в колонку `label`. Пустые языки не пишутся:
+ * пустой `label_uz` перебил бы подпись в старой админке, которая
+ * читает его первым.
+ */
+function labelAttributes(
+  draft: FieldDraft,
+  language: string,
+  label: string,
+): Record<string, string> {
+  const attributes: Record<string, string> = {};
+
+  for (const [code, text] of Object.entries(draft.labels)) {
+    const value = text.trim();
+    if (value) attributes[`label_${code}`] = value;
+  }
+
+  if (label) attributes[`label_${language}`] = label;
+
+  return attributes;
 }
 
 /**
@@ -312,8 +337,8 @@ export function toCreateBody(
      */
     ...toColumnSettings(draft),
     attributes: {
-      // Подпись на языке ДАННЫХ: её читает и ячейка, и старый фронт.
-      [`label_${language}`]: label,
+      // Подписи на языках ДАННЫХ: их читает и ячейка, и старый фронт.
+      ...labelAttributes(draft, language, label),
       ...toSettingsAttributes(draft),
       ...toOptionAttributes(draft, language),
     },

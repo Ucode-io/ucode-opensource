@@ -151,6 +151,16 @@ export type FieldDraft = {
    */
   multilanguage: boolean;
   /**
+   * Подписи по языкам ДАННЫХ проекта: `attributes.label_<код>`.
+   *
+   * Это НЕ мультиязычное значение поля (то — отдельные колонки, см.
+   * multilanguage): подпись у колонки одна, просто написана на разных
+   * языках. `label` — та же подпись на активном языке, и одна из этих
+   * двух вещей всегда дублирует другую: колонку `label` бэкенд хранит
+   * отдельно от attributes.
+   */
+  labels: Record<string, string>;
+  /**
    * BUTTON: колонки со значением у него нет вовсе — есть иконка и
    * функция, которую зовёт клик.
    *
@@ -192,6 +202,7 @@ export const EMPTY_DRAFT: FieldDraft = {
   autofillField: "",
   automatic: false,
   multilanguage: false,
+  labels: {},
   icon: "",
   functionId: "",
 };
@@ -210,6 +221,8 @@ export function toDraft(field: Field, language: string): FieldDraft {
     // Ровно та подпись, что стоит в шапке колонки: у поля их две —
     // колонка `label` и перевод на язык данных, и правят видимую.
     label: localized(field.labels, language, field.label),
+    // Подписи на всех языках проекта: их правит одно поле с переключателем.
+    labels: { ...field.labels },
     slug: field.slug,
     type: field.type,
     options: [],

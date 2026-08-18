@@ -2,13 +2,16 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import {
   IconCheck,
   IconChevronsRight,
+  IconFileDescription,
   IconFileTypePdf,
   IconGripVertical,
   IconHeading,
+  IconLayoutList,
   IconLayoutSidebarRightExpand,
   IconPlus,
   IconSquare,
   IconSquareToggleHorizontal,
+  IconTable,
   IconX,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
@@ -60,9 +63,9 @@ const DRAWER_STACK: object[] = [];
  * Строка берётся из уже загруженной страницы, а не запрашивается заново:
  * drawer открывают из таблицы, и данные для него уже в кэше.
  *
- * ponytail: ссылку на строку с чужой страницы (или после перезагрузки
- * с другим фильтром) открыть нельзя — строки нет в списке. Лечится
- * запросом одной строки по guid, когда это понадобится.
+ * Строки нет в загруженной странице — вызывающий запрашивает её по guid
+ * (см. useItem): по пересланной ссылке карточка открывается у того, у кого
+ * свой отбор и своя страница.
  */
 export function ItemDrawer({
   tableSlug,
@@ -80,6 +83,7 @@ export function ItemDrawer({
   tabContent,
   onLanguage,
   onAddTab,
+  addableRelations,
   onPdf,
   actions,
   titlePlaceholder,
@@ -111,7 +115,21 @@ export function ItemDrawer({
    * рисует вызывающий — это чужая таблица со своими колонками, и знать
    * о ней карточка не обязана. Пусто — вкладок нет, показана только карточка.
    */
-  tabs?: { id: string; label: string; relationId?: string }[] | undefined;
+  tabs?:
+    | {
+        id: string;
+        label: string;
+        relationId?: string;
+        /** Куда смотрит связь: от этого зависит значок вкладки. */
+        direction?: "incoming" | "outgoing";
+      }[]
+    | undefined;
+  /**
+   * Связи, из которых заводится вкладка. Отбирает их вызывающий: какая
+   * связь показывается вкладкой, знает features/view, а карточка только
+   * рисует список.
+   */
+  addableRelations?: Relation[] | undefined;
   /** Открытая вкладка связи. Пусто — открыта сама карточка. */
   tab?: string | undefined;
   onTab?: ((id: string) => void) | undefined;
@@ -396,10 +414,18 @@ export function ItemDrawer({
                 а не внутри — всплывашка, открытая из прокручиваемого
                 контейнера, обрезается его краями. */}
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-              <Tab label={t("drawer.record")} active={!tab} onClick={() => onTab?.("")} />
+              <Tab
+                icon={IconLayoutList}
+                label={t("drawer.record")}
+                active={!tab}
+                onClick={() => onTab?.("")}
+              />
               {(tabs ?? []).map((item) => (
                 <Tab
                   key={item.id}
+                  /* Вкладка на одну строку — не таблица: у обратной связи
+                     в нашей колонке лежит ровно один чужой guid. */
+                  icon={item.direction === "outgoing" ? IconFileDescription : IconTable}
                   label={item.label}
                   active={tab === item.id}
                   onClick={() => onTab?.(item.id)}
@@ -412,7 +438,7 @@ export function ItemDrawer({
                 что существовали на момент создания раскладки. */}
             {onAddTab && (
               <AddTabButton
-                relations={relations}
+                relations={addableRelations ?? []}
                 shown={new Set((tabs ?? []).map((item) => item.relationId).filter(Boolean))}
                 language={language}
                 onAdd={onAddTab}
@@ -743,11 +769,18 @@ function Heading({
   );
 }
 
+/**
+ * Вкладка карточки — со значком, как вкладки view над таблицей: полоса
+ * вкладок в карточке и полоса вкладок экрана читаются как одно и то же
+ * средство, и выглядеть они должны одинаково.
+ */
 function Tab({
+  icon,
   label,
   active,
   onClick,
 }: {
+  icon: typeof IconTable;
   label: string;
   active: boolean;
   onClick: () => void;
@@ -757,12 +790,13 @@ function Tab({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`h-7 shrink-0 rounded-md px-2 text-sm transition-colors ${
+      className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm transition-colors ${
         active
           ? "bg-accent-subtle text-accent-text"
           : "text-fg-muted hover:bg-surface-hover hover:text-fg"
       }`}
     >
+      <Icon as={icon} size={14} />
       {label}
     </button>
   );
@@ -887,10 +921,17 @@ function IconButton({
 }
 
 /**
- * «+» в полосе вкладок: показать ещё одну связь этой таблицы.
+ * «+» в полосе вкладок: показать связь этой таблицы.
  *
- * Предлагаются только те, которых во вкладках ещё нет: вторая вкладка
- * на ту же связь показывала бы те же строки под другим именем.
+ * Выбор — таблица связи, как и в старой админке: там «+ View» в карточке
+ * тоже требует выбрать связь, и без неё не создаёт ничего
+ * (useViewCreatePopupProps.jsx — `setError("table_slug")`). Типа view
+ * здесь нет: в старой их восемь, но нарисован из них один.
+ *
+ * Уже показанные связи из списка не убираются, только помечаются:
+ * две вкладки на одну связь — это «все заказы» и «заказы за месяц»,
+ * они отличаются колонками. Убирать их значило бы запретить второй
+ * взгляд на те же строки.
  */
 function AddTabButton({
   relations,
@@ -904,7 +945,7 @@ function AddTabButton({
   onAdd: (relationId: string, label: string) => void;
 }) {
   const { t } = useTranslation();
-  const rest = relations.filter((relation) => !shown.has(relation.id));
+  const list = relations;
 
   return (
     <Popover
@@ -927,12 +968,18 @@ function AddTabButton({
         <div className="max-h-72 w-56 overflow-y-auto">
           <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.addTabHint")}</p>
 
-          {rest.map((relation) => {
-            const label = localized(relation.toLabels, language, relation.toLabel || relation.toSlug);
+          {list.map((relation) => {
+            /* Имя связи, а не таблицы: у двух связей на одну таблицу
+               иначе два одинаковых пункта. Та же цепочка, что и у самой
+               вкладки (model/layout, relationTabs). */
+            const label =
+              relation.title ||
+              localized(relation.toLabels, language, relation.toLabel || relation.toSlug);
 
             return (
               <PopoverItem
                 key={relation.id}
+                active={shown.has(relation.id)}
                 onClick={() => {
                   onAdd(relation.id, label);
                   close();
@@ -943,8 +990,8 @@ function AddTabButton({
             );
           })}
 
-          {!rest.length && (
-            <p className="px-2 py-2 text-xs text-fg-subtle">{t("drawer.noMoreRelations")}</p>
+          {!list.length && (
+            <p className="px-2 py-2 text-xs text-fg-subtle">{t("drawer.noRelations")}</p>
           )}
         </div>
       )}

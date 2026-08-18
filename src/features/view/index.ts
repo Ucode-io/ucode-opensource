@@ -1,6 +1,15 @@
 export { useExportExcel, useImportExcel, useReadExcel } from "./api/excel";
 export { useCreateView, useDeleteView, useMenuViews, useUpdateView } from "./api/views";
-export { columnKey, pickView, resolveColumnIds, resolveColumns, tabViews } from "./model/columns";
+export { relationTabs, tabbableRelations } from "./model/relation-tabs";
+export type { RelationTab } from "./model/relation-tabs";
+export {
+  columnKey,
+  pickView,
+  pinnedIds,
+  resolveColumnIds,
+  resolveColumns,
+  tabViews,
+} from "./model/columns";
 export { RelationView } from "./ui/RelationView";
 export { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES, isTabView, viewName } from "./model/types";
 export type { View, ViewType } from "./model/types";

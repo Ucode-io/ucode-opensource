@@ -278,3 +278,19 @@ test("функция не уезжает у поля, которое перес�
   expect(body.attributes).not.toHaveProperty("function");
   expect(body.attributes).not.toHaveProperty("icon");
 });
+
+test("подписи едут на всех языках, пустые не затирают чужие", () => {
+  const body = toCreateBody(
+    {
+      ...EMPTY_DRAFT,
+      label: "Дата брони",
+      labels: { cyr: "Дата брони", uz: "Bron sanasi", en: "  " },
+    },
+    { tableSlug: "booking", language: "cyr", id: "f1" },
+  );
+
+  expect(body.attributes).toMatchObject({ label_cyr: "Дата брони", label_uz: "Bron sanasi" });
+  // Пустой язык не пишется: пустой label_en перебил бы подпись
+  // в старой админке — она читает его первым.
+  expect(body.attributes).not.toHaveProperty("label_en");
+});

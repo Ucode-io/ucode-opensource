@@ -18,7 +18,6 @@ import {
   IconPinnedOff,
   IconSearch,
   IconTable,
-  IconTag,
   IconTrash,
   IconX,
   type Icon as TablerIcon,
@@ -46,11 +45,12 @@ import { toast } from "@/shared/lib/toast";
 import { Icon } from "@/shared/ui/icon";
 import { CommitInput } from "@/shared/ui/commit-input";
 import { Input } from "@/shared/ui/input";
+import { LanguageInput } from "@/shared/ui/language-input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
 import { columnKey, moveBefore } from "../model/columns";
 import { hasUrl, type UrlTemplate } from "../model/url-template";
-import { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES, viewName, type View } from "../model/types";
+import { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES, type View } from "../model/types";
 import { viewIcon } from "./view-icon";
 
 /**
@@ -86,29 +86,40 @@ import { viewIcon } from "./view-icon";
  * Правки уходят по одной и сразу: панель настроек без кнопки «сохранить»
  * — то же, что переключатель в системных настройках.
  */
+/**
+ * Необязательный обработчик — это отсутствующая строка настроек, а не
+ * запрещённая: панель одна и на таблицу, и на вкладку связи в карточке,
+ * а у вкладки нет ни типа, ни своих адресов перехода. Показывать
+ * настройку, которой некуда уехать, хуже, чем не показывать вовсе.
+ */
+export type ViewOptionsLabels = { title: TranslationKey; delete: TranslationKey };
+
+const VIEW_LABELS: ViewOptionsLabels = { title: "view.options", delete: "view.delete" };
+
 export type ViewOptionsHandlers = {
   /** Имя на конкретном языке ДАННЫХ. Язык задаёт вызывающая страница. */
   onRename: (name: string, language: string) => void;
-  onType: (type: string) => void;
   onColumns: (columnIds: string[]) => void;
   onQuickFilters: (fields: Field[]) => void;
   /** Закреплённые колонки целиком: список ключей, как в columns. */
   onFixedColumns: (columnIds: string[]) => void;
   /** Отбор, с которым таблица открывается. Пустой — отбора нет. */
   onDefaultFilters: (filters: Filters) => void;
+  /** Смена типа. Нет — строки «Тип» нет: у вкладки тип всегда таблица. */
+  onType?: (type: string) => void;
   /** Куда уводит щелчок по строке. Пустой адрес — открывается карточка. */
-  onNavigate: (template: UrlTemplate) => void;
+  onNavigate?: (template: UrlTemplate) => void;
   /** Куда ведёт «новая запись». Пустой адрес — строка заводится в таблице. */
-  onObjectUrl: (template: UrlTemplate) => void;
+  onObjectUrl?: (template: UrlTemplate) => void;
   /** Адрес PDF записи. Пусто — кнопки в карточке нет. */
-  onPdfUrl: (url: string) => void;
+  onPdfUrl?: (url: string) => void;
   /** Настроить поле: открывает ту же панель, что и меню колонки. */
-  onEditField: (field: Field, anchor: DOMRect) => void;
+  onEditField?: (field: Field, anchor: DOMRect) => void;
   /** Удалить поле из ТАБЛИЦЫ, а не из view. Спрашивает подтверждение вызывающий. */
-  onDeleteField: (field: Field) => void;
-  onImport: () => void;
-  onExport: () => void;
-  /** Нет обработчика — удалять нельзя (последняя вкладка). */
+  onDeleteField?: (field: Field) => void;
+  onImport?: () => void;
+  onExport?: () => void;
+  /** Нет обработчика — удалять нечем. */
   onDelete?: () => void;
 };
 
@@ -122,6 +133,7 @@ export function ViewOptions({
   exporting,
   busy,
   handlers,
+  labels = VIEW_LABELS,
 }: {
   view: View;
   /** ВСЕ поля таблицы: скрытых во view здесь ещё нет, а показать их надо. */
@@ -136,6 +148,12 @@ export function ViewOptions({
   exporting: boolean;
   busy: boolean;
   handlers: ViewOptionsHandlers;
+  /**
+   * Как называть настраиваемое. По умолчанию это view; вкладка связи
+   * в карточке зовёт ту же панель своими словами — «Настройки вкладки»
+   * и «Убрать вкладку».
+   */
+  labels?: ViewOptionsLabels;
 }) {
   const { t } = useTranslation();
 
@@ -156,7 +174,7 @@ export function ViewOptions({
       trigger={({ open, toggle }) => (
         <ToolButton
           icon={IconDotsVertical}
-          label={t("view.options")}
+          label={t(labels.title)}
           open={open}
           onClick={toggle}
         />
@@ -173,6 +191,7 @@ export function ViewOptions({
           exporting={exporting}
           busy={busy}
           handlers={handlers}
+          labels={labels}
           close={close}
         />
       )}
@@ -183,7 +202,6 @@ export function ViewOptions({
 /** Открытая страница панели. null — список настроек. */
 type PanelPage =
   | "type"
-  | "view"
   | "columns"
   | "defaultFilters"
   | "quickFilters"
@@ -203,6 +221,7 @@ function Panel({
   exporting,
   busy,
   handlers,
+  labels,
   close,
 }: {
   view: View;
@@ -214,6 +233,7 @@ function Panel({
   exporting: boolean;
   busy: boolean;
   handlers: ViewOptionsHandlers;
+  labels: ViewOptionsLabels;
   close: () => void;
 }) {
   const { t } = useTranslation();
@@ -244,37 +264,11 @@ function Panel({
             key={type}
             active={type === view.type}
             icon={<Icon as={viewIcon(type)} size={16} className="shrink-0" />}
-            onClick={() => handlers.onType(type)}
+            onClick={() => handlers.onType?.(type)}
           >
             {t(`view.type.${type}` as TranslationKey, { defaultValue: type })}
           </PopoverItem>
         ))}
-      </Subpage>
-    );
-  }
-
-  if (page === "view") {
-    /*
-     * Имя на каждом языке ДАННЫХ проекта. Отдельная страница, а не одно
-     * поле в шапке: в шапке правится только текущий язык, и админ,
-     * работающий в русском интерфейсе, годами не видел, что узбекское
-     * имя вкладки пустое.
-     */
-    return (
-      <Subpage title={t("view.viewSettings")} busy={busy} onBack={back} hint={t("view.namesHint")}>
-        <div className="flex flex-col gap-1 p-1">
-          {languages.map((item) => (
-            <label key={item.code} className="flex flex-col gap-0.5">
-              <span className="px-0.5 text-2xs text-fg-subtle">{item.nativeName}</span>
-              <CommitInput
-                value={view.names[item.code] ?? ""}
-                placeholder={typeLabel}
-                label={t("view.name")}
-                onCommit={(name) => handlers.onRename(name, item.code)}
-              />
-            </label>
-          ))}
-        </div>
       </Subpage>
     );
   }
@@ -505,14 +499,14 @@ function Panel({
             label={t("view.navigateUrl")}
             hint={t("view.navigateUrlHint")}
             template={view.navigate}
-            onChange={handlers.onNavigate}
+            onChange={(template) => handlers.onNavigate?.(template)}
           />
 
           <UrlSetting
             label={t("view.objectUrl")}
             hint={t("view.objectUrlHint")}
             template={view.objectUrl}
-            onChange={handlers.onObjectUrl}
+            onChange={(template) => handlers.onObjectUrl?.(template)}
           />
 
           <label className="flex flex-col gap-0.5">
@@ -522,7 +516,7 @@ function Panel({
               placeholder={URL_PLACEHOLDER}
               label={t("view.pdfUrl")}
               allowEmpty
-              onCommit={handlers.onPdfUrl}
+              onCommit={(url) => handlers.onPdfUrl?.(url)}
             />
             <span className="px-0.5 text-2xs text-fg-subtle">{t("view.pdfUrlHint")}</span>
           </label>
@@ -551,7 +545,7 @@ function Panel({
                   <Icon as={IconChevronRight} size={14} className="shrink-0 text-fg-subtle" />
                 }
                 onClick={(event) => {
-                  handlers.onEditField(field, event.currentTarget.getBoundingClientRect());
+                  handlers.onEditField?.(field, event.currentTarget.getBoundingClientRect());
                   close();
                 }}
               >
@@ -561,7 +555,7 @@ function Panel({
               <button
                 type="button"
                 onClick={() => {
-                  handlers.onDeleteField(field);
+                  handlers.onDeleteField?.(field);
                   close();
                 }}
                 aria-label={t("column.delete")}
@@ -577,7 +571,6 @@ function Panel({
     );
   }
 
-  const title = viewName(view, language);
   const defaultCount = activeFilterCount(defaultFilters);
   /* Сколько адресов задано: строка настроек молчит, пока их нет. */
   const navigationCount = [hasUrl(view.navigate), hasUrl(view.objectUrl), Boolean(view.pdfUrl)]
@@ -585,7 +578,7 @@ function Panel({
 
   return (
     <div className="w-80">
-      <Header title={t("view.options")} busy={busy} onClose={close} />
+      <Header title={t(labels.title)} busy={busy} onClose={close} />
 
       {can.settings && (
         <>
@@ -593,34 +586,42 @@ function Panel({
             <span className="grid size-8 shrink-0 place-items-center rounded-md border border-border text-fg-muted">
               <Icon as={viewIcon(view.type)} size={16} />
             </span>
-            {/* Placeholder — тип, а не пустота: у большинства view имени нет,
-                и пустая строка ввода читается как «настройка сломалась». */}
-            <CommitInput
-              value={view.names[language] ?? view.name}
+            {/*
+              Имя на каждом языке ДАННЫХ — одним полем с переключателем
+              внутри, как в старой админке (TextFieldWithMultiLanguage).
+              Пока правился только текущий язык, админ, работающий
+              в русском интерфейсе, годами не видел, что узбекское имя
+              вкладки пустое.
+
+              Placeholder — тип, а не пустота: у большинства view имени
+              нет, и пустая строка ввода читается как «настройка
+              сломалась».
+            */}
+            <LanguageInput
+              languages={languages}
+              values={view.names}
               placeholder={typeLabel}
               label={t("view.name")}
-              onCommit={(name) => handlers.onRename(name, language)}
+              onCommit={(code, name) => handlers.onRename(name, code)}
             />
           </div>
 
-          <Row
-            icon={IconLayoutList}
-            label={t("view.viewType")}
-            value={typeLabel}
-            onClick={() => open("type")}
-          />
-          <Row
-            icon={IconTag}
-            label={t("view.viewSettings")}
-            value={title}
-            onClick={() => open("view")}
-          />
-          <Row
-            icon={IconExternalLink}
-            label={t("view.navigation")}
-            value={navigationCount ? String(navigationCount) : ""}
-            onClick={() => open("navigation")}
-          />
+          {handlers.onType && (
+            <Row
+              icon={IconLayoutList}
+              label={t("view.viewType")}
+              value={typeLabel}
+              onClick={() => open("type")}
+            />
+          )}
+          {handlers.onNavigate && (
+            <Row
+              icon={IconExternalLink}
+              label={t("view.navigation")}
+              value={navigationCount ? String(navigationCount) : ""}
+              onClick={() => open("navigation")}
+            />
+          )}
 
           <PopoverSeparator />
         </>
@@ -661,12 +662,12 @@ function Panel({
 
       <PopoverSeparator />
 
-      {can.excelMenu && (
+      {can.excelMenu && handlers.onImport && handlers.onExport && (
         <>
           <PopoverItem
             icon={<Icon as={IconFileImport} size={16} className="shrink-0 text-fg-muted" />}
             onClick={() => {
-              handlers.onImport();
+              handlers.onImport?.();
               close();
             }}
           >
@@ -681,7 +682,7 @@ function Panel({
                 className={`shrink-0 text-fg-muted ${exporting ? "animate-spin" : ""}`}
               />
             }
-            onClick={() => handlers.onExport()}
+            onClick={() => handlers.onExport?.()}
           >
             {t("view.export")}
           </PopoverItem>
@@ -722,7 +723,10 @@ function Panel({
         </div>
       )}
 
-      {can.settings && (
+      {/* Поля правятся там, где для них есть редактор: у вкладки связи
+          это поля ЧУЖОЙ таблицы, и открывать их из карточки записи
+          означало бы редактор поверх редактора. */}
+      {can.settings && handlers.onEditField && (
         <Row
           icon={IconLayoutList}
           label={t("view.fields")}
@@ -743,7 +747,7 @@ function Panel({
               close();
             }}
           >
-            {t("view.delete")}
+            {t(labels.delete)}
           </PopoverItem>
         </>
       )}

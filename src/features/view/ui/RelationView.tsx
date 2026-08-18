@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { IconEye, IconEyeOff, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useTablePermission } from "@/features/auth";
 import {
   DataGrid,
   FilterBar,
@@ -9,20 +9,44 @@ import {
   ItemDrawer,
   TableToolbar,
   activeFilterCount,
+  fromConditions,
   nextSorts,
+  orderColumns,
+  seedFilters,
+  toConditions,
   useCreateItem,
+  useDrawerLayout,
   useItems,
   useUpdateItem,
   type Filters,
-  type RelationTab,
+  type Item,
   type Sort,
 } from "@/features/item";
-import { localized, useTableSchema } from "@/features/table";
+import { useTableSchema, type Field, type Relation } from "@/features/table";
+import type { DataLanguage } from "@/features/workspace";
 import { toast } from "@/shared/lib/toast";
-import { Icon } from "@/shared/ui/icon";
-import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
-import { ToolButton } from "@/shared/ui/tool-button";
-import { columnKey, resolveColumnIds } from "../model/columns";
+import { pinnedIds, resolveColumnIds } from "../model/columns";
+import type { RelationTab } from "../model/relation-tabs";
+import { useExportExcel } from "../api/excel";
+import { ExcelImportDialog } from "./ExcelImportDialog";
+import { ViewOptions } from "./ViewOptions";
+
+/**
+ * Правки настроек вкладки. Все они уезжают в раскладку карточки одним
+ * и тем же PUT: у вкладки нет своей строки в базе, кроме `tab`.
+ */
+export type TabSettings = {
+  /** Имя на конкретном языке ДАННЫХ. */
+  onRename: (name: string, language: string) => void;
+  onColumns: (columnIds: string[]) => void;
+  onFixedColumns: (columnIds: string[]) => void;
+  /** Поля целиком: в attributes лежат они, а не идентификаторы. */
+  onQuickFilters: (fields: Field[]) => void;
+  /** Область видимости вкладки: карта «слаг → условие», как в get-list. */
+  onDefaultFilters: (conditions: Record<string, unknown>) => void;
+  /** Убрать вкладку из карточки. */
+  onRemove: () => void;
+};
 
 /**
  * Вкладка связи в карточке записи: строки ЧУЖОЙ таблицы, относящиеся
@@ -47,11 +71,13 @@ export function RelationView({
   tab,
   parentGuid,
   parentValue,
+  menuId,
   locale,
   language,
-  canEdit,
-  onColumns,
-  onRemove,
+  languages = EMPTY_LANGUAGES,
+  onLanguage,
+  settings,
+  saving = false,
 }: {
   tab: RelationTab;
   /** guid открытой записи. По нему отбираются связанные строки. */
@@ -62,16 +88,30 @@ export function RelationView({
    * по guid, который лежит у нас.
    */
   parentValue?: string | undefined;
+  /**
+   * Пункт меню. Нужен раскладке связанной строки: карточка внутри
+   * вкладки показывает поля в том же порядке, что и своя.
+   */
+  menuId: string;
   /** Локаль интерфейса: форматы дат и чисел. */
   locale: string;
   /** Язык данных: подписи полей и вариантов. */
   language: string;
-  /** Право настраивать раскладку: без него колонки вкладки не правятся. */
-  canEdit?: boolean;
-  /** Новый набор колонок вкладки. Не задан — настройка недоступна. */
-  onColumns?: ((columnIds: string[]) => void) | undefined;
-  /** Убрать вкладку из карточки. Не задан — убирать нечем. */
-  onRemove?: (() => void) | undefined;
+  /** Языки данных проекта: по ним сводятся колонки мультиязычного поля. */
+  languages?: DataLanguage[];
+  /**
+   * Сменить язык ДАННЫХ. Нужен карточке связанной строки: у чужой
+   * таблицы мультиязычные поля свои, и переключать их приходится там же.
+   */
+  onLanguage?: ((code: string) => void) | undefined;
+  /**
+   * Правки настроек вкладки. Не заданы — панели «⋯» нет вовсе: настройки
+   * лежат в раскладке карточки, и правит их тот, у кого есть права
+   * на неё. У вложенной вкладки их нет намеренно — см. RelatedRow.
+   */
+  settings?: TabSettings | undefined;
+  /** Идёт запись раскладки: панель настроек показывает это спиннером. */
+  saving?: boolean;
 }) {
   const { t } = useTranslation();
 
@@ -101,7 +141,16 @@ export function RelationView({
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(LIMIT);
   const [search, setSearch] = useState("");
-  const [own, setOwn] = useState<Filters>({});
+  /*
+   * Отбор человека. null — его ещё не трогали, и в подшапке стоят чипы,
+   * предложенные в настройках вкладки. Пустой объект — трогали и сняли
+   * всё: подсказка тогда не возвращается, иначе снятый чип приходил бы
+   * обратно сам.
+   *
+   * Поля подсказки ищутся в схеме, а она приезжает не сразу, — поэтому
+   * подсказка вычисляется, а не кладётся в начальное состояние.
+   */
+  const [own, setOwn] = useState<Filters | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   /** Раскрытая связанная строка. Пусто — открыт список. */
   const [openGuid, setOpenGuid] = useState<string | null>(null);
@@ -123,9 +172,28 @@ export function RelationView({
   const link = tab.direction === "incoming" ? tab.fieldSlug : "guid";
   const value = tab.direction === "incoming" ? parentGuid : (parentValue ?? "");
 
+  /*
+   * Отбор по умолчанию — это ОБЛАСТЬ ВИДИМОСТИ вкладки, а не начальное
+   * значение фильтра: он домешивается сверху и перекрывает условие
+   * человека по тому же полю. Так же он работает у таблицы.
+   */
+  const scope = useMemo(() => fromConditions(tab.view.defaultFilters), [tab.view.defaultFilters]);
+
+  const seeded = useMemo(
+    () => seedFilters(tab.view.quickFilterIds, schema.fields),
+    [tab.view.quickFilterIds, schema.fields],
+  );
+  const chips = own ?? seeded;
+
   const filters = useMemo(
-    () => ({ ...own, [link]: { op: "contains" as const, values: [value] } }),
-    [own, link, value],
+    () => ({ ...chips, ...scope, [link]: { op: "contains" as const, values: [value] } }),
+    [chips, scope, link, value],
+  );
+
+  /** Закреплённые колонки вкладки — в тех же ключах, что и у таблицы. */
+  const pinned = useMemo(
+    () => pinnedIds(tab.view.fixedColumnIds, columns),
+    [tab.view.fixedColumnIds, columns],
   );
 
   const { page: rows, isLoading } = useItems(value ? tab.tableSlug : undefined, {
@@ -138,6 +206,9 @@ export function RelationView({
 
   const update = useUpdateItem(tab.tableSlug);
   const create = useCreateItem(tab.tableSlug);
+  const exportExcel = useExportExcel(tab.tableSlug);
+  const [importing, setImporting] = useState(false);
+  const can = useTablePermission(tab.tableSlug);
 
   /*
    * Выделение вкладке не нужно: массовых действий над связанными
@@ -172,7 +243,7 @@ export function RelationView({
             setPage(1);
           }}
           filtersOpen={filtersOpen}
-          filterCount={activeFilterCount(own)}
+          filterCount={activeFilterCount(chips)}
           onToggleFilters={() => setFiltersOpen((value) => !value)}
           search={search}
           onSearch={(next) => {
@@ -181,13 +252,38 @@ export function RelationView({
           }}
         />
 
-        {onColumns && canEdit && (
-          <TabColumns
+        {settings && (
+          <ViewOptions
+            view={tab.view}
+            // ВСЕ поля чужой таблицы: скрытую колонку иначе не вернуть.
             fields={schema.fields}
-            shown={columns}
             language={language}
-            onChange={onColumns}
-            {...(onRemove ? { onRemove } : {})}
+            languages={languages}
+            defaultFilters={scope}
+            // Права роли на ЧУЖУЮ таблицу: настройки вкладки — про неё,
+            // а не про таблицу, из которой открыли карточку.
+            can={can}
+            exporting={exportExcel.isPending}
+            busy={saving}
+            labels={{ title: "drawer.tabSettings", delete: "drawer.removeTab" }}
+            handlers={{
+              onRename: (name, nameLanguage) => settings.onRename(name, nameLanguage),
+              onColumns: settings.onColumns,
+              onQuickFilters: settings.onQuickFilters,
+              onFixedColumns: settings.onFixedColumns,
+              onDefaultFilters: (next) => settings.onDefaultFilters(toConditions(next)),
+              onImport: () => setImporting(true),
+              // Выгружается то, что видно: колонки вкладки, её отбор
+              // и связь с открытой записью — без последней файл содержал
+              // бы чужие строки.
+              onExport: () =>
+                exportExcel.mutate({
+                  fieldIds: columns.map((field) => field.id),
+                  filters,
+                  search,
+                }),
+              onDelete: settings.onRemove,
+            }}
           />
         )}
       </div>
@@ -196,7 +292,7 @@ export function RelationView({
         <FilterBar
           columns={columns}
           language={language}
-          filters={own}
+          filters={chips}
           sorts={sorts}
           onFilters={(next) => {
             setOwn(next);
@@ -216,6 +312,7 @@ export function RelationView({
         relations={schema.relations}
         locale={locale}
         language={language}
+        pinned={pinned}
         selected={selected}
         onSelect={setSelected}
         sorts={sorts}
@@ -264,23 +361,31 @@ export function RelationView({
         onDeleteSelected={() => {}}
       />
 
-      {/*
-        Карточка связанной строки. Раскладки у чужой таблицы в этом меню
-        нет, поэтому поля идут списком в порядке колонок вкладки —
-        и это честнее, чем показать её раскладку из другого меню.
-      */}
+      {importing && (
+        <ExcelImportDialog
+          tableSlug={tab.tableSlug}
+          // Все поля чужой таблицы: столбец файла можно положить
+          // и в колонку, которой во вкладке не видно.
+          fields={schema.fields}
+          language={language}
+          onClose={() => setImporting(false)}
+        />
+      )}
+
+      {/* Карточка связанной строки — со своей раскладкой и своими
+          вкладками, пока хватает глубины. */}
       {openRow && (
-        <ItemDrawer
+        <RelatedRow
           key={openGuid}
           tableSlug={tab.tableSlug}
-          columns={columns}
           row={openRow}
+          fields={schema.fields}
           relations={schema.relations}
+          menuId={menuId}
           locale={locale}
           language={language}
-          languages={[]}
-          sections={[]}
-          heading=""
+          languages={languages}
+          {...(onLanguage ? { onLanguage } : {})}
           onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
           onClose={() => setOpenGuid(null)}
         />
@@ -290,89 +395,75 @@ export function RelationView({
 }
 
 /**
- * Колонки вкладки. Хранятся в раскладке карточки, поэтому и правятся
- * ею же — отдельного view у вкладки нет.
+ * Карточка связанной строки, раскрытая поверх вкладки.
  *
- * Список полей — ВСЕ поля чужой таблицы: скрытую колонку иначе неоткуда
- * вернуть.
+ * Раскладка у чужой таблицы своя, и берётся она тем же запросом, что
+ * и раскладка открытой записи: ручка отдаёт раскладку пункта меню,
+ * а если её нет — общую раскладку таблицы (layout.go, GetSingleLayout).
+ * Поэтому связанная строка показывается в том же порядке полей, что
+ * и в своей таблице, с тем же заголовком и теми же секциями.
+ *
+ * Запрос уходит только когда строку раскрыли: хук живёт в отдельном
+ * компоненте, а не во вкладке, и до первого щелчка его нет вовсе.
+ *
+ * Ничего не правит: у чужой таблицы это ОБЩАЯ раскладка, и PUT привязал
+ * бы её к нашему пункту меню (`menu_id` пишется безусловно) — с этого
+ * момента все остальные меню видели бы её изменения. Порядок полей,
+ * заголовок и набор вкладок здесь только читаются.
  */
-function TabColumns({
+function RelatedRow({
+  tableSlug,
+  row,
   fields,
-  shown,
+  relations,
+  menuId,
+  locale,
   language,
-  onChange,
-  onRemove,
+  languages,
+  onLanguage,
+  onEdit,
+  onClose,
 }: {
-  fields: Parameters<typeof resolveColumnIds>[1];
-  shown: Parameters<typeof resolveColumnIds>[1];
+  tableSlug: string;
+  row: Item;
+  /** Все поля чужой таблицы: карточка показывает запись целиком. */
+  fields: Field[];
+  relations: Relation[];
+  menuId: string;
+  locale: string;
   language: string;
-  onChange: (columnIds: string[]) => void;
-  /** Убрать вкладку целиком. Не задан — пункта нет. */
-  onRemove?: (() => void) | undefined;
+  languages: DataLanguage[];
+  onLanguage?: ((code: string) => void) | undefined;
+  onEdit: (guid: string, slug: string, value: unknown) => void;
+  onClose: () => void;
 }) {
-  const { t } = useTranslation();
-  const visible = new Set(shown.map((field) => field.id));
+  const layout = useDrawerLayout({ tableSlug, menuId, language });
+
+  const columns = useMemo(
+    () => orderColumns(fields, layout.order).filter((field) => !layout.hidden.has(field.slug)),
+    [fields, layout.order, layout.hidden],
+  );
 
   return (
-    <Popover
-      align="end"
-      trigger={({ open, toggle }) => (
-        <ToolButton icon={IconEye} label={t("view.columns")} open={open} onClick={toggle} />
-      )}
-    >
-      {(close) => (
-        <div className="max-h-72 w-64 overflow-y-auto">
-          <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.tabColumnsHint")}</p>
-
-          {fields.map((field) => {
-            const on = visible.has(field.id);
-
-            return (
-              <PopoverItem
-                key={field.id}
-                active={on}
-                icon={
-                  <Icon
-                    as={on ? IconEye : IconEyeOff}
-                    size={16}
-                    className={`shrink-0 ${on ? "" : "text-fg-subtle"}`}
-                  />
-                }
-                onClick={() =>
-                  onChange(
-                    on
-                      ? shown.filter((item) => item.id !== field.id).map(columnKey)
-                      : [...shown, field].map(columnKey),
-                  )
-                }
-              >
-                {localized(field.labels, language, field.label)}
-              </PopoverItem>
-            );
-          })}
-
-          {/* Убрать вкладку — здесь же: заводят её в полосе вкладок,
-              а снимают там, где настраивают. */}
-          {onRemove && (
-            <>
-              <PopoverSeparator />
-              <PopoverItem
-                danger
-                icon={<Icon as={IconTrash} size={16} className="shrink-0" />}
-                onClick={() => {
-                  onRemove();
-                  close();
-                }}
-              >
-                {t("drawer.removeTab")}
-              </PopoverItem>
-            </>
-          )}
-        </div>
-      )}
-    </Popover>
+    <ItemDrawer
+      tableSlug={tableSlug}
+      columns={columns}
+      row={row}
+      relations={relations}
+      locale={locale}
+      language={language}
+      languages={languages}
+      {...(onLanguage ? { onLanguage } : {})}
+      sections={layout.sections}
+      heading={layout.heading}
+      onEdit={onEdit}
+      onClose={onClose}
+    />
   );
 }
 
 /** Строк на странице вкладки. Меньше, чем у таблицы: места под неё меньше. */
 const LIMIT = 10;
+
+/** Постоянная ссылка: пустой литерал по умолчанию пересобирал бы поля. */
+const EMPTY_LANGUAGES: DataLanguage[] = [];

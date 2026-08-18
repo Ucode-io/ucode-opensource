@@ -38,3 +38,23 @@ test("позиция берётся из ответа, а не выдумыва�
   expect(toMenuNode({ id: "1", label: "Яблоко", type: "TABLE" }, "ru", 0).order).toBe(0);
   expect(toMenuNode({ id: "2", label: "Абрикос", type: "TABLE" }, "ru", 1).order).toBe(1);
 });
+
+test("подпись пункта: сначала локаль интерфейса, потом язык данных", () => {
+  const dto = {
+    id: "1",
+    label: "Orders",
+    type: "TABLE",
+    attributes: { label_ru: "Заказы", label_cyr: "Буюртмалар" },
+  };
+
+  // Переключение языка интерфейса меняет надпись в сайдбаре — ради этого
+  // локаль и стоит первой.
+  expect(toMenuNode(dto, ["ru", "cyr"]).label).toBe("Заказы");
+
+  // Локали интерфейса среди языков проекта нет (проект на en+cyr) —
+  // остаётся язык данных, а не голая колонка label.
+  expect(toMenuNode(dto, ["uz", "cyr"]).label).toBe("Буюртмалар");
+
+  // Не заполнено ни на одном — базовая колонка.
+  expect(toMenuNode(dto, ["uz", "kk"]).label).toBe("Orders");
+});

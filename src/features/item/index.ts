@@ -1,7 +1,6 @@
 export { useDeleteItems, useItem, useItems, useUpdateItem } from "./api/items";
 export { useDrawerLayout } from "./api/layout";
 export { orderColumns } from "./model/layout";
-export type { RelationTab } from "./model/layout";
 export { useCreateItem } from "./api/relations";
 export type { CellEdit, ItemsPage } from "./api/items";
 export { cellKind, editorKind } from "./model/cell-kind";
@@ -17,6 +16,7 @@ export {
   isFilterSet,
   nextSorts,
   parseSorts,
+  seedFilters,
   toConditions,
   toRequestBody,
 } from "./model/query";

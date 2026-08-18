@@ -66,17 +66,17 @@ export function useDataLanguages() {
     enabled: Boolean(projectId),
     // Набор языков меняют в настройках проекта, а не по ходу работы.
     staleTime: 5 * 60_000,
-    select: (data): DataLanguage[] =>
-      (data.language ?? [])
-        .filter((dto) => dto.short_name)
-        .map((dto) => ({
-          code: dto.short_name!,
-          name: dto.name || dto.short_name!,
-          nativeName: dto.native_name || dto.name || dto.short_name!,
-        })),
+    /*
+     * Ссылка на функцию постоянная, и это не педантизм: react-query
+     * пересчитывает `select` каждый раз, когда меняется его identity,
+     * — со стрелкой на месте это каждый рендер, и наружу уходит новый
+     * массив языков. От него зависят коды, от кодов — сведённые колонки
+     * таблицы и карточки: перерисовывалось всё и без единой правки.
+     */
+    select: toLanguages,
   });
 
-  const languages = query.data ?? [];
+  const languages = query.data ?? NO_LANGUAGES;
   const known = languages.some((language) => language.code === chosen);
 
   return {
@@ -84,6 +84,18 @@ export function useDataLanguages() {
     current: (known ? chosen : languages[0]?.code) ?? "",
     setCurrent: setDataLanguage,
   };
+}
+
+const NO_LANGUAGES: DataLanguage[] = [];
+
+function toLanguages(data: ProjectDetailDto): DataLanguage[] {
+  return (data.language ?? [])
+    .filter((dto) => dto.short_name)
+    .map((dto) => ({
+      code: dto.short_name!,
+      name: dto.name || dto.short_name!,
+      nativeName: dto.native_name || dto.name || dto.short_name!,
+    }));
 }
 
 export function useEnvironments(projectId: string, enabled = true) {

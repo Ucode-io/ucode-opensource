@@ -102,3 +102,22 @@ export function pickView(views: View[], viewId: string | undefined): View | unde
   const tabs = tabViews(views);
   return tabs.find((view) => view.id === viewId) ?? tabs[0];
 }
+
+/**
+ * Закреплённые колонки → id полей, которые понимает таблица.
+ *
+ * Ключей у поля-связи два — id поля и id связи, — и в настройке лежит
+ * любой из них, как и в `columns`. Наружу отдаётся только id поля:
+ * второго ключа таблица не знает.
+ */
+export function pinnedIds(fixedColumnIds: string[], fields: Field[]): Set<string> {
+  if (!fixedColumnIds.length) return new Set();
+
+  const fixed = new Set(fixedColumnIds);
+
+  return new Set(
+    fields
+      .filter((field) => fixed.has(field.id) || (field.relationId && fixed.has(field.relationId)))
+      .map((field) => field.id),
+  );
+}

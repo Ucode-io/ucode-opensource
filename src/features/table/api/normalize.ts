@@ -223,9 +223,21 @@ export function toRelation(dto: RelationDto, tableSlug: string): Relation {
     toSlug: other?.slug ?? "",
     toLabel: other?.label?.trim() || other?.slug || "",
     toLabels: pickLabels(other?.attributes),
+    title: dto.title?.trim() ?? "",
     // Колонка-связь лежит в таблице table_from. Если это не мы — в нашей
     // строке её нет, и наружу отдаём пусто, а не чужой слаг.
     fieldFrom: ours === from ? (dto.field_from ?? "") : "",
+    direction: ours === from ? "outgoing" : "incoming",
+    /*
+     * Имя колонки-ссылки — из ответа. Запасной вариант `<table_to>_id`
+     * нужен старым связям, у которых `field_from` в базе пуст: правило
+     * именования у бэкенда одно, и другого имени у такой колонки быть
+     * не могло.
+     */
+    linkField:
+      dto.relation_field_slug?.trim() ||
+      dto.field_from?.trim() ||
+      (to?.slug ? `${to.slug}_id` : ""),
     viewFieldSlugs,
     viewFieldIds,
     raw: { ...dto },

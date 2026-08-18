@@ -181,3 +181,49 @@ test("колонка-связь отдаётся только той табли�
   expect(toRelation(dto, "example_hey").fieldFrom).toBe("listings_id");
   expect(toRelation(dto, "listings").fieldFrom).toBe("");
 });
+
+/*
+ * Сторона и колонка-ссылка: по ним вкладка карточки отбирает связанные
+ * строки. Имя колонки берётся из ответа, а не собирается из слагов —
+ * у второй связи на ту же таблицу оно другое, и собранное промахивается.
+ */
+test("связь знает свою сторону и настоящее имя колонки-ссылки", () => {
+  const dto = {
+    id: "r",
+    type: "Many2One",
+    table_from: { id: "from", slug: "order" },
+    table_to: { id: "to", slug: "customer" },
+    field_from: "customer_id_2",
+  };
+
+  // Мы — table_to: на нас ссылаются чужие строки.
+  expect(toRelation(dto, "customer")).toMatchObject({
+    direction: "incoming",
+    linkField: "customer_id_2",
+    toSlug: "order",
+  });
+
+  // Мы — table_from: колонка-ссылка в нашей строке.
+  expect(toRelation(dto, "order")).toMatchObject({
+    direction: "outgoing",
+    linkField: "customer_id_2",
+    toSlug: "customer",
+  });
+});
+
+test("своё имя колонки перебивает field_from, пустое — правило бэкенда", () => {
+  const dto = {
+    id: "r",
+    type: "Many2Dynamic",
+    table_from: { id: "from", slug: "task" },
+    table_to: { id: "to", slug: "customer" },
+    field_from: "customer_id",
+    relation_field_slug: "owner_id",
+  };
+
+  expect(toRelation(dto, "customer").linkField).toBe("owner_id");
+  // Ни того, ни другого — остаётся имя, которым колонку завёл бэкенд.
+  expect(toRelation({ ...dto, field_from: "", relation_field_slug: "" }, "customer").linkField).toBe(
+    "customer_id",
+  );
+});

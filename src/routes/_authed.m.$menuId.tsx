@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
@@ -16,6 +16,7 @@ import {
   formatSorts,
   nextSorts,
   parseSorts,
+  seedFilters,
   fieldIcon,
   orderColumns,
   useCreateItem,
@@ -61,7 +62,10 @@ import {
   ViewTabs,
   columnKey,
   pickView,
+  pinnedIds,
   resolveColumns,
+  relationTabs as relationTabsFromViews,
+  tabbableRelations,
   tabViews,
   useCreateView,
   useDeleteView,
@@ -168,17 +172,51 @@ function MenuPage() {
    * перестановка колонок — поля карточки.
    */
   const drawerLayout = useDrawerLayout({ tableSlug: view?.tableSlug ?? "", menuId, language });
+
+  /*
+   * Вкладки связей в карточке — это view пункта меню с `is_relation_view`
+   * (см. features/view/model/relation-tabs). Того же списка, что и вкладки
+   * экрана: второго запроса не нужно.
+   */
+  const relationTabs = useMemo(
+    () => relationTabsFromViews(views, schema.relations, language),
+    [views, schema.relations, language],
+  );
+
+  /** Связи, которые ещё можно показать вкладкой. */
+  const addableRelations = useMemo(
+    () => tabbableRelations(schema.relations),
+    [schema.relations],
+  );
   /*
    * Поля карточки: колонки view в порядке раскладки, минус спрятанные
    * из карточки (`field_hide_layout`). Скрытие из карточки — настройка
    * раскладки, а не поля: колонкой таблицы то же поле остаётся.
+   *
+   * Языковые колонки здесь НЕ сводятся, в отличие от колонок таблицы:
+   * карточка сводит их сама и по ним же понимает, что запись
+   * мультиязычная и нужен переключатель языка. Со сведённым набором
+   * от поля остаётся один вариант — переключать нечего, и полоса языков
+   * не появлялась вовсе (флаг `enable_multilanguage` для этого не годится:
+   * object_builder не пишет его при вставке, см. ADR-0004).
    */
-  const drawerColumns = useMemo(
+  const drawerFields = useMemo(
     () =>
-      orderColumns(columns, drawerLayout.order).filter(
+      orderColumns(resolveColumns(view, schema.fields), drawerLayout.order).filter(
         (field) => !drawerLayout.hidden.has(field.slug),
       ),
-    [columns, drawerLayout.order, drawerLayout.hidden],
+    [view, schema.fields, drawerLayout.order, drawerLayout.hidden],
+  );
+
+  /*
+   * Те же поля, сведённые к активному языку: столько их и показывает
+   * карточка. Проверяется заполненность именно их — требовать перевод
+   * на каждый язык проекта значит не дать создать запись, пока не набран
+   * узбекский вариант.
+   */
+  const drawerColumns = useMemo(
+    () => collapseLanguages(drawerFields, codes, language),
+    [drawerFields, codes, language],
   );
 
   const supportedView = view ? IMPLEMENTED_VIEW_TYPES.has(view.type) : false;
@@ -250,11 +288,23 @@ function MenuPage() {
 
   /** Закреплённые колонки — по id поля: DataGrid знает только их. */
   const pinned = useMemo(
-    () => new Set(columns.filter((field) => isPinned(view, field)).map((field) => field.id)),
-    [columns, view],
+    () => pinnedIds(view?.fixedColumnIds ?? [], columns),
+    [columns, view?.fixedColumnIds],
   );
 
-  const createView = useCreateView({ menuId, tableSlug: view?.tableSlug, order: tabs.length + 1 });
+  /*
+   * Слаг таблицы переживает удаление последнего view: ручке создания
+   * нужен именно он, а в пункте меню лежит `table_id`. Без этого
+   * удаление последней вкладки запирало бы пункт меню — «+» слал бы
+   * запрос с пустым слагом.
+   */
+  const lastSlug = useRef("");
+  useEffect(() => {
+    if (view?.tableSlug) lastSlug.current = view.tableSlug;
+  }, [view?.tableSlug]);
+  const tableSlug = view?.tableSlug ?? (lastSlug.current || undefined);
+
+  const createView = useCreateView({ menuId, tableSlug, order: tabs.length + 1 });
   const deleteView = useDeleteView({ menuId, tableSlug: view?.tableSlug });
   const updateView = useUpdateView({ menuId, tableSlug: view?.tableSlug });
   const [deletingView, setDeletingView] = useState<View | null>(null);
@@ -311,7 +361,7 @@ function MenuPage() {
   const drawerRow = loadedRow ?? fetched.item;
 
   /** Открытая вкладка связи. Их набор приходит из раскладки карточки. */
-  const relationTab = drawerLayout.relationTabs.find((item) => item.id === search.tab);
+  const relationTab = relationTabs.find((item) => item.id === search.tab);
 
   /*
    * Подшапка открыта, если её открыли явно или в ней уже что-то есть:
@@ -408,11 +458,13 @@ function MenuPage() {
         )}
       </header>
 
-      {/* Полоса вкладок живёт, пока у пункта меню есть хоть один view, —
-          в том числе когда открыт view неподдержанного типа. Иначе доска
-          прячет вкладки вместе с собой, и вернуться к таблице можно только
-          кнопкой «назад» в браузере. */}
-      {supported && tabs.length > 0 && (
+      {/* Полоса вкладок живёт и при открытом view неподдержанного типа:
+          иначе доска прячет вкладки вместе с собой, и вернуться к таблице
+          можно только кнопкой «назад» в браузере.
+
+          И при нуле вкладок тоже — ради «+»: пункт меню без view иначе
+          становится тупиком, из которого нечем завести первый. */}
+      {supported && (tabs.length > 0 || (can.viewCreate && tableSlug)) && (
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
           <ViewTabs
             views={tabs}
@@ -421,7 +473,7 @@ function MenuPage() {
             onSelect={(next) => openView(next.id)}
           />
 
-          {can.viewCreate && (
+          {can.viewCreate && tableSlug && (
             <ViewCreateButton
               busy={createView.isPending}
               // Новая вкладка сразу открывается: её создали, чтобы в неё
@@ -532,9 +584,10 @@ function MenuPage() {
                       filters: effectiveFilters,
                       search: search.search ?? "",
                     }),
-                  // Единственную вкладку удалять нечем и незачем: без view
-                  // у пункта меню не остаётся ни экрана, ни кнопки «создать».
-                  ...(tabs.length > 1 ? { onDelete: () => setDeletingView(view) } : {}),
+                  // Удаляется любой view, включая последний: так же ведёт
+                  // себя старая админка. Пункт меню без view не тупик —
+                  // «+» в полосе вкладок остаётся на месте.
+                  onDelete: () => setDeletingView(view),
                 }}
               />
             </div>
@@ -709,7 +762,7 @@ function MenuPage() {
         <ItemDrawer
           key={search.item}
           tableSlug={view.tableSlug}
-          columns={drawerColumns}
+          columns={drawerFields}
           row={drawerRow}
           relations={schema.relations}
           locale={i18n.language}
@@ -735,10 +788,28 @@ function MenuPage() {
             : {})}
           sections={drawerLayout.sections}
           heading={drawerLayout.heading}
-          tabs={drawerLayout.relationTabs}
-          /* Вкладку заводит тот же, кто правит настройки: это раскладка
-             карточки, общая для всех, кто её откроет. */
-          {...(can.settings ? { onAddTab: drawerLayout.addTab } : {})}
+          tabs={relationTabs}
+          /* Вкладку карточки заводит тот же, кто правит настройки view:
+             вкладка и есть view — со своими колонками, отбором и именем.
+             Имя и удаление — в её панели «⋯», как у таблицы. */
+          {...(can.settings
+            ? {
+                addableRelations,
+                onAddTab: (relationId: string, label: string) => {
+                  const relation = schema.relations.find((item) => item.id === relationId);
+                  if (!relation) return;
+
+                  createView.mutate(
+                    {
+                      name: label,
+                      language,
+                      relation: { id: relation.id, tableSlug: relation.toSlug },
+                    },
+                    { onSuccess: (created) => created?.id && setSearch({ tab: created.id }) },
+                  );
+                },
+              }
+            : {})}
           tab={search.tab ?? ""}
           onTab={(id) => setSearch({ tab: id || undefined })}
           tabContent={
@@ -752,17 +823,35 @@ function MenuPage() {
                 {...(relationTab.direction === "outgoing" && drawerRow
                   ? { parentValue: String(drawerRow[relationTab.fieldSlug] ?? "") }
                   : {})}
+                menuId={menuId}
                 locale={i18n.language}
                 language={language}
-                canEdit={can.settings}
-                // Колонки вкладки лежат в раскладке карточки, и правит
-                // их тот же PUT, что и порядок полей.
-                onColumns={(columnIds) => drawerLayout.setTabColumns(relationTab.id, columnIds)}
+                languages={languages}
+                onLanguage={setLanguage}
+                saving={updateView.isPending}
+                /* Настройки вкладки — те же, что у таблицы, и уезжают
+                   тем же PUT view: у вкладки своя строка в базе. */
                 {...(can.settings
                   ? {
-                      onRemove: () => {
-                        drawerLayout.removeTab(relationTab.id);
-                        setSearch({ tab: undefined });
+                      settings: {
+                        onRename: (name: string, nameLanguage: string) =>
+                          updateView.mutate({
+                            view: relationTab.view,
+                            name,
+                            language: nameLanguage,
+                          }),
+                        onColumns: (columns: string[]) =>
+                          updateView.mutate({ view: relationTab.view, columns }),
+                        onFixedColumns: (fixedColumns: string[]) =>
+                          updateView.mutate({ view: relationTab.view, fixedColumns }),
+                        onQuickFilters: (quickFilters: Field[]) =>
+                          updateView.mutate({ view: relationTab.view, quickFilters }),
+                        onDefaultFilters: (defaultFilters: Record<string, unknown>) =>
+                          updateView.mutate({ view: relationTab.view, defaultFilters }),
+                        onRemove: () => {
+                          deleteView.mutate(relationTab.view);
+                          setSearch({ tab: undefined });
+                        },
                       },
                     }
                   : {})}
@@ -787,7 +876,7 @@ function MenuPage() {
       {draft && view && (
         <ItemDrawer
           tableSlug={view.tableSlug}
-          columns={drawerColumns}
+          columns={drawerFields}
           row={draft}
           relations={schema.relations}
           locale={i18n.language}
@@ -867,7 +956,7 @@ function MenuPage() {
           fields={schema.fields}
           relations={schema.relations}
           language={language}
-          languages={codes}
+          languages={languages}
           anchor={fieldPanel.anchor}
           icon={fieldIcon}
           onClose={() => setFieldPanel(null)}
@@ -1016,37 +1105,6 @@ function openUrl(url: string) {
   else window.location.assign(url);
 }
 
-/**
- * Подсказка админа → пустые чипы в подшапке. Поля ищутся по тем же двум
- * ключам, что и колонки: у связей во view лежит id связи, а не поля.
- */
-function seedFilters(ids: string[], fields: Field[]): Filters {
-  if (!ids.length) return {};
-
-  const index = new Map<string, Field>();
-  for (const field of fields) {
-    index.set(field.id, field);
-    if (field.relationId) index.set(field.relationId, field);
-  }
-
-  const seeded: Filters = {};
-  for (const id of ids) {
-    const field = index.get(id);
-    const kind = field && filterKind(field);
-    if (field && kind) seeded[field.slug] = emptyFilter(kind);
-  }
-
-  return seeded;
-}
-
-/**
- * Закреплена ли колонка. Ключей у поля-связи два — id поля и id связи, —
- * и в настройке лежит любой из них, как и в columns.
- */
-function isPinned(view: View | undefined, field: Field): boolean {
-  const fixed = view?.fixedColumnIds ?? [];
-  return fixed.includes(field.id) || (field.relationId ? fixed.includes(field.relationId) : false);
-}
 
 function Notice({
   text,

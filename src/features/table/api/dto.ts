@@ -65,6 +65,20 @@ export type RelationDto = {
    * Рядом с ней в строке приходит связанная запись, `<field_from>_data`.
    */
   field_from?: string;
+  /**
+   * Имя, которое админ дал самой связи.
+   *
+   * Приезжает не из строки `relation`, а из view, привязанного к ней:
+   * бэкенд подставляет сюда `view.name` (storage/postgres/relation.go,
+   * GetList → ViewFindOne). Именно его старая админка показывает
+   * на вкладке карточки — «Склад получатель», а не имя чужой таблицы.
+   */
+  title?: string;
+  /**
+   * Имя колонки-ссылки, заданное явно. Заполняется у Many2Dynamic,
+   * у остальных типов пусто — там имя лежит в `field_from`.
+   */
+  relation_field_slug?: string;
   /** Поля целиком, а не слаги: бэкенд подставляет сюда весь объект поля. */
   view_fields?: FieldDto[];
   attributes?: Record<string, unknown>;
