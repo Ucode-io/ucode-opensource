@@ -129,6 +129,47 @@ export function useUpdateTableSettings(tableSlug: string | undefined) {
 }
 
 /**
+ * Удаление таблицы.
+ *
+ * Уносит с собой всё, что на неё ссылалось, и это делает бэкенд одной
+ * транзакцией (storage/postgres/table.go, Delete): строку `table`,
+ * саму таблицу в базе (`DROP TABLE`), раскладки с вкладками и секциями,
+ * связи в обе стороны, права на поля и записи, view и — что важно
+ * для сайдбара — пункты меню с этим `table_id`. Отдельно чистить нечего,
+ * но перезапросить надо почти всё.
+ *
+ * В пути id, а не слаг: шлюз проверяет его на uuid и отвечает отказом
+ * на что угодно другое (api/handlers/v2/collection.go:456). Это редкое
+ * место — везде остальное мы живём слагом.
+ *
+ * Системную таблицу удалить нельзя: бэкенд отвечает ошибкой, и её видно
+ * как есть. Признака `is_system` в ответе о таблице нет вовсе, поэтому
+ * заранее спрятать действие не по чему.
+ */
+export function useDeleteTable() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (table: TableSettings) => api.delete<unknown>(`/v2/collections/${table.id}`),
+    onError: (error) => reportError(error, "common.deleteFailed"),
+    onSuccess: async () => {
+      toast.success(i18n.t("tableSettings.deleted"));
+      /*
+       * Меню, view и схема — всё разом: пункт сайдбара исчез вместе
+       * с таблицей, а адрес, на котором человек стоит, больше никуда
+       * не ведёт. Точечные ключи тут не спасают: удалённая таблица
+       * могла быть чужой связью в соседней.
+       */
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.menus.all }),
+        queryClient.invalidateQueries({ queryKey: keys.views.all }),
+        queryClient.invalidateQueries({ queryKey: keys.tables.all }),
+      ]);
+    },
+  });
+}
+
+/**
  * Черновик → тело PUT.
  *
  * Слаг уезжает обратно как пришёл: сменить его этой ручкой нельзя —

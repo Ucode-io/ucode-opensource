@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { IconLoader2 } from "@tabler/icons-react";
+import { IconLoader2, IconTrash } from "@tabler/icons-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { Icon } from "@/shared/ui/icon";
 import {
   LOGIN_STRATEGIES,
+  useDeleteTable,
   useTableSettings,
   useUpdateTableSettings,
   type LoginStrategy,
@@ -42,8 +45,11 @@ export function TableSettings({
   languages: { code: string; nativeName: string }[];
 }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { table, isLoading } = useTableSettings(tableSlug);
   const update = useUpdateTableSettings(tableSlug);
+  const remove = useDeleteTable();
+  const [confirming, setConfirming] = useState(false);
 
   /*
    * Включённая таблица входа без единого способа на сервер не уезжает:
@@ -169,6 +175,43 @@ export function TableSettings({
           <Icon as={IconLoader2} size={12} className="animate-spin" />
           {t("common.saving")}
         </p>
+      )}
+
+      {/*
+        Удаление таблицы — последней строкой и с подтверждением: оно
+        уносит строки, поля, связи, view и пункт меню разом, и отменить
+        это нечем.
+      */}
+      <div className="mt-1 border-t border-border pt-2">
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm text-danger transition-colors hover:bg-danger-subtle"
+        >
+          <Icon as={IconTrash} size={16} className="shrink-0" />
+          {t("tableSettings.delete")}
+        </button>
+      </div>
+
+      {confirming && (
+        <ConfirmDialog
+          title={t("tableSettings.deleteTitle", { name: table.label || table.slug })}
+          description={t("tableSettings.deleteDescription")}
+          confirmLabel={t("action.delete")}
+          busy={remove.isPending}
+          onClose={() => setConfirming(false)}
+          onConfirm={() =>
+            remove.mutate(table, {
+              /*
+               * Уходим на главную: адрес, на котором стоит человек, —
+               * это пункт меню удалённой таблицы, и вместе с ней он
+               * исчез. Оставшись, экран показал бы ошибку вместо
+               * подтверждения, что всё получилось.
+               */
+              onSuccess: () => void navigate({ to: "/" }),
+            })
+          }
+        />
       )}
     </div>
   );
