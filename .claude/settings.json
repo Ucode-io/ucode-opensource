@@ -6,5 +6,19 @@
       "Edit(~/Documents/workspace/IT/udevs/ucode-frontend/**)",
       "Write(~/Documents/workspace/IT/udevs/ucode-frontend/**)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/no-write-to-readonly-repos.py\"",
+            "statusMessage": "Проверяю, не пишем ли в чужой репозиторий"
+          }
+        ]
+      }
+    ]
   }
 }
