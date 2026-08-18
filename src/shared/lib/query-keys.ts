@@ -31,8 +31,14 @@ export const keys = {
     projects: (companyId: string) => [...keys.workspace.all, "projects", companyId] as const,
     environments: (projectId: string) =>
       [...keys.workspace.all, "environments", projectId] as const,
-    /** Языки данных проекта — не локали интерфейса, см. features/workspace. */
-    languages: (projectId: string) => [...keys.workspace.all, "languages", projectId] as const,
+    /**
+     * Карточка проекта целиком: имя, логотип, языки данных, пояс,
+     * валюта. Ключ ОДИН на всех, кто её читает, — и языки в сайдбаре,
+     * и настройки проекта, и логотип в шапке берут один и тот же ответ.
+     * Раньше тот же адрес лежал под двумя ключами, то есть грузился
+     * дважды.
+     */
+    project: (projectId: string) => [...keys.workspace.all, "project", projectId] as const,
   },
   /**
    * Настройки: профиль человека и его сессии, настройки проекта
@@ -44,11 +50,21 @@ export const keys = {
     all: ["settings"] as const,
     profile: (userId: string) => [...keys.settings.all, "profile", userId] as const,
     sessions: (userId: string) => [...keys.settings.all, "sessions", userId] as const,
-    project: (projectId: string) => [...keys.settings.all, "project", projectId] as const,
     /** Роли проекта: их список и права каждой на таблицы. */
     roles: (projectId: string) => [...keys.settings.all, "roles", projectId] as const,
     rolePermissions: (projectId: string, roleId: string) =>
       [...keys.settings.all, "roles", projectId, roleId] as const,
+    /** Типы клиентов проекта: у роли обязательно есть один. */
+    clientTypes: (projectId: string) => [...keys.settings.all, "client-types", projectId] as const,
+    /**
+     * Права роли на пункты меню — по уровню дерева: бэкенд отдаёт их
+     * по одному родителю, как и само меню.
+     */
+    menuPermissionsAll: () => [...keys.settings.all, "menu-permissions"] as const,
+    menuPermissions: (projectId: string, roleId: string, parentId: string) =>
+      [...keys.settings.menuPermissionsAll(), projectId, roleId, parentId] as const,
+    /** Наборы значков iconify. Общие на всё приложение, а не на проект. */
+    iconCollections: () => [...keys.settings.all, "icon-collections"] as const,
     /** Справочник: LANGUAGE, TIMEZONE, CURRENCY. Общий на проект. */
     options: (projectId: string, type: string) =>
       [...keys.settings.all, "options", projectId, type] as const,
