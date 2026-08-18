@@ -71,6 +71,8 @@ export function ItemDrawer({
   tableSlug,
   columns,
   row,
+  loading = false,
+  error = null,
   relations,
   locale,
   language,
@@ -98,6 +100,10 @@ export function ItemDrawer({
   /** Поля записи в порядке карточки — своём, не в порядке колонок таблицы. */
   columns: Field[];
   row: Item | undefined;
+  /** Строка ещё едет: карточка открыта по ссылке, а страницы под ней нет. */
+  loading?: boolean;
+  /** Причина отказа словами. Пусто — отказа не было. */
+  error?: string | null;
   relations: Relation[];
   locale: string;
   language: string;
@@ -448,7 +454,14 @@ export function ItemDrawer({
         )}
 
         {!row ? (
-          <p className="p-6 text-sm text-fg-muted">{t("drawer.notFound")}</p>
+          /*
+           * Строки нет — и это три разных случая, а не один. Пока она
+           * едет, «записи не существует» — неправда; отказ сервера тем
+           * более: он чинится, а «не найдено» нет.
+           */
+          <p className="p-6 text-sm text-fg-muted">
+            {loading ? t("common.loading") : (error ?? t("drawer.notFound"))}
+          </p>
         ) : tab ? (
           tabContent
         ) : (

@@ -42,12 +42,18 @@ export function FormulaSettings({
   language: string;
   onChange: (next: Partial<FieldDraft>) => void;
 }) {
-  if (draft.type === "FORMULA_FRONTEND") {
+  /*
+   * Выражение и шаблон строки — разные вещи, но правятся одинаково:
+   * текст, в который подставляются слаги полей этой же строки. Разница
+   * в том, кто и когда его читает, и она сказана подписью.
+   */
+  if (draft.type === "FORMULA_FRONTEND" || draft.type === "MANUAL_STRING") {
     return (
       <ExpressionEditor
         formula={draft.formula}
         fields={fields.filter((field) => field.slug !== draft.slug)}
         language={language}
+        template={draft.type === "MANUAL_STRING"}
         onChange={(formula) => onChange({ formula })}
       />
     );
@@ -71,20 +77,28 @@ export function FormulaSettings({
  * Список полей не украшение: в выражении участвуют СЛАГИ, а человек
  * знает поля по подписям — «Цена» и `price_uzs` в голове не совпадают.
  * Клик вставляет слаг туда, где стоит курсор.
+ *
+ * `template` — это MANUAL_STRING: тот же текст со слагами, но не
+ * выражение, а строка. Считает её бэкенд, и ровно один раз, при вставке
+ * записи, — поэтому и подпись другая: «сумма пересчитается» и «номер
+ * уже выдан» это разные обещания.
  */
 function ExpressionEditor({
   formula,
   fields,
   language,
+  template = false,
   onChange,
 }: {
   formula: string;
   fields: Field[];
   language: string;
+  template?: boolean;
   onChange: (formula: string) => void;
 }) {
   const { t } = useTranslation();
   const area = useRef<HTMLTextAreaElement>(null);
+  const label = t(template ? "formula.template" : "formula.expression");
 
   const insert = (slug: string) => {
     const element = area.current;
@@ -107,18 +121,24 @@ function ExpressionEditor({
 
   return (
     <div className="px-2 py-1">
-      <span className="mb-0.5 block text-2xs text-fg-muted">{t("formula.expression")}</span>
+      <span className="mb-0.5 block text-2xs text-fg-muted">{label}</span>
 
       <textarea
         ref={area}
         rows={3}
         value={formula}
         spellCheck={false}
-        placeholder="(price * count) * 1.12"
-        aria-label={t("formula.expression")}
+        placeholder={template ? "INV-order_number/client_name" : "(price * count) * 1.12"}
+        aria-label={label}
         onChange={(event) => onChange(event.target.value)}
         className="w-full resize-none rounded-md border border-border-strong bg-surface px-2 py-1.5 font-mono text-xs text-fg outline-none focus:border-accent"
       />
+
+      {/* Обещание, которое стоит проговорить: у формулы значение живое,
+          у шаблона — снимок. Правка шаблона старые строки не трогает. */}
+      {template && (
+        <span className="mt-1 block text-2xs text-fg-subtle">{t("formula.templateHint")}</span>
+      )}
 
       {fields.length > 0 && (
         <>

@@ -15,6 +15,7 @@ import {
   seedFilters,
   toConditions,
   useCreateItem,
+  applyRights,
   useDrawerLayout,
   useItems,
   useUpdateItem,
@@ -122,10 +123,35 @@ export function RelationView({
    * нечем: иначе колонка-связь во вкладке осталась бы пустой — её
    * view_fields никто бы не загрузил.
    */
-  const { schema, isLoading: schemaLoading } = useTableSchema(
+  const {
+    schema,
+    isLoading: schemaLoading,
+    error: schemaError,
+    refetch: refetchSchema,
+  } = useTableSchema(
     tab.tableSlug,
     tab.columnIds.length ? tab.columnIds : undefined,
   );
+
+  /*
+   * Раскладка ЧУЖОЙ таблицы — ради прав роли на её поля: в схеме
+   * (GET /v2/fields) их нет вовсе, а раскладка подставляет их по роли
+   * из токена (см. features/item/model/layout).
+   *
+   * Своей раскладки у чужой таблицы под нашим пунктом меню нет, и ручка
+   * отдаёт её общую (layout.go:1197: не нашли по menu_id — берём
+   * `is_default`). Прав это не меняет: они считаются по таблице и роли,
+   * а не по раскладке. Тот же запрос делает карточка связанной строки —
+   * ключ у него один, и второй раз он не уходит.
+   */
+  const layout = useDrawerLayout({ tableSlug: tab.tableSlug, menuId, language });
+
+  /** Поля чужой таблицы, из которых убрано запрещённое роли. */
+  const fields = useMemo(
+    () => applyRights(schema.fields, layout.rights),
+    [schema.fields, layout.rights],
+  );
+
   /*
    * Колонки вкладки. Пустой список — обычное дело: бэкенд заводит вкладку
    * вместе со связью и колонок в неё не кладёт. Пустая вкладка ничего
@@ -133,9 +159,8 @@ export function RelationView({
    * таблицы, а сузить их можно настройкой вкладки.
    */
   const columns = useMemo(
-    () =>
-      tab.columnIds.length ? resolveColumnIds(tab.columnIds, schema.fields) : schema.fields,
-    [tab.columnIds, schema.fields],
+    () => (tab.columnIds.length ? resolveColumnIds(tab.columnIds, fields) : fields),
+    [tab.columnIds, fields],
   );
 
   const [sorts, setSorts] = useState<Sort[]>([]);
@@ -198,13 +223,18 @@ export function RelationView({
     [tab.view.fixedColumnIds, columns],
   );
 
+  /** Права роли на ЧУЖУЮ таблицу: у неё они свои. */
+  const can = useTablePermission(tab.tableSlug);
+
   const {
     page: rows,
     isLoading,
     hasMore,
     loadingMore,
     loadMore,
-  } = useItems(value ? tab.tableSlug : undefined, {
+    error: rowsError,
+    refetch: refetchRows,
+  } = useItems(value && can.read ? tab.tableSlug : undefined, {
     limit,
     page,
     // Режим листания у вкладки тот же, что у её view: вкладка и есть view.
@@ -221,7 +251,6 @@ export function RelationView({
   // экрана человека, и у одной таблицы она одна на все места показа.
   const { columnWidths: widths, setColumnWidth } = useUi();
   const [importing, setImporting] = useState(false);
-  const can = useTablePermission(tab.tableSlug);
 
   /*
    * Выделение вкладке не нужно: массовых действий над связанными
@@ -236,7 +265,14 @@ export function RelationView({
    * целиком.
    */
   if (!value) return <p className="p-6 text-sm text-fg-muted">{t("drawer.noRelated")}</p>;
+  // Чтение чужой таблицы запрещено роли: вкладка честно говорит об этом,
+  // а не показывает пустой список связанных записей.
+  if (!can.read) return <p className="p-6 text-sm text-fg-muted">{t("table.noReadAccess")}</p>;
   if (schemaLoading || isLoading) return <GridSkeleton columns={columns.length || 4} />;
+  // Отказ — словами сервера и с кнопкой: пустая вкладка вместо него
+  // выглядела бы как «связанных записей нет».
+  const failure = schemaError ?? rowsError;
+  if (failure) return <Failure text={failure} onRetry={schemaError ? refetchSchema : refetchRows} />;
   if (!columns.length) return <p className="p-6 text-sm text-fg-muted">{t("table.noColumns")}</p>;
 
   const openRow = rows.rows.find((item) => item.guid === openGuid);
@@ -335,7 +371,14 @@ export function RelationView({
           setSorts(direction ? [{ field, direction }] : nextSorts(sorts, field));
           setPage(1);
         }}
-        onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
+        /* Правка — по правам роли на ЧУЖУЮ таблицу: у неё они свои,
+           и от прав на таблицу, из которой открыли вкладку, не зависят. */
+        {...(can.update
+          ? {
+              onEdit: (guid: string, slug: string, value: unknown) =>
+                update.mutate({ guid, slug, value }),
+            }
+          : {})}
         // Связанная строка раскрывается на месте, поверх вкладки:
         // у чужой таблицы своего экрана в этом меню нет, а посмотреть
         // на неё целиком нужно чаще, чем перейти в её таблицу.
@@ -346,7 +389,7 @@ export function RelationView({
          * заводят ИЗ карточки, и заполнять её вручную значит предложить
          * человеку выбрать ту самую запись, из которой он смотрит.
          */
-        {...(tab.canCreate
+        {...(tab.canCreate && can.write
           ? {
               creating: create.isPending,
               onCreate: (values: Record<string, unknown>, done: () => void) =>
@@ -375,7 +418,7 @@ export function RelationView({
           setLimit(next);
           setPage(1);
         }}
-        onDeleteSelected={() => {}}
+
       />
 
       {importing && (
@@ -383,7 +426,7 @@ export function RelationView({
           tableSlug={tab.tableSlug}
           // Все поля чужой таблицы: столбец файла можно положить
           // и в колонку, которой во вкладке не видно.
-          fields={schema.fields}
+          fields={fields}
           language={language}
           onClose={() => setImporting(false)}
         />
@@ -396,14 +439,19 @@ export function RelationView({
           key={openGuid}
           tableSlug={tab.tableSlug}
           row={openRow}
-          fields={schema.fields}
+          fields={fields}
           relations={schema.relations}
           menuId={menuId}
           locale={locale}
           language={language}
           languages={languages}
           {...(onLanguage ? { onLanguage } : {})}
-          onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
+          {...(can.update
+            ? {
+                onEdit: (guid: string, slug: string, value: unknown) =>
+                  update.mutate({ guid, slug, value }),
+              }
+            : {})}
           onClose={() => setOpenGuid(null)}
         />
       )}
@@ -451,7 +499,8 @@ function RelatedRow({
   language: string;
   languages: DataLanguage[];
   onLanguage?: ((code: string) => void) | undefined;
-  onEdit: (guid: string, slug: string, value: unknown) => void;
+  /** Правка значения. Не задан — карточка открывается только на чтение. */
+  onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
   onClose: () => void;
 }) {
   const layout = useDrawerLayout({ tableSlug, menuId, language });
@@ -473,9 +522,27 @@ function RelatedRow({
       {...(onLanguage ? { onLanguage } : {})}
       sections={layout.sections}
       heading={layout.heading}
-      onEdit={onEdit}
+      {...(onEdit ? { onEdit } : {})}
       onClose={onClose}
     />
+  );
+}
+
+/** Отказ во вкладке: причина и «повторить». */
+function Failure({ text, onRetry }: { text: string; onRetry: () => void }) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex flex-col items-start gap-2 p-6">
+      <p className="text-sm text-fg-muted">{text}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="h-8 rounded-md border border-border-strong px-3 text-sm text-fg transition-colors hover:bg-surface-hover"
+      >
+        {t("action.retry")}
+      </button>
+    </div>
   );
 }
 

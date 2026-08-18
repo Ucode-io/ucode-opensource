@@ -294,3 +294,54 @@ test("подписи едут на всех языках, пустые не за
   // в старой админке — она читает его первым.
   expect(body.attributes).not.toHaveProperty("label_en");
 });
+
+test("шаблон строки уходит тем же ключом, что и выражение формулы", () => {
+  // MANUAL_STRING и FORMULA_FRONTEND делят ключ `formula`: бэкенд
+  // подставляет слаги в шаблон при вставке (prepareFunctions.go),
+  // а выражение считает браузер.
+  const body = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Номер", slug: "nomer", type: "MANUAL_STRING", formula: " INV-code " },
+    AT,
+  );
+
+  expect(body.attributes).toMatchObject({ formula: "INV-code" });
+  // Значение собирает бэкенд — значения по умолчанию у такого поля нет.
+  expect(body.attributes).not.toHaveProperty("defaultValue");
+});
+
+test("настройки типа уходят числами и только своему типу", () => {
+  const map = toCreateBody(
+    {
+      ...EMPTY_DRAFT,
+      label: "Точка",
+      slug: "tochka",
+      type: "MAP",
+      lat: "41,311",
+      long: "69.240",
+      apiKey: " key-1 ",
+    },
+    AT,
+  );
+
+  // Запятая — то, как координату набирают руками; уехать она обязана
+  // числом: cast.ToFloat из строки даёт ноль, то есть другую точку.
+  expect(map.attributes).toMatchObject({ lat: 41.311, long: 69.24, apiKey: "key-1" });
+
+  const photo = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Фото", slug: "foto", type: "PHOTO", format: "webp", ratio: "1.3" },
+    AT,
+  );
+
+  expect(photo.attributes).toMatchObject({ format: "webp", ratio: 1.3 });
+  // Чужому типу настройки не отправляются вовсе — иначе у поля,
+  // сменившего тип, в attributes остался бы мёртвый ключ.
+  expect(photo.attributes).not.toHaveProperty("lat");
+  expect(photo.attributes).not.toHaveProperty("transcode");
+
+  const scanner = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Код", slug: "kod", type: "SCAN_BARCODE", pressEnter: true, length: "13" },
+    AT,
+  );
+
+  expect(scanner.attributes).toMatchObject({ pressEnter: true, length: 13 });
+});

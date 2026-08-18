@@ -16,11 +16,12 @@ export const keys = {
     fields: (tableSlug: string) => [...keys.tables.all, "fields", tableSlug] as const,
     relations: (tableSlug: string) => [...keys.tables.all, "relations", tableSlug] as const,
     /**
-     * Какие поля участвуют в общем поиске. Отдельный запрос, потому что
-     * флаг is_search отдаёт только POST /v1/table-details — в ответе
-     * GET /v2/fields его нет вовсе.
+     * Подробности таблицы: поля с флагом `is_search` и view с правами
+     * роли. Отдельный запрос, потому что и то и другое отдаёт только
+     * POST /v1/table-details — ни в GET /v2/fields, ни в списке view
+     * их нет вовсе.
      */
-    searchFields: (tableSlug: string) => [...keys.tables.all, "search-fields", tableSlug] as const,
+    details: (tableSlug: string) => [...keys.tables.all, "details", tableSlug] as const,
     /** Настройки одной связи: поля показа лежат только в ней. */
     relation: (tableSlug: string, relationId: string) =>
       [...keys.tables.all, "relations", tableSlug, relationId] as const,

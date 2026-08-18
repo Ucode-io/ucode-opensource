@@ -16,6 +16,7 @@ import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { editorKind } from "../model/cell-kind";
+import { blankItem } from "../model/cell-value";
 import type { Sort, SortDirection } from "../model/query";
 import { relationDataKey, type Item } from "../model/types";
 import { rowErrors, type CellError } from "../model/validate";
@@ -244,7 +245,7 @@ export function DataGrid({
     setDraft((current) => (current ? { ...current, ...values } : current));
 
   const startDraft = () => {
-    setDraft({ guid: crypto.randomUUID() });
+    setDraft(blankItem(columns));
     setShowErrors(false);
   };
 

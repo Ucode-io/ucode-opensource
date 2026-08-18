@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import { keys } from "@/shared/lib/query-keys";
+import { errorMessage } from "@/shared/lib/toast";
 import { EMPTY_SCHEMA, type Field, type Relation, type TableSchema } from "../model/types";
 import type { FieldsResponseDto, RelationDto, RelationsResponseDto } from "./dto";
 import { toField, toRelation } from "./normalize";
@@ -57,7 +58,12 @@ export function useTableSchema(tableSlug: string | undefined, columnIds?: string
       ([fields, relations]: FieldsQueries) => ({
         schema: toSchema(fields.data, relations.data, slug),
         isLoading: fields.isLoading || relations.isLoading,
-        error: fields.error ?? relations.error,
+        /** Причина отказа словами. null — всё в порядке. */
+        error: errorMessage(fields.error ?? relations.error, "table.loadFailed"),
+        refetch: () => {
+          void fields.refetch();
+          void relations.refetch();
+        },
       }),
       [slug],
     ),
@@ -109,7 +115,7 @@ export function useTableSchema(tableSlug: string | undefined, columnIds?: string
    */
   const schema = useMemo(() => withDetails(base.schema, details), [base.schema, details]);
 
-  return { schema, isLoading: base.isLoading, error: base.error };
+  return { schema, isLoading: base.isLoading, error: base.error, refetch: base.refetch };
 }
 
 /** Настройки связи поверх её короткой формы из списка. */

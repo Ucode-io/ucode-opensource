@@ -74,7 +74,7 @@ export function TableActions({
   const [open, setOpen] = useState(false);
   // Запрос уходит, только когда панель раскрыли: у большинства таблиц
   // действий нет вовсе, а список стоит запроса на каждую загрузку.
-  const { actions } = useActions(tableSlug, open);
+  const { actions, error } = useActions(tableSlug, open);
 
   return (
     <Popover
@@ -100,6 +100,7 @@ export function TableActions({
           selected={selected}
           canEdit={canEdit}
           actions={actions}
+          error={error}
           close={close}
         />
       )}
@@ -117,6 +118,7 @@ function Panel({
   selected,
   canEdit,
   actions,
+  error,
   close,
 }: {
   tableSlug: string;
@@ -125,6 +127,8 @@ function Panel({
   selected: string[];
   canEdit: boolean;
   actions: Action[];
+  /** Причина отказа словами. Пусто — отказа не было. */
+  error: string | null;
   close: () => void;
 }) {
   const { t } = useTranslation();
@@ -146,8 +150,13 @@ function Panel({
   /*
    * Выключенные действия в списке не показываются вовсе: `disable` —
    * это «не предлагать», а не «предложить серым».
+   *
+   * Запрещённые роли — тоже, но с оговоркой: тому, кто настраивает
+   * таблицу, они видны. Иначе действие, запрещённое админской роли,
+   * пропало бы и из настроек, а завести его заново поверх существующего
+   * нельзя.
    */
-  const runnable = actions.filter((action) => !action.disabled);
+  const runnable = actions.filter((action) => !action.disabled && (action.allowed || canEdit));
 
   return (
     <div className="w-72">
@@ -205,8 +214,10 @@ function Panel({
         </div>
       ))}
 
+      {/* «Действий пока нет» и «список не приехал» — разные вещи:
+          на первое заводят действие, на второе смотрят на причину. */}
       {!runnable.length && (
-        <p className="px-2 py-2 text-xs text-fg-subtle">{t("actions.empty")}</p>
+        <p className="px-2 py-2 text-xs text-fg-subtle">{error ?? t("actions.empty")}</p>
       )}
 
       {canEdit && (

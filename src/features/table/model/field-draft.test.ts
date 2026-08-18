@@ -1,5 +1,14 @@
 import { expect, test } from "vitest";
-import { newDraft, toBlocks, toDraft, withType } from "./field-draft";
+import {
+  FIELD_TYPE_GROUPS,
+  hasDefaultValue,
+  hasPrefix,
+  newDraft,
+  optionsShape,
+  toBlocks,
+  toDraft,
+  withType,
+} from "./field-draft";
 import type { Field } from "./types";
 
 const field = (label: string, slug: string) => ({ label, slug }) as Field;
@@ -80,4 +89,51 @@ test("порядок типов не меняется", () => {
   const b = [{ type: "b", label: "b" }];
 
   expect(toBlocks([a, b])[0]?.map((item) => item.type)).toEqual(["a", "b"]);
+});
+
+test("PICK_LIST — выбор одного варианта, и варианты у него как у MULTISELECT", () => {
+  // Тип живой в последнем поколении старой админки, но экрана для его
+  // вариантов там нет: поле выходило пустым списком. У нас варианты
+  // правятся тем же плоским списком, что и у MULTISELECT.
+  expect(optionsShape("PICK_LIST")).toBe("flat");
+  expect(optionsShape("MULTISELECT")).toBe("flat");
+  expect(optionsShape("STATUS")).toBe("groups");
+  expect(optionsShape("SINGLE_LINE")).toBeNull();
+});
+
+test("в список создаваемых типов не попадает то, что нечем показать", () => {
+  const types = new Set(FIELD_TYPE_GROUPS.flatMap((group) => group.types.map((item) => item.type)));
+
+  // Живые в последнем поколении — предлагаем.
+  for (const type of ["PICK_LIST", "TEXT", "QR", "FLOAT_NOLIMIT"]) {
+    expect(types.has(type)).toBe(true);
+  }
+
+  /*
+   * MONEY и PROGRAMMING_LANGUAGE есть в справочнике старой админки,
+   * но её же последнее поколение их не рисует; DENTIST захардкожен
+   * под конкретный проект. Завести такой тип значит завести колонку,
+   * которую нечем показать.
+   */
+  for (const type of ["MONEY", "PROGRAMMING_LANGUAGE", "PRIMARY_KEY", "DENTIST"]) {
+    expect(types.has(type)).toBe(false);
+  }
+});
+
+test("приставка и значение по умолчанию спрашиваются только там, где работают", () => {
+  // Приставку подставляет бэкенд, генерируя значение (prepareFunctions.go).
+  expect(hasPrefix("INCREMENT_ID")).toBe(true);
+  expect(hasPrefix("RANDOM_NUMBERS")).toBe(true);
+  // Старая админка рисует то же поле и здесь, но INCREMENT_NUMBER — SERIAL,
+  // а CODABAR бэкенд не генерирует вовсе: приставке негде примениться.
+  expect(hasPrefix("INCREMENT_NUMBER")).toBe(false);
+  expect(hasPrefix("CODABAR")).toBe(false);
+
+  expect(hasDefaultValue("SINGLE_LINE")).toBe(true);
+  expect(hasDefaultValue("NUMBER")).toBe(true);
+  // Вычисляемому значение по умолчанию не подставить, а у MULTISELECT
+  // в том же ключе лежит список — текстовое поле его бы стёрло.
+  expect(hasDefaultValue("INCREMENT_ID")).toBe(false);
+  expect(hasDefaultValue("FORMULA")).toBe(false);
+  expect(hasDefaultValue("MULTISELECT")).toBe(false);
 });

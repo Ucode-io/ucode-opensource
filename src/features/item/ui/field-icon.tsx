@@ -79,6 +79,8 @@ const BY_TYPE: Record<string, TablerIcon> = {
   INCREMENT_NUMBER: IconId,
   FORMULA: IconMath,
   FORMULA_FRONTEND: IconMath,
+  // Тоже собранное значение, но строка, а не число.
+  MANUAL_STRING: IconMath,
   CODE: IconCode,
   PROGRAMMING_LANGUAGE: IconCode,
   MAP: IconMapPin,

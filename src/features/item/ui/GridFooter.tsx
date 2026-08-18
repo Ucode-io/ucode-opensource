@@ -61,7 +61,12 @@ export function GridFooter({
   /** Переход на страницу. Не задан — режим прокрутки. */
   onPage?: ((page: number) => void) | undefined;
   onLimit: (limit: number) => void;
-  onDeleteSelected: () => void;
+  /**
+   * Удалить отмеченные. Не задан — кнопки нет: у роли без права
+   * на удаление она отвечала бы 403, а во вкладке связи удалять
+   * чужие строки не предлагают вовсе.
+   */
+  onDeleteSelected?: (() => void) | undefined;
 }) {
   const { t } = useTranslation();
   const pages = pageCount(total, limit);
@@ -73,7 +78,7 @@ export function GridFooter({
 
         {/* Действия появляются вместе с выделением и занимают место
             только тогда: пустая панель действий сбивает с толку. */}
-        {selectedCount > 0 && (
+        {selectedCount > 0 && onDeleteSelected && (
           <Button variant="danger" size="sm" disabled={deleting} onClick={onDeleteSelected}>
             <Icon as={IconTrash} size={14} />
             {t("table.deleteSelected", { count: selectedCount })}

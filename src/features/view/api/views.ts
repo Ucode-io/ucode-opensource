@@ -4,7 +4,7 @@ import { api } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
 import i18n from "@/shared/lib/i18n";
 import { keys } from "@/shared/lib/query-keys";
-import { reportError, toast } from "@/shared/lib/toast";
+import { errorMessage, reportError, toast } from "@/shared/lib/toast";
 import type { View } from "../model/types";
 import { toUrlTemplate, type UrlTemplate } from "../model/url-template";
 
@@ -51,7 +51,13 @@ export function useMenuViews(menuId: string) {
     select: toViews,
   });
 
-  return { views: query.data ?? [], isLoading: query.isLoading, error: query.error };
+  return {
+    views: query.data ?? [],
+    isLoading: query.isLoading,
+    /** Причина отказа словами. null — всё в порядке. */
+    error: errorMessage(query.error, "table.loadFailed"),
+    refetch: () => void query.refetch(),
+  };
 }
 
 /**

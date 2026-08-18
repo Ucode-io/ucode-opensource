@@ -259,7 +259,18 @@ export function ActiveCell({
       return <IconEditor value={value} anchor={anchor} onEdit={edit} onClose={onClose} />;
 
     case "map":
-      return <MapEditor value={value} anchor={anchor} onEdit={edit} onClose={onClose} />;
+      return (
+        <MapEditor
+          value={value}
+          // Точка, с которой открывается ПУСТАЯ ячейка: её задаёт админ
+          // в настройках поля (`attributes.lat`/`long`). Без неё
+          // заполнять координаты пришлось бы с нуля каждый раз.
+          center={{ lat: field.attributes["lat"], lon: field.attributes["long"] }}
+          anchor={anchor}
+          onEdit={edit}
+          onClose={onClose}
+        />
+      );
 
     case "json":
       return <JsonEditor value={value} anchor={anchor} onEdit={edit} onClose={onClose} />;
@@ -1299,17 +1310,35 @@ function IconEditor({
  */
 function MapEditor({
   value,
+  center,
   anchor,
   onEdit,
   onClose,
 }: {
   value: unknown;
+  /**
+   * Точка по умолчанию из настроек поля. Подставляется только в пустую
+   * ячейку и только в поля ввода: пока человек ничего не тронул,
+   * в строке по-прежнему пусто — значение уедет, если он подтвердит.
+   */
+  center?: { lat: unknown; lon: unknown };
   anchor: DOMRect;
   onEdit: (value: unknown) => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const point = parseCoords(value);
+  /*
+   * Настройки поля приходят как есть из свободного мешка attributes:
+   * координата бывает и числом, и строкой. Приводим к паре тем же
+   * разбором, что и значение ячейки, — заодно отсеиваются мусор
+   * и координаты вне глобуса.
+   */
+  const coord = (raw: unknown) =>
+    typeof raw === "number" || typeof raw === "string" ? String(raw).trim() : "";
+
+  const point =
+    parseCoords(value) ??
+    (isBlank(value) ? parseCoords(formatCoords(coord(center?.lat), coord(center?.lon))) : null);
   const [lat, setLat] = useState(point ? String(point.lat) : "");
   const [lon, setLon] = useState(point ? String(point.lon) : "");
   const latest = useRef({ lat, lon });

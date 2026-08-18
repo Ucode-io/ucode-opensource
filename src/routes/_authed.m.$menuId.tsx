@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   DataGrid,
   FilterBar,
+  blankItem,
   GridSkeleton,
   ItemDrawer,
   GridFooter,
@@ -18,6 +19,7 @@ import {
   parseSorts,
   seedFilters,
   fieldIcon,
+  applyRights,
   orderColumns,
   useCreateItem,
   useDeleteItems,
@@ -34,7 +36,7 @@ import {
   type Filters,
   type Item,
 } from "@/features/item";
-import { useTablePermission } from "@/features/auth";
+import { useTablePermissions } from "@/features/auth";
 import { IMPLEMENTED_TYPES, SidebarToggleButton, useMenu } from "@/features/sidebar";
 import {
   FieldEditor,
@@ -47,6 +49,8 @@ import {
   useCreateRelation,
   useDeleteField,
   useDeleteRelation,
+  ALL_VIEW_RIGHTS,
+  useTableDetails,
   useTableSchema,
   useUpdateField,
   useUpdateRelation,
@@ -143,8 +147,13 @@ function MenuPage() {
   /** Коды языков данных: по ним сводятся языковые колонки. */
   const codes = useMemo(() => languages.map((item) => item.code), [languages]);
 
-  const { views } = useMenuViews(menuId);
-  const tabs = useMemo(() => tabViews(views), [views]);
+  const {
+    views,
+    isLoading: viewsLoading,
+    error: viewsError,
+    refetch: refetchViews,
+  } = useMenuViews(menuId);
+  const allTabs = useMemo(() => tabViews(views), [views]);
   const view = pickView(views, search.view);
 
   /*
@@ -152,25 +161,38 @@ function MenuPage() {
    * делает сервер, и без гейта роль без прав всё равно получала бы 403 —
    * но уже после того, как переименовала вкладку у себя на экране.
    */
-  const can = useTablePermission(view?.tableSlug);
+  const permissionOf = useTablePermissions();
+  const can = permissionOf(view?.tableSlug);
+
+  /*
+   * Права роли на view: какие показывать вкладкой, какие давать править
+   * и удалять. Приходят отдельной ручкой — ни в списке view, ни в схеме
+   * их нет (см. api/table-details).
+   */
+  const { viewRights } = useTableDetails(view?.tableSlug);
+  const rightsOf = (id: string) => viewRights.get(id) ?? ALL_VIEW_RIGHTS;
+
+  /** Вкладки, которые роли позволено видеть. */
+  const tabs = useMemo(
+    () => allTabs.filter((item) => (viewRights.get(item.id) ?? ALL_VIEW_RIGHTS).view),
+    [allTabs, viewRights],
+  );
+
+  /**
+   * Открытый view роли смотреть не дают. Не переключаем на соседний
+   * молча: по ссылке пришли в конкретную вкладку, и подмена выглядела бы
+   * так, будто открылось то, что просили.
+   */
+  const viewForbidden = Boolean(view) && !rightsOf(view?.id ?? "").view;
 
   // Колонки view — не только «что показать», но и «что грузить»:
   // настройки связей за пределами этого списка никому не нужны.
-  const { schema, isLoading: schemaLoading } = useTableSchema(view?.tableSlug, view?.columnIds);
-  /*
-   * Колонки view, а затем — сведённые языковые. Мультиязычное поле
-   * лежит в схеме НЕСКОЛЬКИМИ колонками (`title_en`, `title_cyr`),
-   * и без сведения таблица показывает их подряд с одинаковой подписью:
-   * какая из них узбекская, видно только по значению.
-   *
-   * Сводится после выбора колонок view: скрытая колонка остаётся
-   * скрытой на всех языках.
-   */
-  const columns = useMemo(
-    () => collapseLanguages(resolveColumns(view, schema.fields), codes, language),
-    [view, schema.fields, codes, language],
-  );
-
+  const {
+    schema,
+    isLoading: schemaLoading,
+    error: schemaError,
+    refetch: refetchSchema,
+  } = useTableSchema(view?.tableSlug, view?.columnIds);
   /*
    * Порядок полей в drawer — свой, из раскладки пункта меню, и с колонками
    * таблицы не связан: перестановка в карточке не двигает колонки, а
@@ -179,13 +201,52 @@ function MenuPage() {
   const drawerLayout = useDrawerLayout({ tableSlug: view?.tableSlug ?? "", menuId, language });
 
   /*
+   * Поля таблицы, приведённые к правам роли: запрещённого к показу
+   * здесь уже нет, запрещённое к правке — только для чтения. Права
+   * приходят с раскладкой: в схеме полей их нет (см. model/layout).
+   *
+   * Отсюда растёт всё остальное — колонки, карточка, быстрые фильтры,
+   * список колонок view, разбор файла Excel: поле, которого роли видеть
+   * не положено, не должно всплыть ни в одном из них. Сырой список
+   * остаётся ровно у одного места — проверки уникальности слага
+   * в редакторе поля: там нужны ВСЕ слаги, включая скрытые, потому что
+   * совпадение даёт 500.
+   */
+  const tableFields = useMemo(
+    () => applyRights(schema.fields, drawerLayout.rights),
+    [schema.fields, drawerLayout.rights],
+  );
+
+  /** Колонки view — и таблицы, и карточки: порядок у них разный, набор один. */
+  const viewFields = useMemo(() => resolveColumns(view, tableFields), [view, tableFields]);
+
+  /*
+   * Колонки таблицы: те же поля, но со сведёнными языковыми. Мультиязычное
+   * поле лежит в схеме НЕСКОЛЬКИМИ колонками (`title_en`, `title_cyr`),
+   * и без сведения таблица показывает их подряд с одинаковой подписью:
+   * какая из них узбекская, видно только по значению.
+   */
+  const columns = useMemo(
+    () => collapseLanguages(viewFields, codes, language),
+    [viewFields, codes, language],
+  );
+
+  /*
    * Вкладки связей в карточке — это view пункта меню с `is_relation_view`
    * (см. features/view/model/relation-tabs). Того же списка, что и вкладки
    * экрана: второго запроса не нужно.
    */
   const relationTabs = useMemo(
-    () => relationTabsFromViews(views, schema.relations, language),
-    [views, schema.relations, language],
+    () =>
+      relationTabsFromViews(views, schema.relations, language).filter(
+        // Вкладка ведёт в ЧУЖУЮ таблицу: без права на чтение её строк
+        // вкладки нет вовсе. Старая админка отбирала их по
+        // `relation.permission.view_permission`, которого бэкенд
+        // не отдаёт вообще (layout.go, GetRelation — этого поля нет
+        // в запросе), и потому не показывала ни одной.
+        (tab) => permissionOf(tab.tableSlug).read,
+      ),
+    [views, schema.relations, language, permissionOf],
   );
 
   /** Связи, которые ещё можно показать вкладкой. */
@@ -207,10 +268,10 @@ function MenuPage() {
    */
   const drawerFields = useMemo(
     () =>
-      orderColumns(resolveColumns(view, schema.fields), drawerLayout.order).filter(
+      orderColumns(viewFields, drawerLayout.order).filter(
         (field) => !drawerLayout.hidden.has(field.slug),
       ),
-    [view, schema.fields, drawerLayout.order, drawerLayout.hidden],
+    [viewFields, drawerLayout.order, drawerLayout.hidden],
   );
 
   /*
@@ -280,8 +341,8 @@ function MenuPage() {
     () =>
       search.filters ??
       rememberedFilters ??
-      seedFilters(view?.quickFilterIds ?? [], schema.fields),
-    [search.filters, rememberedFilters, view?.quickFilterIds, schema.fields],
+      seedFilters(view?.quickFilterIds ?? [], tableFields),
+    [search.filters, rememberedFilters, view?.quickFilterIds, tableFields],
   );
 
   /** То, что действительно уходит в запрос. Область видимости — сверху. */
@@ -310,7 +371,9 @@ function MenuPage() {
   }, [view?.tableSlug]);
   const tableSlug = view?.tableSlug ?? (lastSlug.current || undefined);
 
-  const createView = useCreateView({ menuId, tableSlug, order: tabs.length + 1 });
+  // Порядок — среди ВСЕХ view пункта меню, а не среди видимых: скрытые
+  // правами никуда не делись, и новый view должен встать за ними.
+  const createView = useCreateView({ menuId, tableSlug, order: allTabs.length + 1 });
   const deleteView = useDeleteView({ menuId, tableSlug: view?.tableSlug });
   const updateView = useUpdateView({ menuId, tableSlug: view?.tableSlug });
   const [deletingView, setDeletingView] = useState<View | null>(null);
@@ -351,7 +414,9 @@ function MenuPage() {
     hasMore,
     loadingMore,
     loadMore,
-  } = useItems(supportedView ? view?.tableSlug : undefined, {
+    error: rowsError,
+    refetch: refetchRows,
+  } = useItems(supportedView && can.read ? view?.tableSlug : undefined, {
     limit,
     page: search.page,
     infinite,
@@ -501,7 +566,11 @@ function MenuPage() {
             />
           )}
 
-          {view && (
+          {/* Инструменты — только там, где есть на что их применить.
+              У роли без права на чтение строк нет вовсе: поиск, отбор
+              и действия нажимались бы вхолостую, а настройки правили бы
+              таблицу, которую ей не показывают. */}
+          {view && can.read && !viewForbidden && (
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               {/* Поиск, отбор и сортировка — про таблицу: у нарисованного
                   заглушкой view искать нечего. */}
@@ -545,7 +614,7 @@ function MenuPage() {
                   type="button"
                   onClick={() => {
                     setShowErrors(false);
-                    setDraft({ guid: crypto.randomUUID() });
+                    setDraft(blankItem(drawerColumns));
                   }}
                   className="mr-1 h-7 shrink-0 rounded-md bg-accent-solid px-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
                 >
@@ -564,11 +633,13 @@ function MenuPage() {
                 view={view}
                 // Все поля таблицы, а не колонки view: скрытые нужно
                 // показать, иначе вернуть их будет неоткуда.
-                fields={schema.fields}
+                fields={tableFields}
                 language={language}
                 languages={languages}
                 defaultFilters={defaultFilters}
-                can={can}
+                /* Настройка view — право не только на таблицу, но и
+                   на сам view: их выдают по отдельности. */
+                can={{ ...can, settings: can.settings && rightsOf(view.id).edit }}
                 exporting={exportExcel.isPending}
                 busy={updateView.isPending}
                 handlers={{
@@ -602,7 +673,11 @@ function MenuPage() {
                   // Удаляется любой view, включая последний: так же ведёт
                   // себя старая админка. Пункт меню без view не тупик —
                   // «+» в полосе вкладок остаётся на месте.
-                  onDelete: () => setDeletingView(view),
+                  //
+                  // Право на удаление — своё, отдельное от права
+                  // на правку: роль, которая настраивает view, не обязана
+                  // иметь возможность его снести.
+                  ...(rightsOf(view.id).delete ? { onDelete: () => setDeletingView(view) } : {}),
                 }}
               />
             </div>
@@ -612,12 +687,32 @@ function MenuPage() {
 
       {!supported ? (
         <Notice text={t("menu.notImplemented")} />
+      ) : viewsLoading ? (
+        // Пока список view едет, «у таблицы нет view» — не правда, а
+        // мигание: через мгновение он приедет и таблица нарисуется.
+        <GridSkeleton />
+      ) : viewsError ? (
+        <Notice text={viewsError} actions={[{ label: t("action.retry"), onClick: refetchViews }]} />
       ) : !view ? (
         <Notice text={t("table.noView")} />
+      ) : viewForbidden ? (
+        /* Ссылка на view, который роли смотреть не дают. Соседний
+           не подставляем: открылось бы не то, что просили. */
+        <Notice text={t("table.noViewAccess")} />
       ) : !supportedView ? (
         <Notice text={t("table.notImplementedView")} />
+      ) : !can.read ? (
+        /* Чтение таблицы запрещено роли: строк не спрашиваем вовсе.
+           Пункт меню при этом бывает виден — права на меню и на таблицу
+           разные, и запрещают их по отдельности. */
+        <Notice text={t("table.noReadAccess")} />
       ) : schemaLoading ? (
         <GridSkeleton />
+      ) : schemaError ? (
+        /* Схема не приехала — колонок нет ни одной, и без этой ветки
+           экран предлагал бы завести первое поле в таблице, которая
+           просто не ответила. */
+        <Notice text={schemaError} actions={[{ label: t("action.retry"), onClick: refetchSchema }]} />
       ) : !columns.length ? (
         /*
          * Тупик без этой кнопки: «+» для нового поля живёт в шапке
@@ -629,15 +724,15 @@ function MenuPage() {
          * показывают. Один текст на оба врал бы про половину.
          */
         <Notice
-          text={schema.fields.length ? t("table.noColumns") : t("table.noFieldsYet")}
+          text={tableFields.length ? t("table.noColumns") : t("table.noFieldsYet")}
           actions={[
             // Поля есть, но ни одно не показано — их показывают, а не заводят.
-            ...(schema.fields.length && can.columns
+            ...(tableFields.length && can.columns
               ? [
                   {
                     label: t("view.showAll"),
                     onClick: () =>
-                      updateView.mutate({ view, columns: schema.fields.map(columnKey) }),
+                      updateView.mutate({ view, columns: tableFields.map(columnKey) }),
                   },
                 ]
               : []),
@@ -673,6 +768,14 @@ function MenuPage() {
 
           {rowsLoading ? (
             <GridSkeleton columns={columns.length} />
+          ) : rowsError ? (
+            /* Отказ показывается словами сервера. Пустая таблица вместо
+               него врала бы: «записей нет» и «спросить не дали» — разные
+               вещи, и вторая чинится, а первая нет. */
+            <Notice
+              text={rowsError}
+              actions={[{ label: t("action.retry"), onClick: refetchRows }]}
+            />
           ) : (
             <DataGrid
               tableSlug={view.tableSlug}
@@ -707,21 +810,36 @@ function MenuPage() {
                   true,
                 )
               }
-              onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
+              /* Без права на правку редактор не открывается вовсе:
+                 таблица понимает отсутствие onEdit как «только чтение».
+                 Новая строка при этом заполняется — это создание, и право
+                 у него своё. */
+              {...(can.update
+                ? {
+                    onEdit: (guid: string, slug: string, value: unknown) =>
+                      update.mutate({ guid, slug, value }),
+                  }
+                : {})}
               /*
+               * Строка заводится прямо в подвале таблицы — но только
+               * с правом на запись: без него строки подвала нет вовсе.
+               *
                * Уведомление обязательно: список отсортирован и отфильтрован,
                * и новая строка нередко уезжает на другую страницу — без
                * него создание выглядит как «ничего не произошло».
                */
-              onCreate={(values, done) =>
-                create.mutate(values, {
-                  onSuccess: () => {
-                    done();
-                    toast.success(t("table.rowCreated"));
-                  },
-                })
-              }
-              creating={create.isPending}
+              {...(can.write
+                ? {
+                    onCreate: (values: Item, done: () => void) =>
+                      create.mutate(values, {
+                        onSuccess: () => {
+                          done();
+                          toast.success(t("table.rowCreated"));
+                        },
+                      }),
+                    creating: create.isPending,
+                  }
+                : {})}
               /*
                * «Новая запись» ведёт на свою форму проекта, когда админ
                * задал её адрес (attributes.url_object). Иначе строка
@@ -764,6 +882,9 @@ function MenuPage() {
             />
           )}
 
+          {/* Подвал считает и листает загруженное — на отказе считать
+              нечего, и «0 из 0» под сообщением об ошибке только сбивает. */}
+          {!rowsError && (
           <GridFooter
             /* Со страницами подвал листает, с прокруткой — считает. */
             {...(infinite ? {} : { page: search.page, onPage: (next: number) => setSearch({ page: next }) })}
@@ -780,8 +901,12 @@ function MenuPage() {
               setTableLimit(view.tableSlug, next);
               setSearch({ limit: next, page: 1 });
             }}
-            onDeleteSelected={() => setConfirming(true)}
+            /* Удаление — отдельное право роли: без него кнопки нет.
+               Выделение при этом остаётся: над отмеченными строками
+               запускают действия. */
+            {...(can.delete ? { onDeleteSelected: () => setConfirming(true) } : {})}
           />
+          )}
         </>
       )}
 
@@ -791,6 +916,10 @@ function MenuPage() {
           tableSlug={view.tableSlug}
           columns={drawerFields}
           row={drawerRow}
+          // Карточка открыта по ссылке: строки нет ни на странице, ни
+          // ещё в кэше — пока она едет, «записи не существует» неправда.
+          loading={fetched.isLoading}
+          error={fetched.error}
           relations={schema.relations}
           locale={i18n.language}
           language={language}
@@ -885,7 +1014,12 @@ function MenuPage() {
               />
             )
           }
-          onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
+          {...(can.update
+            ? {
+                onEdit: (guid: string, slug: string, value: unknown) =>
+                  update.mutate({ guid, slug, value }),
+              }
+            : {})}
           onSettings={(field, anchor) => setFieldPanel({ field, anchor })}
           onReorder={drawerLayout.reorder}
           // Заголовок карточки — настройка раскладки: её правит тот же,
@@ -968,7 +1102,7 @@ function MenuPage() {
           tableSlug={view.tableSlug}
           // Все поля таблицы, а не колонки view: столбец файла можно
           // положить и в скрытую колонку — данные от этого не исчезнут.
-          fields={schema.fields}
+          fields={tableFields}
           language={language}
           onClose={() => setImporting(false)}
         />

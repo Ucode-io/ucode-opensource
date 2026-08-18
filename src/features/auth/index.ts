@@ -11,7 +11,7 @@ export {
   useStartRecovery,
   useVerifyCode,
 } from "./api/auth";
-export { useTablePermission } from "./model/permissions";
+export { useTablePermission, useTablePermissions } from "./model/permissions";
 export type { Permission } from "./model/types";
 export { AuthLayout } from "./ui/AuthLayout";
 export { InviteForm } from "./ui/InviteForm";

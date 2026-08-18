@@ -6,6 +6,12 @@ import { keys } from "@/shared/lib/query-keys";
 import { reportError, toast } from "@/shared/lib/toast";
 import type { Field } from "../model/types";
 import {
+  hasDefaultValue,
+  hasMapSettings,
+  hasPhotoSettings,
+  hasPrefix,
+  hasScannerSettings,
+  hasTranscode,
   MULTILANGUAGE_TYPES,
   optionsShape,
   STATUS_GROUPS,
@@ -122,7 +128,7 @@ export function useUpdateSearchFields(tableSlug: string | undefined) {
     // Только флаги: инвалидация всей схемы тянула бы за собой поля,
     // связи и запрос на КАЖДУЮ связь — полтора десятка запросов
     // на один щелчок по галочке.
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: keys.tables.searchFields(slug) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: keys.tables.details(slug) }),
   });
 }
 
@@ -230,6 +236,15 @@ function toColumnSettings(draft: FieldDraft): Record<string, unknown> {
 function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
   const digits = Number(draft.digits.trim());
 
+  /** Число или пустая строка: стёртое значение обязано доехать пустым. */
+  const numeric = (key: string, text: string): Record<string, unknown> => {
+    const value = text.trim();
+    if (!value) return { [key]: "" };
+
+    const parsed = Number(value.replace(",", "."));
+    return { [key]: Number.isFinite(parsed) ? parsed : "" };
+  };
+
   return {
     disabled: draft.readonly,
     /*
@@ -250,6 +265,39 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
     ...(draft.type === "BUTTON"
       ? { icon: draft.icon.trim(), function: draft.functionId }
       : {}),
+    /*
+     * Приставка и значение по умолчанию отправляются пустыми тоже —
+     * по той же причине, что и проверка ввода: тело собирается поверх
+     * прежних attributes, и стёртое значение иначе осталось бы в них
+     * навсегда. Но только у типов, где мы их и спрашиваем: у чужого
+     * типа тот же ключ бывает занят настройкой, которой мы не
+     * управляем (см. hasDefaultValue).
+     */
+    ...(hasPrefix(draft.type) ? { prefix: draft.prefix.trim() } : {}),
+    ...(hasDefaultValue(draft.type) ? { defaultValue: draft.defaultValue.trim() } : {}),
+    /*
+     * Настройки отдельных типов — по тому же правилу: у своего типа
+     * отправляются всегда, у чужого не отправляются вовсе.
+     *
+     * Числа уходят числами: `lat`, `long` и `ratio` читает не только
+     * наш экран, но и загрузчик с картой в приложении проекта, а
+     * `cast.ToFloat` из строки «» делает ноль — то есть Гвинейский залив
+     * вместо «не задано».
+     */
+    ...(hasMapSettings(draft.type)
+      ? {
+          ...numeric("lat", draft.lat),
+          ...numeric("long", draft.long),
+          apiKey: draft.apiKey.trim(),
+        }
+      : {}),
+    ...(hasPhotoSettings(draft.type)
+      ? { format: draft.format.trim(), ...numeric("ratio", draft.ratio) }
+      : {}),
+    ...(hasTranscode(draft.type) ? { transcode: draft.transcode } : {}),
+    ...(hasScannerSettings(draft.type)
+      ? { pressEnter: draft.pressEnter, ...numeric("length", draft.length) }
+      : {}),
     ...(draft.type === "INCREMENT_ID" && Number.isInteger(digits) && digits > 0 && digits < 10
       ? { digit_number: digits }
       : {}),
@@ -257,9 +305,10 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
 }
 
 /**
- * Настройки формул. Два разных поля под одним словом:
+ * Настройки формул. Три разных поля под одним ключом `formula`:
  *
  *   FORMULA_FRONTEND  выражение считает браузер (attributes.formula)
+ *   MANUAL_STRING     шаблон строки, подставляет бэкенд при вставке
  *   FORMULA           агрегат по связанной таблице, считает бэкенд
  *
  * Ключи агрегата исторические и в attributes лежат россыпью — их
@@ -272,7 +321,9 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
  * читатель принял бы его за настройку.
  */
 function toFormulaAttributes(draft: FieldDraft): Record<string, unknown> {
-  if (draft.type === "FORMULA_FRONTEND") return { formula: draft.formula.trim() };
+  if (draft.type === "FORMULA_FRONTEND" || draft.type === "MANUAL_STRING") {
+    return { formula: draft.formula.trim() };
+  }
   if (draft.type !== "FORMULA") return {};
 
   const { type, tableFrom, field, rounds, filters } = draft.aggregate;

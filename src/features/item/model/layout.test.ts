@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import type { Field } from "@/features/table";
 import {
+  applyRights,
   fieldOrder,
+  fieldRights,
   headingSlug,
   hiddenFields,
   moveField,
@@ -130,4 +132,34 @@ test("обычный заголовок — просто слаг, и он же 
   // переключение языка обнуляло бы заголовок.
   const multi = setHeading(next, "title_en", { en: "title_en", cyr: "title_cyr" });
   expect(headingSlug(multi, "cyr")).toBe("title_cyr");
+});
+
+test("права роли на поля читаются из раскладки: запрет строгий, разрешение по умолчанию", () => {
+  const rights = fieldRights({
+    tabs: [
+      {
+        type: "section",
+        sections: [
+          {
+            fields: [
+              { slug: "secret", attributes: { field_permission: { view_permission: false } } },
+              { slug: "locked", attributes: { field_permission: { edit_permission: false } } },
+              { slug: "open", attributes: { field_permission: { view_permission: true } } },
+              // Ни блока прав, ни записи в field_permission — поле обычное.
+              { slug: "plain" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  expect([...rights.hidden]).toEqual(["secret"]);
+  expect([...rights.readonly]).toEqual(["locked"]);
+
+  const field = (slug: string): Field => ({ slug, editable: true }) as Field;
+  const columns = applyRights([field("secret"), field("locked"), field("plain")], rights);
+
+  expect(columns.map((item) => item.slug)).toEqual(["locked", "plain"]);
+  expect(columns.map((item) => item.editable)).toEqual([false, true]);
 });

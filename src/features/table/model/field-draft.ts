@@ -119,6 +119,48 @@ export type FieldDraft = {
    */
   digits: string;
   /**
+   * Приставка к автономеру: `INV-000123`. Только у типов, где номер
+   * генерирует бэкенд.
+   */
+  prefix: string;
+  /**
+   * Значение по умолчанию у новой записи (`attributes.defaultValue`).
+   *
+   * Подставляет его ФРОНТ, а не база: колонки `default` у поля нет,
+   * и бэкенд про эту настройку не знает вовсе — он просто хранит
+   * её в свободном мешке attributes. Отсюда и camelCase посреди
+   * змеиных имён: ключ придумала старая админка, и читает она
+   * только его.
+   */
+  defaultValue: string;
+  /**
+   * Карта и область: точка, с которой открывается пустая ячейка,
+   * и ключ карт проекта.
+   *
+   * `lat`/`long` — то же имя, что в старой админке: пара координат,
+   * а не адрес. Ключ (`apiKey`) она спрашивает у MAP и POLYGON, хотя
+   * рисует карту чужой библиотекой; мы его храним, но своей карты
+   * у нас нет — см. TypeSettings.
+   */
+  lat: string;
+  long: string;
+  apiKey: string;
+  /**
+   * PHOTO: в чём хранить (`format`) и в каких пропорциях обрезать
+   * (`ratio`). Пропорция лежит ЧИСЛОМ-строкой — «1.3» это 4:3:
+   * так её записывает старая админка, деля одно на другое.
+   */
+  format: string;
+  ratio: string;
+  /** VIDEO: перекодировать загруженное на сервере. */
+  transcode: boolean;
+  /**
+   * Сканер штрихкодов (SCAN_BARCODE): отправлять по Enter, а не
+   * по каждому символу, и сколько символов в коде.
+   */
+  pressEnter: boolean;
+  length: string;
+  /**
    * Автозаполнение: значение берётся не у человека, а из строки,
    * на которую указывает связь.
    *
@@ -198,6 +240,16 @@ export const EMPTY_DRAFT: FieldDraft = {
   formula: "",
   aggregate: EMPTY_AGGREGATE,
   digits: "",
+  prefix: "",
+  defaultValue: "",
+  lat: "",
+  long: "",
+  apiKey: "",
+  format: "",
+  ratio: "",
+  transcode: false,
+  pressEnter: false,
+  length: "",
   autofillTable: "",
   autofillField: "",
   automatic: false,
@@ -239,6 +291,22 @@ export function toDraft(field: Field, language: string): FieldDraft {
     formula: textOf(field.attributes["formula"]),
     aggregate: toAggregate(field.attributes),
     digits: digitsOf(field.attributes),
+    prefix: textOf(field.attributes["prefix"]),
+    /*
+     * `default_values` — прежнее имя того же ключа: старая админка
+     * читает оба, а пишет `defaultValue`. Читаем так же, пишем только
+     * новое — иначе значение осталось бы в двух местах и разъехалось.
+     */
+    defaultValue:
+      textOf(field.attributes["defaultValue"]) || textOf(field.attributes["default_values"]),
+    lat: numericOf(field.attributes["lat"]),
+    long: numericOf(field.attributes["long"]),
+    apiKey: textOf(field.attributes["apiKey"]),
+    format: textOf(field.attributes["format"]),
+    ratio: numericOf(field.attributes["ratio"]),
+    transcode: field.attributes["transcode"] === true,
+    pressEnter: field.attributes["pressEnter"] === true,
+    length: numericOf(field.attributes["length"]),
     /*
      * Автозаполнение и мультиязычность читаются из КОЛОНОК ответа,
      * как required и unique. Одноимённые ключи в attributes — эхо,
@@ -314,6 +382,17 @@ export function isValidPattern(source: string): boolean {
 }
 
 /** Число цифр приходит то числом, то строкой — в форме оно строка. */
+/**
+ * Число из attributes — строкой, потому что правится оно полем ввода.
+ *
+ * Числом его кладёт старая админка, строкой — её же старые версии:
+ * координаты и пропорция встречаются в обоих видах, и разбирать
+ * их по-разному значит потерять половину живых настроек.
+ */
+function numericOf(value: unknown): string {
+  return typeof value === "number" || typeof value === "string" ? String(value) : "";
+}
+
 function digitsOf(attributes: Record<string, unknown>): string {
   const value = attributes["digit_number"];
   return typeof value === "number" || typeof value === "string" ? String(value) : "";
@@ -389,18 +468,115 @@ export function unique(base: string, taken: string[], separator: string): string
 
 /** Нужен ли типу список вариантов и какой. */
 export function optionsShape(type: string): "flat" | "groups" | null {
-  if (type === "MULTISELECT") return "flat";
+  if (type === "MULTISELECT" || type === "PICK_LIST") return "flat";
   if (type === "STATUS") return "groups";
   return null;
 }
 
 /**
+ * Есть ли у типа приставка к автономеру.
+ *
+ * Список — по бэкенду, а не по старой админке: приставку подставляет
+ * он сам, генерируя значение при вставке (helper/prepareFunctions.go —
+ * INCREMENT_ID, RANDOM_NUMBERS, RANDOM_TEXT). Старая админка рисует
+ * то же поле ещё у INCREMENT_NUMBER и CODABAR, где оно не делает
+ * ничего: INCREMENT_NUMBER — обычный SERIAL, CODABAR бэкенд не
+ * генерирует вовсе.
+ */
+export function hasPrefix(type: string): boolean {
+  return type === "INCREMENT_ID" || type === "RANDOM_NUMBERS" || type === "RANDOM_TEXT";
+}
+
+/**
+ * Типы, у которых спрашивается значение по умолчанию.
+ *
+ * Список разрешающий, а не запрещающий, и это осознанно. Значение
+ * вводится одной строкой, а attributes перезаписываются целиком: у
+ * MULTISELECT старая админка кладёт в тот же ключ СПИСОК, и покажи мы
+ * ему текстовое поле — чужая настройка стёрлась бы при первом открытии
+ * панели. Тип, которого тут нет, свой `defaultValue` сохраняет
+ * нетронутым.
+ */
+const DEFAULT_VALUE_TYPES = new Set([
+  "SINGLE_LINE",
+  "MULTI_LINE",
+  "TEXT",
+  "EMAIL",
+  "PHONE",
+  "INTERNATION_PHONE",
+  "CODE",
+  "COLOR",
+  "ICON",
+  "NUMBER",
+  "FLOAT",
+  "FLOAT_NOLIMIT",
+  "CHECKBOX",
+  "SWITCH",
+  "DATE",
+  "DATE_TIME",
+  "TIME",
+  // Значение варианта, а не подпись: в строке лежит slug.
+  "STATUS",
+  "PICK_LIST",
+]);
+
+export function hasDefaultValue(type: string): boolean {
+  return DEFAULT_VALUE_TYPES.has(type);
+}
+
+/**
+ * Настройки, которые есть только у одного-двух типов, — и у каких.
+ *
+ * Список тот же, что в старой админке (FieldSettings/Attributes),
+ * потому что имена ключей придумала она, а читают их проекты:
+ * загрузчик файлов, сканер на складе, карта в мобильном приложении.
+ */
+export function hasMapSettings(type: string): boolean {
+  return type === "MAP" || type === "POLYGON";
+}
+
+export function hasPhotoSettings(type: string): boolean {
+  return type === "PHOTO";
+}
+
+export function hasTranscode(type: string): boolean {
+  return type === "VIDEO";
+}
+
+/** Поле ручного сканера: значение вводит не человек, а считыватель. */
+export function hasScannerSettings(type: string): boolean {
+  return type === "SCAN_BARCODE";
+}
+
+/**
+ * Пропорции кадра у PHOTO. Значение — число-строка: старая админка
+ * делит ширину на высоту и кладёт результат, а читает его загрузчик.
+ */
+export const PHOTO_RATIOS = [
+  { value: "1.3", label: "4:3" },
+  { value: "1", label: "1:1" },
+  { value: "1.5", label: "3:2" },
+  { value: "1.7", label: "16:9" },
+  { value: "0.7", label: "2:3" },
+] as const;
+
+/** Форматы хранения фотографии. Ровно те, что понимает загрузчик. */
+export const PHOTO_FORMATS = ["png", "webp"] as const;
+
+/**
  * Типы, которые можно завести из таблицы.
  *
  * Список короче полного справочника ucode, и это выбор, а не недоделка.
- * Сюда попадает только то, что таблица умеет и показать, и объяснить:
+ * Сюда попадает только то, что таблица умеет и показать, и объяснить,
+ * и что живо в последнем поколении старой админки (views/views,
+ * FormElementGenerator) — справочник `fieldTypes` в ней шире, чем
+ * то, что она сама рисует:
  *
- *   не попали  DYNAMIC, LANGUAGE_TYPE, MONEY, ARRAY — нет ни рендера,
+ *   не попали  MONEY, PROGRAMMING_LANGUAGE, PRIMARY_KEY — их не рисует
+ *              и последнее поколение: тип завёлся бы, а показать его
+ *              было бы нечем;
+ *              DENTIST — поле, захардкоженное под конкретный проект;
+ *              DYNAMIC, LANGUAGE_TYPE, ARRAY — нет ни рендера,
  *              ни договорённости о содержимом
  *
  * LOOKUP в списке есть, но обычным типом не является: выбор открывает
@@ -434,6 +610,7 @@ export const FIELD_TYPE_GROUPS: FieldTypeGroup[] = [
     types: [
       { type: "SINGLE_LINE", label: "Single line" },
       { type: "MULTI_LINE", label: "Multi line" },
+      { type: "TEXT", label: "Text" },
       { type: "EMAIL", label: "Email" },
       { type: "PHONE", label: "Phone" },
       { type: "INTERNATION_PHONE", label: "International phone" },
@@ -449,6 +626,7 @@ export const FIELD_TYPE_GROUPS: FieldTypeGroup[] = [
     key: "choice",
     types: [
       { type: "STATUS", label: "Status" },
+      { type: "PICK_LIST", label: "Select" },
       { type: "MULTISELECT", label: "Multiselect" },
       { type: "CHECKBOX", label: "Checkbox" },
       { type: "SWITCH", label: "Switch" },
@@ -459,6 +637,9 @@ export const FIELD_TYPE_GROUPS: FieldTypeGroup[] = [
     types: [
       { type: "NUMBER", label: "Number" },
       { type: "FLOAT", label: "Float" },
+      // Тот же float, но без ограничения знаков после запятой:
+      // у количеств и курсов их бывает больше двух.
+      { type: "FLOAT_NOLIMIT", label: "Float unlimited" },
       { type: "INCREMENT_ID", label: "Increment id" },
     ],
   },
@@ -488,8 +669,12 @@ export const FIELD_TYPE_GROUPS: FieldTypeGroup[] = [
     types: [
       { type: "FORMULA_FRONTEND", label: "Formula" },
       { type: "FORMULA", label: "Aggregate" },
+      // Строка по шаблону: слаги в тексте заменяются значениями строки
+      // один раз, при вставке (prepareFunctions.go — MANUAL_STRING).
+      { type: "MANUAL_STRING", label: "Manual string" },
       { type: "BUTTON", label: "Button" },
       { type: "JSON", label: "JSON" },
+      { type: "QR", label: "QR code" },
       { type: "COLOR", label: "Color" },
       { type: "ICON", label: "Icon" },
       { type: "MAP", label: "Map" },

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import i18n from "@/shared/lib/i18n";
 import { keys } from "@/shared/lib/query-keys";
-import { reportError, toast } from "@/shared/lib/toast";
+import { errorMessage, reportError, toast } from "@/shared/lib/toast";
 import type { Labels } from "../model/types";
 import { pickLabels } from "./normalize";
 
@@ -32,6 +32,15 @@ type ActionDto = {
   method?: string;
   path?: string;
   attributes?: Record<string, unknown>;
+  /**
+   * Право РОЛИ запускать это действие. Приходит по роли из токена
+   * (`custom_event.go:253` — JOIN по `role_id`), и `permission` в нём
+   * булево, а не 'Yes'/'No', как у прав на таблицу.
+   *
+   * `id` пустой — записи прав нет вовсе: `permission` в этом случае
+   * не «нельзя», а COALESCE до false. См. isAllowed.
+   */
+  action_permission?: { id?: string; permission?: boolean };
 };
 
 type ActionsResponse = { custom_events?: ActionDto[] };
@@ -48,6 +57,8 @@ export type Action = {
   url: string;
   /** Выключенное действие в списке не показывается. */
   disabled: boolean;
+  /** Роли разрешено его запускать. См. isAllowed. */
+  allowed: boolean;
   /** HTTP | after | before — когда функция срабатывает. */
   actionType: string;
   /** Над какой операцией: GETLIST, UPDATE, CREATE… */
@@ -87,7 +98,12 @@ export function useActions(tableSlug: string | undefined, enabled = true) {
     select: (data) => (data.custom_events ?? []).filter((dto) => dto.id).map(toAction),
   });
 
-  return { actions: query.data ?? [], isLoading: query.isLoading };
+  return {
+    actions: query.data ?? [],
+    isLoading: query.isLoading,
+    /** Причина отказа словами. null — всё в порядке. */
+    error: errorMessage(query.error, "table.loadFailed"),
+  };
 }
 
 /** Черновик действия: то, что правится в форме. */
@@ -269,6 +285,28 @@ function firstNamed(labels: Labels): string {
   return "";
 }
 
+/**
+ * Разрешено ли роли запускать действие.
+ *
+ * Запрет строгий, разрешение по умолчанию — как и у прав на поля, но
+ * различить их здесь можно только по `id`. Запрос списка действий
+ * подставляет право через `COALESCE(ac.permission, false)`
+ * (custom_event.go:239), то есть у роли БЕЗ записи прав приходит ровно
+ * то же `false`, что и у явного запрета. Отличает их пустой `id`:
+ * записи нет — значит, никто ничего не запрещал.
+ *
+ * Разница не теоретическая. Записи прав заводятся один раз, когда
+ * действие создают, и только для ролей, которые к тому моменту уже
+ * есть (custom_event.go:105); роль, заведённая позже, записи не получает
+ * никогда, а правка прав — это UPDATE без вставки (permission.go:1690).
+ * Считай мы такую роль запрещённой — она потеряла бы все действия
+ * таблицы, и вернуть их через настройки было бы нечем.
+ */
+function isAllowed(permission: ActionDto["action_permission"]): boolean {
+  if (!permission?.id) return true;
+  return permission.permission === true;
+}
+
 export function toAction(dto: ActionDto): Action {
   const attributes = dto.attributes ?? {};
 
@@ -280,6 +318,7 @@ export function toAction(dto: ActionDto): Action {
     icon: dto.icon ?? "",
     url: dto.url ?? "",
     disabled: dto.disable === true,
+    allowed: isAllowed(dto.action_permission),
     actionType: dto.action_type ?? "",
     method: dto.method ?? "",
     refresh: attributes["use_refresh"] === true,

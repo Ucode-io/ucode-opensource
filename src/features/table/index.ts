@@ -8,7 +8,8 @@ export { useTableSchema } from "./api/schema";
 export { useCreateRelation, useDeleteRelation, useTables, useUpdateRelation } from "./api/tables";
 export { EMPTY_RELATION_DRAFT, isRelationReady } from "./model/relation-draft";
 export type { RelationDraft } from "./model/relation-draft";
-export { useSearchFields } from "./api/search-fields";
+export { ALL_VIEW_RIGHTS, useTableDetails } from "./api/table-details";
+export type { ViewRights } from "./api/table-details";
 export { toDraft } from "./model/field-draft";
 export {
   baseSlug,

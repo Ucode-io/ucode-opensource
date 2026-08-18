@@ -25,7 +25,18 @@ import type { Field } from "@/features/table";
  * настройка РАСКЛАДКИ, а не поля: то же поле остаётся колонкой таблицы.
  * Ключ бывает не задан вовсе — тогда поле показывается.
  */
-type LayoutField = { slug?: string; attributes?: { field_hide_layout?: boolean } };
+type LayoutField = {
+  slug?: string;
+  attributes?: {
+    field_hide_layout?: boolean;
+    /**
+     * Права РОЛИ на это поле. Приходят только здесь: GET /v2/fields
+     * их не отдаёт вовсе (в SELECT их нет), а раскладка подставляет
+     * их по роли из токена — layout.go, `getFieldsWithPermissions`.
+     */
+    field_permission?: { view_permission?: boolean; edit_permission?: boolean };
+  };
+};
 /** У секции есть имя: в старой админке она рисуется заголовком над группой полей. */
 type LayoutSection = { label?: string; fields?: LayoutField[] };
 /**
@@ -91,6 +102,65 @@ export function hiddenFields(layout: Layout | undefined): string[] {
     .filter((field) => field.attributes?.field_hide_layout === true)
     .map((field) => field.slug ?? "")
     .filter(Boolean);
+}
+
+/**
+ * Права роли на поля: что не показывать и что не давать править.
+ *
+ * Читаются из раскладки, потому что больше их взять негде. Схема полей
+ * (GET /v2/fields) приходит одинаковой для всех ролей — колонок
+ * `view_permission` и `edit_permission` в её запросе нет, — а раскладка
+ * идёт за ними в `field_permission` по роли из токена.
+ *
+ * Запрет строгий, разрешение — по умолчанию: прячется только то, что
+ * запрещено ЯВНО. Поля, которого в раскладке нет, это не касается,
+ * и это не мелочь: запрос раскладки соединяется с правами так, что
+ * у роли без единой записи в `field_permission` полей в ответе нет
+ * ВООБЩЕ (layout.go:995 — условие на `fp.role_id` в WHERE превращает
+ * LEFT JOIN во внутренний). Прячь мы «всё, чего нет в раскладке» —
+ * такая роль видела бы пустую таблицу.
+ */
+export function fieldRights(layout: Layout | undefined): {
+  hidden: Set<string>;
+  readonly: Set<string>;
+} {
+  const hidden = new Set<string>();
+  const readonly = new Set<string>();
+
+  for (const field of flatFields(layout)) {
+    const permission = field.attributes?.field_permission;
+    if (!field.slug || !permission) continue;
+
+    if (permission.view_permission === false) hidden.add(field.slug);
+    if (permission.edit_permission === false) readonly.add(field.slug);
+  }
+
+  return { hidden, readonly };
+}
+
+/**
+ * Колонки, приведённые к правам роли: запрещённых к показу нет вовсе,
+ * запрещённые к правке — только для чтения.
+ *
+ * Одно место на всех: и колонки таблицы, и поля карточки растут из
+ * одного списка, и прятать поле в одном из них значит показать его
+ * в другом.
+ *
+ * Настоящую проверку делает сервер: правку скрытого поля он отклонит
+ * и без нас. Здесь — чтобы человек не смотрел на колонку, которой
+ * ему видеть не положено.
+ */
+export function applyRights(
+  columns: Field[],
+  rights: { hidden: Set<string>; readonly: Set<string> },
+): Field[] {
+  if (!rights.hidden.size && !rights.readonly.size) return columns;
+
+  return columns
+    .filter((field) => !rights.hidden.has(field.slug))
+    .map((field) =>
+      field.editable && rights.readonly.has(field.slug) ? { ...field, editable: false } : field,
+    );
 }
 
 /**

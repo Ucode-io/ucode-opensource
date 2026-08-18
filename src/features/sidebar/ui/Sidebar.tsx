@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
-import { ApiError } from "@/shared/api/client";
+import { errorText } from "@/shared/api/client";
 import { Icon } from "@/shared/ui/icon";
 import { ResizeHandle } from "@/shared/ui/resize-handle";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useUi } from "@/shared/lib/ui-store";
@@ -163,8 +163,10 @@ function ExpandedSidebar({
  */
 function LoadError({ error }: { error: Error }) {
   const { t } = useTranslation();
-  const detail =
-    error instanceof ApiError && typeof error.body === "string" ? error.body : null;
+  // Разбирает ответ общий errorText: причина приходит и голой строкой,
+  // и завёрнутой в {message} — своя проверка знала только первую форму
+  // и на самом частом ответе показывала пустоту.
+  const detail = errorText(error);
 
   return (
     <div className="mx-1 flex flex-col gap-1 rounded-md bg-danger-subtle px-2 py-1.5">

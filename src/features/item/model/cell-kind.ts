@@ -62,7 +62,14 @@ const BY_TYPE: Record<string, CellKind> = {
   RANDOM_UUID: "text",
   PRIMARY_KEY: "text",
   INCREMENT_ID: "text",
-  PICK_LIST: "text",
+  // Строка, собранная бэкендом по шаблону из других полей записи.
+  MANUAL_STRING: "text",
+  /*
+   * Выбор одного варианта из списка. Варианты лежат там же, где
+   * у MULTISELECT (`attributes.options`), поэтому и рисуется он тем же
+   * чипом: тип другой, а данные те же.
+   */
+  PICK_LIST: "status",
 
   MULTI_LINE: "longtext",
   TEXT: "longtext",
@@ -151,6 +158,13 @@ export function cellKind(type: string): CellKind {
 const COMPUTED = new Set([
   "INCREMENT_ID",
   "INCREMENT_NUMBER",
+  /*
+   * Собирается по шаблону при вставке. Правку бэкенд не перезапишет —
+   * шаблон он читает только на создании, — но править её всё равно
+   * нельзя: значение обещает быть шаблоном, а не тем, что кто-то
+   * однажды вписал руками.
+   */
+  "MANUAL_STRING",
   "RANDOM_NUMBERS",
   "RANDOM_UUID",
   "PRIMARY_KEY",

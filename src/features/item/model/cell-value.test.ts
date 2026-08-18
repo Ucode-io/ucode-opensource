@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
+import type { Field } from "@/features/table";
 import {
+  blankItem,
   fromDateInput,
   sameValue,
   toDateInput,
@@ -75,4 +77,30 @@ test("значение мультиселекта всегда список", ()
   expect(toList("a")).toEqual(["a"]);
   expect(toList(null)).toEqual([]);
   expect(toList([null, "a", ""])).toEqual(["a"]);
+});
+
+test("новая запись подставляет значения по умолчанию в типе колонки", () => {
+  const field = (over: Partial<Field>): Field =>
+    ({ slug: "f", type: "SINGLE_LINE", attributes: {}, ...over }) as Field;
+
+  const row = blankItem([
+    field({ slug: "city", attributes: { defaultValue: "Ташкент" } }),
+    field({ slug: "count", type: "NUMBER", attributes: { defaultValue: "3" } }),
+    field({ slug: "active", type: "CHECKBOX", attributes: { defaultValue: "true" } }),
+    // Прежнее имя того же ключа: поля, заведённые старой админкой.
+    field({ slug: "note", attributes: { default_values: "—" } }),
+    field({ slug: "empty", attributes: { defaultValue: "  " } }),
+    // Список — настройка MULTISELECT и связей, её мы не трогаем.
+    field({ slug: "tags", type: "MULTISELECT", attributes: { defaultValue: ["a"] } }),
+    field({ slug: "plain", attributes: {} }),
+  ]);
+
+  expect(row["city"]).toBe("Ташкент");
+  expect(row["count"]).toBe(3);
+  expect(row["active"]).toBe(true);
+  expect(row["note"]).toBe("—");
+  expect(row).not.toHaveProperty("empty");
+  expect(row).not.toHaveProperty("tags");
+  expect(row).not.toHaveProperty("plain");
+  expect(typeof row.guid).toBe("string");
 });

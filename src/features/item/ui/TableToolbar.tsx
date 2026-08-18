@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import {
   localized,
   SEARCH_TYPES,
-  useSearchFields,
+  useTableDetails,
   useUpdateSearchFields,
   type Field,
 } from "@/features/table";
@@ -210,7 +210,7 @@ function SearchBox({
 function SearchFieldsMenu({ tableSlug, language }: { tableSlug: string; language: string }) {
   const { t } = useTranslation();
   const update = useUpdateSearchFields(tableSlug);
-  const { fields, enabled, isFetching } = useSearchFields(tableSlug);
+  const { fields, enabled, isFetching, error } = useTableDetails(tableSlug);
   // Отметка едет на сервер и возвращается оттуда же: без признака
   // работы список выглядит так, будто щелчок не сработал.
   const busy = isFetching || update.isPending;
@@ -238,7 +238,8 @@ function SearchFieldsMenu({ tableSlug, language }: { tableSlug: string; language
         <div className="max-h-80 w-64 overflow-y-auto">
           <p className="flex items-center gap-1.5 px-2 py-1 text-2xs text-fg-subtle">
             <span className="flex-1">
-              {t(searchable.length ? "table.searchFieldsHint" : "table.searchFieldsNone")}
+              {/* Список не приехал — говорим об этом, а не «искать не по чему». */}
+              {error ?? t(searchable.length ? "table.searchFieldsHint" : "table.searchFieldsNone")}
             </span>
             {busy && <Icon as={IconLoader2} size={12} className="shrink-0 animate-spin" />}
           </p>

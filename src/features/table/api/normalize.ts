@@ -144,7 +144,13 @@ export function toOptions(dto: FieldDto): Map<string, FieldOption> {
   const attributes = dto.attributes;
   if (!attributes) return options;
 
-  if (dto.type === "MULTISELECT") {
+  /*
+   * PICK_LIST хранит варианты там же, где MULTISELECT, и отличается
+   * только тем, что выбирают из них один. Старая админка предлагает
+   * этот тип при создании, но экрана для его вариантов у неё нет —
+   * поле выходило пустым списком.
+   */
+  if (dto.type === "MULTISELECT" || dto.type === "PICK_LIST") {
     for (const raw of asOptions(attributes["options"])) {
       // Именно slug: по нему значение и лежит в строке.
       add(options, raw, raw.slug ?? "", null);

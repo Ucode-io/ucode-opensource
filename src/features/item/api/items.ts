@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import { keys } from "@/shared/lib/query-keys";
-import { reportError } from "@/shared/lib/toast";
+import { errorMessage, reportError } from "@/shared/lib/toast";
 import type { Item } from "../model/types";
 import { type ItemsQuery, toRequestBody } from "../model/query";
 
@@ -72,7 +72,17 @@ export function useItems(tableSlug: string | undefined, query: ItemsQuery) {
     loadMore: () => {
       if (result.hasNextPage && !result.isFetchingNextPage) void result.fetchNextPage();
     },
-    error: result.error,
+    /**
+     * Причина отказа словами. null — всё в порядке.
+     *
+     * Строкой, а не объектом ошибки: показывает её экран, а разбирать
+     * ответ сервера — дело слоя запросов. Причина берётся та, что
+     * прислал сервер: у роли без права на чтение это будет его «403»
+     * своими словами, а не наша догадка.
+     */
+    error: errorMessage(result.error, "table.loadFailed"),
+    /** Повторить запрос: у отказа на экране есть кнопка. */
+    refetch: () => void result.refetch(),
   };
 }
 
@@ -104,7 +114,7 @@ export function useItem(
     filters: { guid: { op: "contains", values: [guid ?? ""] } },
   });
 
-  return { item: query.page.rows[0], isLoading: query.isLoading };
+  return { item: query.page.rows[0], isLoading: query.isLoading, error: query.error };
 }
 
 /** response приходит null, когда строк нет, — это не ошибка. */

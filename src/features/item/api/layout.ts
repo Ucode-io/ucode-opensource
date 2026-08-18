@@ -6,6 +6,7 @@ import { keys } from "@/shared/lib/query-keys";
 import { reportError } from "@/shared/lib/toast";
 import {
   fieldOrder,
+  fieldRights,
   headingSlug,
   hiddenFields,
   moveField,
@@ -78,6 +79,11 @@ export function useDrawerLayout({
     order: useMemo(() => fieldOrder(query.data), [query.data]),
     /** Слаги полей, спрятанных из карточки (`field_hide_layout`). */
     hidden: useMemo(() => new Set(hiddenFields(query.data)), [query.data]),
+    /**
+     * Права роли на поля. Приходят с раскладкой, потому что в схеме
+     * полей их нет вовсе — см. model/layout, fieldRights.
+     */
+    rights: useMemo(() => fieldRights(query.data), [query.data]),
     /** Секции карточки: имя и слаги полей. */
     sections: useMemo(() => sections(query.data), [query.data]),
     /** Слаг поля-заголовка карточки. Пусто — заголовка нет. */

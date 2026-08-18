@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { session } from "@/shared/api/session";
 import { useSession } from "@/shared/api/use-session";
 import type { Permission } from "./types";
@@ -50,14 +51,31 @@ export function storePermissions(permissions: Permission[]) {
 
 /** Права на конкретную таблицу. Без слага и без данных — всё разрешено. */
 export function useTablePermission(tableSlug: string | undefined): Permission {
+  return useTablePermissions()(tableSlug);
+}
+
+/**
+ * Права на любую таблицу, спрошенные по ходу дела.
+ *
+ * Нужны, когда таблиц на экране несколько и набор их приходит из данных:
+ * вкладки связей ведут каждая в свою таблицу, и хук на каждую не
+ * повесишь — их число меняется от записи к записи.
+ */
+export function useTablePermissions(): (tableSlug: string | undefined) => Permission {
   const store = useSession();
   const map = store.getPermissions();
+  const superRole = store.getProfile()?.role === SUPER_ROLE;
 
-  if (!tableSlug || store.getProfile()?.role === SUPER_ROLE) return ALL;
+  /*
+   * Ссылка постоянная, пока не поменялись сами права: спрошенное
+   * из useMemo иначе пересчитывалось бы каждый рендер — а на этих
+   * списках висят вкладки карточки.
+   */
+  return useCallback((tableSlug: string | undefined) => {
+    if (!tableSlug || superRole) return ALL;
 
-  const flags = map[tableSlug];
-  // Ответ ещё не приехал (первый рендер до refresh) — не запрещаем.
-  if (!flags) return ALL;
-
-  return { ...ALL, ...flags, tableSlug };
+    const flags = map[tableSlug];
+    // Ответ ещё не приехал (первый рендер до refresh) — не запрещаем.
+    return flags ? { ...ALL, ...flags, tableSlug } : ALL;
+  }, [map, superRole]);
 }

@@ -22,6 +22,8 @@ import {
   MULTILANGUAGE_TYPES,
   STATUS_GROUPS,
   fieldTypeLabel,
+  hasDefaultValue,
+  hasPrefix,
   isValidPattern,
   newDraft,
   optionsShape,
@@ -44,6 +46,7 @@ import { useTableFields, useTables } from "../api/tables";
 import { AutofillSettings } from "./AutofillSettings";
 import { ButtonSettings } from "./ButtonSettings";
 import { FormulaSettings } from "./FormulaSettings";
+import { TypeSettings } from "./TypeSettings";
 
 /**
  * Поле: заводится и правится одной панелью, привязанной к тому месту,
@@ -572,6 +575,11 @@ export function FieldEditor({
                     он не нужен. */}
                 {draft.type === "BUTTON" && <ButtonSettings draft={draft} onChange={patch} />}
 
+                {/* Настройки, которые есть у одного типа: точка карты,
+                    формат снимка, перекодирование видео, сканер.
+                    У остальных типов блок не рисуется. */}
+                <TypeSettings draft={draft} onChange={patch} />
+
                 {/* Автозаполнение из связанной строки. У таблицы без
                     подходящих связей блок не рисуется. */}
                 <AutofillSettings
@@ -580,6 +588,41 @@ export function FieldEditor({
                   language={language}
                   onChange={patch}
                 />
+
+                {/* Приставка к автономеру: `INV-000123`. Правится и у
+                    заведённого поля — её подставляет бэкенд в момент
+                    вставки строки, а не при создании последовательности,
+                    поэтому новая приставка действует со следующей записи. */}
+                {hasPrefix(draft.type) && (
+                  <label className="flex h-8 items-center gap-2 px-2">
+                    <span className="flex-1 truncate text-sm text-fg">{t("fieldForm.prefix")}</span>
+                    <input
+                      value={draft.prefix}
+                      // Без дефиса: его бэкенд ставит сам («INV» → «INV-000123»).
+                      placeholder="INV"
+                      onChange={(event) => patch({ prefix: event.target.value })}
+                      className="h-6 w-24 rounded-md border border-border-strong bg-surface px-1.5 text-xs text-fg outline-none focus:border-accent"
+                    />
+                  </label>
+                )}
+
+                {/*
+                  Значение по умолчанию у новой записи. Подставляет его
+                  фронт (features/item/model/cell-value → blankItem):
+                  колонки под него у поля нет, бэкенд просто хранит ключ
+                  в attributes и при вставке про него не знает.
+                */}
+                {hasDefaultValue(draft.type) && (
+                  <div className="flex flex-col gap-1 px-2 py-1">
+                    <span className="text-2xs text-fg-muted">{t("fieldForm.defaultValue")}</span>
+                    <input
+                      value={draft.defaultValue}
+                      placeholder={t("fieldForm.defaultValuePlaceholder")}
+                      onChange={(event) => patch({ defaultValue: event.target.value })}
+                      className="h-7 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg outline-none focus:border-accent"
+                    />
+                  </div>
+                )}
 
                 {/* Число цифр учитывается, когда заводится последовательность;
                     у заведённого поля правка ничего не переписывает задним

@@ -1,4 +1,6 @@
-import type { CellKind } from "./cell-kind";
+import type { Field } from "@/features/table";
+import { cellKind, type CellKind } from "./cell-kind";
+import type { Item } from "./types";
 
 /**
  * Значение ячейки: чтение из строки и запись обратно.
@@ -150,6 +152,52 @@ export function isBlank(value: unknown): boolean {
 export function sameValue(a: unknown, b: unknown): boolean {
   if (isBlank(a) && isBlank(b)) return true;
   return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Новая запись: guid и значения по умолчанию из настроек полей.
+ *
+ * Подставляет их фронт, а не база. Колонки `default` у поля нет — значение
+ * лежит в свободном мешке attributes (`defaultValue`, прежнее имя того же
+ * ключа — `default_values`), и вставка о нём не знает ничего. Не подставим
+ * мы — не подставит никто.
+ *
+ * Собирается в одном месте, потому что запись заводится в двух: строкой
+ * в подвале таблицы и карточкой сбоку. Настройка, которая работает
+ * в одном из них, хуже отсутствующей.
+ *
+ * Значение хранится строкой, а колонка — нет: в числовую поедет число,
+ * в булеву — булево. Строка в колонке NUMERIC — это 500 в ответ
+ * на вставку, а не «поле осталось пустым».
+ */
+export function blankItem(columns: Field[]): Item {
+  const row: Item = { guid: crypto.randomUUID() };
+
+  for (const field of columns) {
+    const raw = field.attributes["defaultValue"] ?? field.attributes["default_values"];
+    // Список — это значение по умолчанию у MULTISELECT и связей, которые
+    // мы не настраиваем; чужую настройку читаем не глядя только в мусор.
+    if (typeof raw !== "string" && typeof raw !== "number" && typeof raw !== "boolean") continue;
+
+    const text = String(raw).trim();
+    if (!text) continue;
+
+    switch (cellKind(field.type)) {
+      case "number": {
+        const value = toNumber(text);
+        if (value !== null) row[field.slug] = value;
+        break;
+      }
+      case "boolean": {
+        if (text === "true" || text === "false") row[field.slug] = text === "true";
+        break;
+      }
+      default:
+        row[field.slug] = text;
+    }
+  }
+
+  return row;
 }
 
 /** Значение MULTISELECT: в строке список, но одиночная строка тоже бывает. */

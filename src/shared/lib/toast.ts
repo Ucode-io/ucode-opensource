@@ -70,5 +70,20 @@ export const toast = {
  * мутация не компонент, хука `useTranslation` в ней нет.
  */
 export function reportError(error: unknown, fallback: TranslationKey) {
-  toast.error(errorText(error) ?? i18n.t(fallback));
+  toast.error(errorMessage(error, fallback) ?? i18n.t(fallback));
+}
+
+/**
+ * Отказ запроса → текст для ЭКРАНА, а не для уведомления.
+ *
+ * Тем же правилом, что и уведомление: причину показываем ту, что прислал
+ * сервер, и только если он смолчал — свою. Отдельно от reportError,
+ * потому что живут они по-разному: уведомление гаснет само, а на месте
+ * несостоявшейся таблицы текст остаётся, пока запрос не повторят.
+ *
+ * null — ошибки нет. Так его и проверяют на экране.
+ */
+export function errorMessage(error: unknown, fallback: TranslationKey): string | null {
+  if (!error) return null;
+  return errorText(error) ?? i18n.t(fallback);
 }
