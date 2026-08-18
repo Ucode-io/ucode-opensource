@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useProjectDetail } from "@/features/workspace";
 import { api } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
 import i18n from "@/shared/lib/i18n";
@@ -24,6 +26,12 @@ type ProjectDto = {
   language?: LanguageDto[];
   timezone?: NamedDto | null;
   currency?: NamedDto | null;
+  /**
+   * Наборы значков, из которых выбирают иконку пункта меню. Значения —
+   * `<префикс iconify>#<имя набора>`: так их пишет старая админка, и так
+   * же их читает выбор иконки.
+   */
+  icon_categories?: string[];
 };
 
 export type ProjectOption = { id: string; name: string };
@@ -35,21 +43,29 @@ export type ProjectSettings = {
   /** Языки данных проекта — id из справочника LANGUAGE. */
   languageIds: string[];
   timezoneId: string;
+  /** Валюта проекта — id из справочника CURRENCY. */
+  currencyId: string;
+  /** Наборы значков: `<префикс>#<имя>`, см. ProjectDto.icon_categories. */
+  iconCategories: string[];
   raw: Record<string, unknown>;
 };
 
-export function useProject(enabled = true) {
-  const projectId = useSession().getProjectId() ?? "";
+/**
+ * Настройки проекта.
+ *
+ * Своего запроса нет: карточку проекта грузит features/workspace, и её
+ * же читают языки данных и логотип в шапке. Раньше тот же адрес лежал
+ * здесь под своим ключом — то есть на каждом экране, где открыты
+ * настройки, он приезжал дважды.
+ */
+export function useProject() {
+  const query = useProjectDetail();
+  const project = useMemo(
+    () => (query.data ? toProjectSettings(query.data as ProjectDto) : undefined),
+    [query.data],
+  );
 
-  const query = useQuery({
-    queryKey: keys.settings.project(projectId),
-    queryFn: () => api.get<ProjectDto>(`/v1/company-project/${projectId}`),
-    enabled: enabled && Boolean(projectId),
-    staleTime: 5 * 60_000,
-    select: toProjectSettings,
-  });
-
-  return { project: query.data, isLoading: query.isLoading };
+  return { project, isLoading: query.isLoading };
 }
 
 /**
@@ -58,7 +74,7 @@ export function useProject(enabled = true) {
  * Ручка одна на три списка и различает их параметром `type`, поэтому
  * и ключ кэша включает тип: иначе языки и пояса делили бы одну ячейку.
  */
-export function useProjectOptions(type: "LANGUAGE" | "TIMEZONE", enabled = true) {
+export function useProjectOptions(type: "LANGUAGE" | "TIMEZONE" | "CURRENCY", enabled = true) {
   const projectId = useSession().getProjectId() ?? "";
 
   const query = useQuery({
@@ -93,7 +109,15 @@ function listOf(body: SettingsResponse, type: string): LanguageDto[] {
   return Array.isArray(inner) ? (inner as LanguageDto[]) : [];
 }
 
-export type ProjectDraft = { title?: string; languageIds?: string[]; timezoneId?: string };
+export type ProjectDraft = {
+  title?: string;
+  languageIds?: string[];
+  timezoneId?: string;
+  currencyId?: string;
+  iconCategories?: string[];
+  /** Адрес логотипа в нашем CDN. Пусто — логотипа нет. */
+  logo?: string;
+};
 
 /**
  * Правка проекта.
@@ -122,15 +146,26 @@ export function useUpdateProject(languages: LanguageOption[]) {
           ? {}
           : { language: ids.map((id) => languages.find((item) => item.id === id)).filter(Boolean) }),
         ...(draft.timezoneId === undefined ? {} : { timezone: { id: draft.timezoneId } }),
+        /*
+         * Валюта и часовой пояс уезжают объектом с одним id: остальное
+         * бэкенд подставляет сам из справочника, а список из голого
+         * идентификатора он не примет — как и языки.
+         */
+        ...(draft.currencyId === undefined ? {} : { currency: { id: draft.currencyId } }),
+        ...(draft.iconCategories === undefined ? {} : { icon_categories: draft.iconCategories }),
+        ...(draft.logo === undefined ? {} : { logo: draft.logo }),
       });
     },
 
     onError: (error) => reportError(error, "common.saveFailed"),
     onSuccess: async () => {
       toast.success(i18n.t("settings.saved"));
-      await queryClient.invalidateQueries({ queryKey: keys.settings.project(projectId) });
-      // Языки данных читает половина экранов — их список тоже устарел.
-      await queryClient.invalidateQueries({ queryKey: keys.workspace.all });
+      /*
+       * Один ключ на всех: карточку проекта читают и языки данных,
+       * и логотип в шапке, и этот экран. Второго места, которое надо
+       * было бы протухать отдельно, больше нет.
+       */
+      await queryClient.invalidateQueries({ queryKey: keys.workspace.project(projectId) });
     },
   });
 }
@@ -139,14 +174,17 @@ export function useUpdateProject(languages: LanguageOption[]) {
 export type LanguageOption = { id: string; name: string; short_name: string; native_name: string };
 
 /**
- * Языки справочника — с кодами. Отдельно от useProjectOptions: там
- * нужны только id и имя, а при записи проекта уезжает объект целиком.
+ * Языки справочника — с кодами.
+ *
+ * Отдельный разбор, но ТОТ ЖЕ ключ, что у useProjectOptions("LANGUAGE"):
+ * запрос один, а каждый потребитель берёт из ответа своё. С отдельным
+ * ключом тот же адрес приезжал бы дважды на одном экране.
  */
 export function useLanguageOptions(enabled = true) {
   const projectId = useSession().getProjectId() ?? "";
 
   const query = useQuery({
-    queryKey: [...keys.settings.options(projectId, "LANGUAGE"), "full"],
+    queryKey: keys.settings.options(projectId, "LANGUAGE"),
     queryFn: () =>
       api.get<SettingsResponse>("/v1/project/setting", {
         params: { "project-id": projectId, type: "LANGUAGE", limit: 200 },
@@ -174,6 +212,48 @@ export function toProjectSettings(dto: ProjectDto): ProjectSettings {
     logo: dto.logo ?? "",
     languageIds: (dto.language ?? []).map((item) => item.id ?? "").filter(Boolean),
     timezoneId: dto.timezone?.id ?? "",
+    currencyId: dto.currency?.id ?? "",
+    iconCategories: (dto.icon_categories ?? []).filter(Boolean),
     raw: { ...dto },
   };
 }
+
+/**
+ * Наборы значков iconify — справочник для настройки проекта.
+ *
+ * Запрос идёт МИМО нашего http-клиента: это чужой хост, ему не нужны
+ * ни наш токен, ни окружение, ни разворачивание конверта. Отдельный
+ * инстанс axios ради одного GET — лишняя сущность, поэтому fetch.
+ *
+ * Так же берёт их и старая админка (ProjectSettings.jsx): своего
+ * справочника наборов у ucode нет.
+ */
+export type IconCollection = { value: string; label: string };
+
+const ICONIFY_COLLECTIONS = "https://api.iconify.design/collections";
+
+export function useIconCollections(enabled = true) {
+  const query = useQuery({
+    queryKey: keys.settings.iconCollections(),
+    queryFn: async (): Promise<IconCollection[]> => {
+      const response = await fetch(ICONIFY_COLLECTIONS);
+      if (!response.ok) throw new Error(`iconify: ${response.status}`);
+
+      const body = (await response.json()) as Record<string, { name?: string }>;
+
+      return Object.entries(body).map(([prefix, item]) => ({
+        // Формат значения — `<префикс>#<имя>`: его пишет и читает
+        // старая админка, и по префиксу же запрашиваются сами значки.
+        value: `${prefix}#${item?.name ?? prefix}`,
+        label: item?.name ?? prefix,
+      }));
+    },
+    enabled,
+    // Наборы iconify меняются несколько раз в год.
+    staleTime: 24 * 60 * 60_000,
+  });
+
+  return { collections: query.data ?? NO_COLLECTIONS, isLoading: query.isLoading };
+}
+
+const NO_COLLECTIONS: IconCollection[] = [];

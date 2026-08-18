@@ -5,7 +5,9 @@ import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Field, Input, Select } from "@/shared/ui/input";
 import { LanguageTabs } from "@/shared/ui/language-tabs";
+import { ImagePicker } from "./ImagePicker";
 import {
+  useIconCollections,
   useLanguageOptions,
   useProject,
   useProjectOptions,
@@ -30,12 +32,16 @@ export function ProjectSettings() {
   const { project, isLoading } = useProject();
   const { languages } = useLanguageOptions();
   const { options: timezones } = useProjectOptions("TIMEZONE");
+  const { options: currencies } = useProjectOptions("CURRENCY");
   const update = useUpdateProject(languages);
   const { languages: dataLanguages, current, setCurrent } = useDataLanguages();
 
   const [title, setTitle] = useState("");
   const [languageIds, setLanguageIds] = useState<string[]>([]);
   const [timezoneId, setTimezoneId] = useState("");
+  const [currencyId, setCurrencyId] = useState("");
+  const [logo, setLogo] = useState("");
+  const [iconCategories, setIconCategories] = useState<string[]>([]);
   /* Языков в справочнике под две сотни — без поиска это стена флажков. */
   const [query, setQuery] = useState("");
 
@@ -44,6 +50,9 @@ export function ProjectSettings() {
     setTitle(project.title);
     setLanguageIds(project.languageIds);
     setTimezoneId(project.timezoneId);
+    setCurrencyId(project.currencyId);
+    setLogo(project.logo);
+    setIconCategories(project.iconCategories);
   }, [project]);
 
   if (isLoading || !project) {
@@ -53,8 +62,12 @@ export function ProjectSettings() {
   const changed =
     title !== project.title ||
     timezoneId !== project.timezoneId ||
+    currencyId !== project.currencyId ||
+    logo !== project.logo ||
     languageIds.length !== project.languageIds.length ||
-    languageIds.some((id) => !project.languageIds.includes(id));
+    languageIds.some((id) => !project.languageIds.includes(id)) ||
+    iconCategories.length !== project.iconCategories.length ||
+    iconCategories.some((value) => !project.iconCategories.includes(value));
 
   const toggle = (id: string) =>
     setLanguageIds((current) =>
@@ -62,8 +75,18 @@ export function ProjectSettings() {
     );
 
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4">
+    /* Ширину берём от окна — см. ProfileSettings: узкая колонка в широком
+       окне настроек оставляла пустой правый край. */
+    <div className="flex w-full max-w-5xl flex-col gap-6">
+      <ImagePicker
+        value={logo}
+        letter={(title || project.id).slice(0, 1).toUpperCase()}
+        label={t("settings.logo")}
+        hint={t("settings.logoHint")}
+        onChange={setLogo}
+      />
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Field label={t("settings.projectName")}>
           <Input value={title} onChange={(event) => setTitle(event.target.value)} />
         </Field>
@@ -78,9 +101,32 @@ export function ProjectSettings() {
             ))}
           </Select>
         </Field>
+
+        {/* Валюта проекта: ею подписаны денежные поля. Тот же справочник,
+            что у языков и поясов, — только с другим типом. */}
+        <Field label={t("settings.currency")}>
+          <Select value={currencyId} onChange={(event) => setCurrencyId(event.target.value)}>
+            <option value="">{t("settings.noCurrency")}</option>
+            {currencies.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </div>
 
-      <section className="flex flex-col gap-2">
+      {/*
+        Языки и наборы значков — рядом: оба со своей прокруткой,
+        и друг под другом они гнали страницу вниз на два экрана.
+
+        Строки общие для обеих секций (subgrid): подсказка слева
+        занимает две строки, справа одну, и без общей сетки поля поиска
+        и рамки списков стоят на разной высоте — колонки выглядят
+        косыми.
+      */}
+      <div className="grid gap-x-6 gap-y-2 lg:grid-cols-2 lg:grid-rows-[auto_auto_auto_1fr]">
+        <section className="grid content-start gap-2 lg:row-span-4 lg:grid-rows-subgrid">
         <h3 className="text-sm font-medium">{t("settings.dataLanguages")}</h3>
         <p className="text-xs text-fg-subtle">{t("settings.dataLanguagesHint")}</p>
 
@@ -93,7 +139,7 @@ export function ProjectSettings() {
 
         {/* Выбранные всегда сверху и всегда видны: иначе поиск прячет
             то, что человек только что отметил. */}
-        <div className="grid max-h-56 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-border p-2">
+        <div className="grid h-56 auto-rows-min gap-1 overflow-y-auto rounded-md border border-border p-2">
           {matching(languages, languageIds, query).map((language) => (
             <label
               key={language.id}
@@ -112,7 +158,10 @@ export function ProjectSettings() {
             </label>
           ))}
         </div>
-      </section>
+        </section>
+
+        <IconCategories value={iconCategories} onChange={setIconCategories} />
+      </div>
 
       {/* Личный выбор, а не настройка проекта: он не уезжает на сервер
           и не меняет данные — только то, какой языковой вариант показан. */}
@@ -130,7 +179,12 @@ export function ProjectSettings() {
       <div className="flex justify-end">
         <Button
           disabled={!changed || update.isPending}
-          onClick={() => update.mutate({ project, draft: { title, languageIds, timezoneId } })}
+          onClick={() =>
+            update.mutate({
+              project,
+              draft: { title, languageIds, timezoneId, currencyId, iconCategories, logo },
+            })
+          }
         >
           {t("action.save")}
         </Button>
@@ -168,3 +222,76 @@ function matching(
  * и прокручивать их до нужного дольше, чем набрать две буквы.
  */
 const VISIBLE_LANGUAGES = 30;
+
+/**
+ * Наборы значков, из которых выбирают иконку пункта меню.
+ *
+ * Список приходит не от бэкенда, а прямо из iconify
+ * (api.iconify.design/collections) — оттуда же берутся и сами значки.
+ * Так это устроено и в старой админке: свой справочник наборов ucode
+ * не держит.
+ *
+ * Значение — `<префикс>#<имя набора>`: префикс нужен запросу значков,
+ * имя — человеку в списке. Формат не наш, его читает старая админка,
+ * и менять его значит разойтись с ней на одних и тех же данных.
+ *
+ * Запрос уходит один раз на открытие настроек и живёт в кэше сутки:
+ * набор коллекций iconify меняется несколько раз в год.
+ */
+function IconCategories({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const { t } = useTranslation();
+  const { collections, isLoading } = useIconCollections();
+  const [query, setQuery] = useState("");
+
+  const chosen = new Set(value);
+  const shown = collections
+    .filter((item) => chosen.has(item.value) || matches(item.label, query))
+    .slice(0, 200);
+
+  return (
+    <section className="grid content-start gap-2 lg:row-span-4 lg:grid-rows-subgrid">
+      <h3 className="text-sm font-medium">{t("settings.iconCategories")}</h3>
+      <p className="text-xs text-fg-subtle">{t("settings.iconCategoriesHint")}</p>
+
+      <Input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t("settings.searchIconCategory")}
+        aria-label={t("settings.searchIconCategory")}
+      />
+
+      <div className="grid h-56 auto-rows-min gap-1 overflow-y-auto rounded-md border border-border p-2">
+        {isLoading && <p className="p-1 text-xs text-fg-subtle">{t("common.loading")}</p>}
+
+        {shown.map((item) => (
+          <label
+            key={item.value}
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover"
+          >
+            <Checkbox
+              checked={chosen.has(item.value)}
+              onChange={() =>
+                onChange(
+                  chosen.has(item.value)
+                    ? value.filter((current) => current !== item.value)
+                    : [...value, item.value],
+                )
+              }
+            />
+            <span className="min-w-0 truncate text-sm text-fg">{item.label}</span>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function matches(label: string, query: string): boolean {
+  return !query.trim() || label.toLowerCase().includes(query.trim().toLowerCase());
+}

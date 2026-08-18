@@ -43,7 +43,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       style={{ background: "var(--color-overlay)" }}
       onPointerDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div className="flex h-[min(42rem,90vh)] w-full max-w-4xl overflow-hidden rounded-xl border border-border bg-surface shadow-modal">
+      {/* Окно широкое: в правах помещается матрица «таблица × право»,
+          а она не сжимается — колонок одиннадцать. На узком экране
+          растягивается до его краёв. */}
+      <div className="flex h-[min(48rem,92vh)] w-full max-w-[min(84rem,96vw)] overflow-hidden rounded-xl border border-border bg-surface shadow-modal">
         {/* Список разделов слева: их немного, и прятать их в выпадающий
             список значит заставлять открывать его на каждый переход. */}
         <nav className="flex w-52 shrink-0 flex-col gap-0.5 border-r border-border bg-bg p-2">

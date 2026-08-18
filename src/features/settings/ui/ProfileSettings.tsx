@@ -14,6 +14,8 @@ import {
   useUpdateProfile,
   type ProfileDraft,
 } from "../api/profile";
+import { useClientTypes } from "../api/roles";
+import { ImagePicker } from "./ImagePicker";
 
 /**
  * Профиль: имя, как человека зовут в интерфейсе, и способы входа.
@@ -28,12 +30,21 @@ export function ProfileSettings() {
   const update = useUpdateProfile();
   const store = useSession();
   const role = store.getProfile()?.role ?? "";
+  /*
+   * Тип клиента у человека один и лежит в токене; человеческое имя
+   * к нему — в справочнике проекта. Свой запрос за ним не нужен: список
+   * типов уже грузится для создания ролей и живёт в кэше.
+   */
+  const { clientTypes } = useClientTypes();
+  const clientType =
+    clientTypes.find((type) => type.id === store.getClientTypeId())?.name ?? "";
 
   const [draft, setDraft] = useState<ProfileDraft>({
     name: "",
     login: "",
     email: "",
     phone: "",
+    photo: "",
   });
 
   // Черновик наполняется, когда профиль приехал: до этого править нечего.
@@ -44,6 +55,7 @@ export function ProfileSettings() {
       login: profile.login,
       email: profile.email,
       phone: profile.phone,
+      photo: profile.photoUrl,
     });
   }, [profile]);
 
@@ -55,12 +67,28 @@ export function ProfileSettings() {
     draft.name !== profile.name ||
     draft.login !== profile.login ||
     draft.email !== profile.email ||
-    draft.phone !== profile.phone;
+    draft.phone !== profile.phone ||
+    draft.photo !== profile.photoUrl;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-6">
+    /*
+     * Ширину берём от окна, а не держим узкой колонкой: окно настроек
+     * широкое ради матрицы прав, и профиль в нём выглядел строчкой слева
+     * с пустотой на пол-экрана. Верхний предел всё же есть — поле ввода
+     * во всю ширину монитора читается хуже, чем в две трети.
+     */
+    <div className="flex w-full max-w-5xl flex-col gap-6">
       <section className="flex flex-col gap-4">
-        <div className="grid grid-cols-2 gap-4">
+        <ImagePicker
+          value={draft.photo}
+          letter={(draft.name || profile.login || "?").slice(0, 1).toUpperCase()}
+          label={t("settings.photo")}
+          hint={t("settings.photoHint")}
+          round
+          onChange={(photo) => setDraft({ ...draft, photo })}
+        />
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <Field label={t("settings.name")}>
             <Input
               value={draft.name}
@@ -90,9 +118,15 @@ export function ProfileSettings() {
             />
           </Field>
 
-          {/* Роль выдаёт проект, а не человек себе сам. */}
+          {/* Роль и тип клиента выдаёт проект, а не человек себе сам:
+              поле ввода, которое сервер всё равно перезапишет, —
+              это ложное обещание. */}
           <Field label={t("settings.role")}>
             <Input value={role} disabled readOnly />
+          </Field>
+
+          <Field label={t("settings.clientType")}>
+            <Input value={clientType} disabled readOnly />
           </Field>
         </div>
 

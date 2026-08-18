@@ -10,7 +10,7 @@ import {
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SettingsDialog } from "@/features/settings";
+import { SettingsDialog, useProject } from "@/features/settings";
 import { WorkspaceSwitcher } from "@/features/workspace";
 import { useSession } from "@/shared/api/use-session";
 import { LOCALES, setLocale, type Locale } from "@/shared/lib/i18n";
@@ -36,6 +36,12 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
 
   const title = profile?.company || t("app.name");
   const letter = (title[0] ?? "U").toUpperCase();
+  /*
+   * Логотип проекта — из настроек проекта. Запрос уже сделан там же
+   * и живёт в кэше пять минут; своего здесь не появляется.
+   */
+  const { project } = useProject();
+  const logo = project?.logo ?? "";
 
   return (
     <>
@@ -49,7 +55,7 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
               open ? "bg-surface-hover" : ""
             }`}
           >
-            <Avatar letter={letter} />
+            <Avatar letter={letter} {...(logo ? { image: logo } : {})} />
 
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               {profile?.name && (
@@ -74,7 +80,11 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
         {(close) => (
           <div className="w-64">
             <div className="flex items-center gap-2.5 p-2">
-              <Avatar letter={(profile?.name?.[0] ?? letter).toUpperCase()} size="lg" />
+              <Avatar
+                letter={(profile?.name?.[0] ?? letter).toUpperCase()}
+                size="lg"
+                {...(profile?.photo ? { image: profile.photo } : {})}
+              />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-fg">
                   {profile?.name || t("workspace.noName")}
@@ -210,20 +220,39 @@ function LanguageButton() {
   );
 }
 
+/**
+ * Знак рабочего пространства: картинка, если её загрузили, иначе буква.
+ *
+ * Картинка — логотип проекта у компании и фотография у человека; обе
+ * задаются в настройках. Буква остаётся запасным вариантом: логотип
+ * есть далеко не у каждого проекта, и пустой квадрат хуже буквы.
+ */
 function Avatar({
   letter,
+  image,
   size = "md",
   tone = "accent",
 }: {
   letter: string;
+  image?: string | undefined;
   size?: "md" | "lg";
   tone?: "accent" | "muted";
 }) {
+  const box = size === "lg" ? "size-9 text-base" : "size-7 text-xs";
+
+  if (image) {
+    return (
+      <span className={`grid shrink-0 place-items-center overflow-hidden rounded-md ${box}`}>
+        <img src={image} alt="" className="size-full object-cover" />
+      </span>
+    );
+  }
+
   return (
     <span
-      className={`grid shrink-0 place-items-center rounded-md font-semibold ${
-        size === "lg" ? "size-9 text-base" : "size-7 text-xs"
-      } ${tone === "accent" ? "bg-accent-solid text-accent-fg" : "bg-surface-active text-fg-muted"}`}
+      className={`grid shrink-0 place-items-center rounded-md font-semibold ${box} ${
+        tone === "accent" ? "bg-accent-solid text-accent-fg" : "bg-surface-active text-fg-muted"
+      }`}
     >
       {letter}
     </span>

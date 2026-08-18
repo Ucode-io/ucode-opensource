@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, authApi } from "@/shared/api/client";
 import { session } from "@/shared/api/session";
@@ -55,28 +56,36 @@ export function useProjects(companyId: string, enabled = true) {
  * ними. Язык из хранилища проверяется по набору проекта: язык, убранный
  * из настроек, иначе показывал бы пустые подписи навсегда.
  */
-export function useDataLanguages() {
+/**
+ * Карточка проекта — ОДИН запрос на всех, кто её читает.
+ *
+ * Её данные нужны в трёх местах сразу: языки данных (везде), логотип
+ * в шапке сайдбара и настройки проекта. Ключ поэтому один, а каждый
+ * потребитель берёт из ответа своё — иначе тот же адрес грузился бы
+ * по разу на потребителя, как это было в старом ucode с четырьмя
+ * именами кэша для одних и тех же строк.
+ */
+export function useProjectDetail() {
   const projectId = useSession().getProjectId() ?? "";
+
+  return useQuery({
+    queryKey: keys.workspace.project(projectId),
+    queryFn: () => api.get<ProjectDetailDto>(`/v1/company-project/${projectId}`),
+    enabled: Boolean(projectId),
+    // Карточку проекта меняют в настройках, а не по ходу работы.
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useDataLanguages() {
   const chosen = useUi((state) => state.dataLanguage);
   const setDataLanguage = useUi((state) => state.setDataLanguage);
 
-  const query = useQuery({
-    queryKey: keys.workspace.languages(projectId),
-    queryFn: () => api.get<ProjectDetailDto>(`/v1/company-project/${projectId}`),
-    enabled: Boolean(projectId),
-    // Набор языков меняют в настройках проекта, а не по ходу работы.
-    staleTime: 5 * 60_000,
-    /*
-     * Ссылка на функцию постоянная, и это не педантизм: react-query
-     * пересчитывает `select` каждый раз, когда меняется его identity,
-     * — со стрелкой на месте это каждый рендер, и наружу уходит новый
-     * массив языков. От него зависят коды, от кодов — сведённые колонки
-     * таблицы и карточки: перерисовывалось всё и без единой правки.
-     */
-    select: toLanguages,
-  });
+  // Своего запроса нет: языки — это часть карточки проекта, которую
+  // и так грузит useProjectDetail.
+  const { data } = useProjectDetail();
+  const languages = useMemo(() => (data ? toLanguages(data) : NO_LANGUAGES), [data]);
 
-  const languages = query.data ?? NO_LANGUAGES;
   const known = languages.some((language) => language.code === chosen);
 
   return {
