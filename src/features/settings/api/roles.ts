@@ -29,9 +29,16 @@ type RoleDto = {
   name?: string;
   client_type_id?: string;
   is_system?: boolean;
+  /** Выключенная роль: в списке она есть, но входить под ней нельзя. */
+  status?: boolean;
 };
 
-type RolesResponseDto = { roles?: RoleDto[]; count?: number };
+/**
+ * Ответ завёрнут ДВАЖДЫ: общий конверт снимает http-клиент, а под ним
+ * лежит ещё `{table_slug, data: {count, response}}` — ручка отвечает
+ * так же, как ручки строк таблицы. Ключа `roles` в ответе нет вовсе.
+ */
+type RolesResponseDto = { data?: { count?: number; response?: RoleDto[] } };
 
 export type Role = {
   id: string;
@@ -60,8 +67,8 @@ export function useRoles() {
 
 const NO_ROLES: Role[] = [];
 
-function toRoles(data: RolesResponseDto): Role[] {
-  return (data.roles ?? [])
+export function toRoles(data: RolesResponseDto): Role[] {
+  return (data.data?.response ?? [])
     .filter((dto) => dto.guid)
     .map((dto) => ({
       id: dto.guid ?? "",
@@ -117,6 +124,198 @@ export function useUpdateRolePermissions(roleId: string) {
       await queryClient.invalidateQueries({
         queryKey: keys.settings.rolePermissions(projectId, roleId),
       });
+    },
+  });
+}
+
+/**
+ * Типы клиентов проекта: у роли обязательно есть один, и выбирают его
+ * при создании. Ответ устроен как у ролей — `{data: {count, response}}`.
+ */
+type ClientTypeDto = { guid?: string; name?: string };
+type ClientTypesResponseDto = { data?: { response?: ClientTypeDto[] } };
+
+export type ClientType = { id: string; name: string };
+
+export function useClientTypes(enabled = true) {
+  const projectId = useSession().getProjectId() ?? "";
+
+  const query = useQuery({
+    queryKey: keys.settings.clientTypes(projectId),
+    queryFn: () =>
+      authApi.get<ClientTypesResponseDto>("/v2/client-type", {
+        params: { "project-id": projectId, limit: 50, offset: 0 },
+      }),
+    enabled: enabled && Boolean(projectId),
+    staleTime: 5 * 60_000,
+    select: (data): ClientType[] =>
+      (data.data?.response ?? [])
+        .filter((dto) => dto.guid)
+        .map((dto) => ({ id: dto.guid ?? "", name: dto.name?.trim() || dto.guid || "" })),
+  });
+
+  return { clientTypes: query.data ?? NO_CLIENT_TYPES, isLoading: query.isLoading };
+}
+
+const NO_CLIENT_TYPES: ClientType[] = [];
+
+/**
+ * Новая роль. Тип клиента обязателен: роль без него не привязана
+ * ни к одной таблице входа, и войти под ней нельзя.
+ *
+ * Права у новой роли пустые — их раздают тут же, в матрице.
+ */
+export function useCreateRole() {
+  const queryClient = useQueryClient();
+  const projectId = useSession().getProjectId() ?? "";
+
+  return useMutation({
+    mutationFn: ({ name, clientTypeId }: { name: string; clientTypeId: string }) =>
+      authApi.post<unknown>(
+        ROLES,
+        { name: name.trim(), client_type_id: clientTypeId, project_id: projectId },
+        { params: { "project-id": projectId } },
+      ),
+    onError: (error) => reportError(error, "common.createFailed"),
+    onSuccess: async () => {
+      toast.success(i18n.t("roles.created"));
+      await queryClient.invalidateQueries({ queryKey: keys.settings.roles(projectId) });
+    },
+  });
+}
+
+/**
+ * Удаление роли. Права уходят вместе с ней; пользователи, вошедшие
+ * под этой ролью, останутся без неё — бэкенд их не трогает.
+ */
+export function useDeleteRole() {
+  const queryClient = useQueryClient();
+  const projectId = useSession().getProjectId() ?? "";
+
+  return useMutation({
+    mutationFn: (roleId: string) =>
+      authApi.delete<unknown>(`${ROLES}/${roleId}`, {
+        params: { "project-id": projectId },
+      }),
+    onError: (error) => reportError(error, "common.deleteFailed"),
+    onSuccess: async () => {
+      toast.success(i18n.t("roles.deleted"));
+      await queryClient.invalidateQueries({ queryKey: keys.settings.roles(projectId) });
+    },
+  });
+}
+
+/**
+ * Права роли на пункты меню — своя пара ручек и свой уровень за раз:
+ * дерево бэкенд отдаёт по одному родителю, как и само меню.
+ *
+ * Значения булевы, в отличие от прав на таблицы.
+ */
+export type MenuPermission = {
+  id: string;
+  label: string;
+  type: string;
+  read: boolean;
+  write: boolean;
+  update: boolean;
+  delete: boolean;
+};
+
+type MenuPermissionDto = {
+  id?: string;
+  label?: string;
+  type?: string;
+  /** Подписи по языкам: `label_ru`, `label_cyr`. У половины пунктов
+      колонка `label` пуста, и без них в списке остаётся голый uuid. */
+  attributes?: Record<string, unknown>;
+  permission?: { read?: boolean; write?: boolean; update?: boolean; delete?: boolean };
+};
+
+/**
+ * Имя пункта меню: локаль интерфейса, затем любая заданная подпись,
+ * затем колонка `label`. Тот же порядок, что и в сайдбаре, — иначе
+ * один и тот же пункт называется в двух местах по-разному.
+ */
+function menuLabel(dto: MenuPermissionDto): string {
+  const labels = Object.entries(dto.attributes ?? {})
+    .filter(([key, value]) => key.startsWith("label_") && typeof value === "string" && value.trim())
+    .map(([key, value]) => [key.slice("label_".length), (value as string).trim()] as const);
+
+  const byLanguage = new Map(labels);
+
+  return (
+    byLanguage.get(i18n.language) ??
+    labels[0]?.[1] ??
+    dto.label?.trim() ??
+    ""
+  );
+}
+
+export function useMenuPermissions(roleId: string, parentId: string) {
+  const projectId = useSession().getProjectId() ?? "";
+
+  const query = useQuery({
+    queryKey: keys.settings.menuPermissions(projectId, roleId, parentId),
+    queryFn: () =>
+      authApi.get<{ menus?: MenuPermissionDto[] }>(
+        `/v2/menu-permission/detailed/${projectId}/${roleId}/${parentId}`,
+        { params: { "project-id": projectId } },
+      ),
+    enabled: Boolean(projectId && roleId && parentId),
+    staleTime: 60_000,
+    select: (data): MenuPermission[] =>
+      (data.menus ?? [])
+        .filter((dto) => dto.id)
+        .map((dto) => ({
+          id: dto.id ?? "",
+          label: menuLabel(dto) || dto.id || "",
+          type: dto.type ?? "",
+          read: dto.permission?.read !== false,
+          write: dto.permission?.write !== false,
+          update: dto.permission?.update !== false,
+          delete: dto.permission?.delete !== false,
+        })),
+  });
+
+  return { menus: query.data ?? NO_MENUS, isLoading: query.isLoading };
+}
+
+const NO_MENUS: MenuPermission[] = [];
+
+/**
+ * Запись прав на пункты меню.
+ *
+ * Уезжают ТОЛЬКО изменённые пункты — так же шлёт их старая админка.
+ * Целиком дерево слать нечем: оно грузится по уровню, и того, что
+ * человек не раскрывал, у нас на руках нет.
+ */
+export function useUpdateMenuPermissions(roleId: string) {
+  const queryClient = useQueryClient();
+  const projectId = useSession().getProjectId() ?? "";
+
+  return useMutation({
+    mutationFn: (menus: MenuPermission[]) =>
+      authApi.put<unknown>(
+        "/v2/menu-permission/detailed",
+        {
+          menus: menus.map((menu) => ({
+            id: menu.id,
+            permission: {
+              read: menu.read,
+              write: menu.write,
+              update: menu.update,
+              delete: menu.delete,
+            },
+          })),
+          project_id: projectId,
+          role_id: roleId,
+        },
+        { params: { "project-id": projectId } },
+      ),
+    onError: (error) => reportError(error, "common.saveFailed"),
+    onSuccess: async () => {
+      toast.success(i18n.t("roles.saved"));
+      await queryClient.invalidateQueries({ queryKey: keys.settings.menuPermissionsAll() });
     },
   });
 }

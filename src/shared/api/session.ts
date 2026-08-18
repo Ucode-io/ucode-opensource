@@ -19,6 +19,8 @@ export type Profile = {
   name: string;
   role: string;
   company: string;
+  /** Фотография человека. Пусто — в шапке буква имени, как и было. */
+  photo?: string;
 };
 
 /**
@@ -69,6 +71,23 @@ export const session = {
    */
   getUserId(): string {
     return localStorage.getItem(USER_KEY) || readClaim(accessToken, "user_id");
+  },
+
+  /**
+   * Id пользователя в сервисе АВТОРИЗАЦИИ — не тот же, что getUserId.
+   *
+   * В токене их два, и они про разное: `user_id` — строка в таблице
+   * входа проекта (`admins`, `users`), `user_id_auth` — сам пользователь
+   * в auth-сервисе. Ручки `/v2/user/...` знают только второй, и запрос
+   * с первым отвечает «no rows in result set». Старая админка зовёт их
+   * ровно так же (Account/useAccountProps.jsx:152).
+   *
+   * Запасной путь на `user_id` — для сессий, выданных до появления
+   * второго claim'а: пусть лучше запрос уйдёт со старым идентификатором,
+   * чем не уйдёт вовсе.
+   */
+  getAuthUserId(): string {
+    return readClaim(accessToken, "user_id_auth") || this.getUserId();
   },
 
   /**

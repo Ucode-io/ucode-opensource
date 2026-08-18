@@ -111,6 +111,18 @@ layout_id, type, order, icon, relation_id, attributes, view_type`
 нельзя, но признака `is_system` в ответе о таблице нет — заранее спрятать
 действие не по чему.
 
+**Ответ прав роли завёрнут дважды.** Под общим конвертом лежит
+`{project_id, data: {...}}`, и права — в этом `data`: там же `guid`
+и `name` роли, `tables[]` и `global_permission`. Отдельного объекта
+`role` в ответе нет. Список ролей (`GET /v2/role`) устроен ещё иначе —
+`{table_slug, data: {count, response}}`, как ручки строк таблицы.
+
+**`is_public` в ответе прав не приходит.** Старый экран рисует под него
+колонку, но `record_permissions` содержит только read/write/update/delete
+(проверено на живом проекте). У `custom_permission` пятнадцать ключей,
+у `global_permission` — семнадцать, и они БУЛЕВЫ, в отличие от прав
+на таблицы.
+
 **Права роли перезаписываются целиком.** `PUT /v2/role-permission/detailed`
 отказывается работать без `global_permission` (`storage/postgres/permission.go:1202`)
 и ждёт обратно весь объект, который отдал GET. Значения прав — строки

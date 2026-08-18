@@ -38,7 +38,12 @@ export type Profile = {
 
 export function useProfile() {
   const store = useSession();
-  const userId = store.getUserId();
+  /*
+   * Профиль живёт в auth-сервисе, и знает он СВОЙ идентификатор
+   * пользователя (`user_id_auth`), а не строку в таблице входа проекта.
+   * С обычным `user_id` ручка отвечает «no rows in result set».
+   */
+  const userId = store.getAuthUserId();
 
   /*
    * Тип клиента обязателен и живёт только в токене: без него ручка
@@ -51,7 +56,7 @@ export function useProfile() {
     queryKey: keys.settings.profile(userId),
     queryFn: () =>
       authApi.get<UserDto>(`/v2/user/${userId}`, {
-        params: { "client-type-id": clientTypeId },
+        params: { "client-type-id": clientTypeId, "project-id": store.getProjectId() ?? "" },
       }),
     enabled: Boolean(userId) && Boolean(clientTypeId),
     // Свой профиль человек меняет раз в год.
@@ -62,7 +67,14 @@ export function useProfile() {
   return { profile: query.data, isLoading: query.isLoading };
 }
 
-export type ProfileDraft = { name: string; login: string; email: string; phone: string };
+export type ProfileDraft = {
+  name: string;
+  login: string;
+  email: string;
+  phone: string;
+  /** Адрес фотографии в нашем CDN. Пусто — фотографии нет. */
+  photo: string;
+};
 
 /**
  * Правка профиля.
@@ -77,7 +89,9 @@ export type ProfileDraft = { name: string; login: string; email: string; phone: 
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
   const store = useSession();
-  const userId = store.getUserId();
+  // Тот же идентификатор, что у чтения профиля, — иначе перезапрос
+  // после сохранения промахивается мимо своей ячейки кэша.
+  const userId = store.getAuthUserId();
 
   return useMutation({
     mutationFn: ({ profile, draft }: { profile: Profile; draft: ProfileDraft }) =>
@@ -88,12 +102,17 @@ export function useUpdateProfile() {
         login: draft.login.trim(),
         email: draft.email.trim(),
         phone: draft.phone.trim(),
+        photo_url: draft.photo,
       }),
 
     onError: (error) => reportError(error, "common.saveFailed"),
     onSuccess: async (_data, { draft }) => {
       const current = session.getProfile();
-      if (current) session.setProfile({ ...current, name: draft.name.trim() });
+      // Имя и фотография дублируются в сессию: шапка сайдбара берёт их
+      // оттуда, и без этого она показывала бы прежние до следующего входа.
+      if (current) {
+        session.setProfile({ ...current, name: draft.name.trim(), photo: draft.photo });
+      }
 
       toast.success(i18n.t("settings.saved"));
       await queryClient.invalidateQueries({ queryKey: keys.settings.profile(userId) });
