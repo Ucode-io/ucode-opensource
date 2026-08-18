@@ -25,6 +25,7 @@ import {
 import { useTableSchema, type Field, type Relation } from "@/features/table";
 import type { DataLanguage } from "@/features/workspace";
 import { toast } from "@/shared/lib/toast";
+import { useUi } from "@/shared/lib/ui-store";
 import { pinnedIds, resolveColumnIds } from "../model/columns";
 import type { RelationTab } from "../model/relation-tabs";
 import { useExportExcel } from "../api/excel";
@@ -138,7 +139,6 @@ export function RelationView({
   );
 
   const [sorts, setSorts] = useState<Sort[]>([]);
-  const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(LIMIT);
   const [search, setSearch] = useState("");
   /*
@@ -196,9 +196,15 @@ export function RelationView({
     [tab.view.fixedColumnIds, columns],
   );
 
-  const { page: rows, isLoading } = useItems(value ? tab.tableSlug : undefined, {
+  const {
+    page: rows,
+    isLoading,
+    hasMore,
+    loadingMore,
+    loadMore,
+  } = useItems(value ? tab.tableSlug : undefined, {
     limit,
-    page,
+    page: 1,
     sorts,
     filters,
     search,
@@ -207,6 +213,9 @@ export function RelationView({
   const update = useUpdateItem(tab.tableSlug);
   const create = useCreateItem(tab.tableSlug);
   const exportExcel = useExportExcel(tab.tableSlug);
+  // Ширины колонок вкладка помнит там же, где таблица: это настройка
+  // экрана человека, и у одной таблицы она одна на все места показа.
+  const { columnWidths: widths, setColumnWidth } = useUi();
   const [importing, setImporting] = useState(false);
   const can = useTablePermission(tab.tableSlug);
 
@@ -238,18 +247,12 @@ export function RelationView({
           columns={columns}
           language={language}
           sorts={sorts}
-          onSorts={(next) => {
-            setSorts(next);
-            setPage(1);
-          }}
+          onSorts={setSorts}
           filtersOpen={filtersOpen}
           filterCount={activeFilterCount(chips)}
           onToggleFilters={() => setFiltersOpen((value) => !value)}
           search={search}
-          onSearch={(next) => {
-            setSearch(next);
-            setPage(1);
-          }}
+          onSearch={setSearch}
         />
 
         {settings && (
@@ -294,14 +297,8 @@ export function RelationView({
           language={language}
           filters={chips}
           sorts={sorts}
-          onFilters={(next) => {
-            setOwn(next);
-            setPage(1);
-          }}
-          onSorts={(next) => {
-            setSorts(next);
-            setPage(1);
-          }}
+          onFilters={setOwn}
+          onSorts={setSorts}
         />
       )}
 
@@ -313,18 +310,20 @@ export function RelationView({
         locale={locale}
         language={language}
         pinned={pinned}
+        widths={widths[tab.tableSlug]}
+        onWidth={(fieldId, width) => setColumnWidth(tab.tableSlug, fieldId, width)}
         selected={selected}
         onSelect={setSelected}
         sorts={sorts}
         onSort={(field, direction) => {
           setSorts(direction ? [{ field, direction }] : nextSorts(sorts, field));
-          setPage(1);
         }}
         onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
         // Связанная строка раскрывается на месте, поверх вкладки:
         // у чужой таблицы своего экрана в этом меню нет, а посмотреть
         // на неё целиком нужно чаще, чем перейти в её таблицу.
         onOpenRow={setOpenGuid}
+        {...(hasMore ? { onEndReached: loadMore } : {})}
         /*
          * Ссылка на открытую запись проставляется сама: связанную строку
          * заводят ИЗ карточки, и заполнять её вручную значит предложить
@@ -348,16 +347,13 @@ export function RelationView({
       />
 
       <GridFooter
-        page={page}
+        shown={rows.rows.length}
         limit={limit}
         total={rows.count}
+        loadingMore={loadingMore}
         selectedCount={0}
         deleting={false}
-        onPage={setPage}
-        onLimit={(next) => {
-          setLimit(next);
-          setPage(1);
-        }}
+        onLimit={setLimit}
         onDeleteSelected={() => {}}
       />
 

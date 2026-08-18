@@ -56,7 +56,7 @@
 
 | Что | Где |
 |---|---|
-| Фильтры, пагинация, сортировка, активный View, открытый Item | **URL (search params)** |
+| Фильтры, сортировка, размер порции, активный View, открытый Item | **URL (search params)** |
 | Данные с бэкенда | **TanStack Query**, `staleTime: 60s` |
 | Sidebar collapsed, тема | **Zustand** |
 | Всё остальное | `useState` |
@@ -65,8 +65,13 @@
 Форма URL — см. [ADR-0001](adr/0001-environment-in-session-not-url.md):
 
 ```
-/m/:menuId?view=<viewId>&page=&sort=&filter=
+/m/:menuId?view=<viewId>&limit=&sort=&filter=
 ```
+
+Номера страницы в адресе нет: строки догружаются прокруткой (см. таблицу
+ниже — бесконечный скролл в v1), и `page` в ссылке означал бы место,
+которого у бесконечного списка не бывает. `limit` остался: это размер
+порции, и он же настройка view.
 
 Путь — какой пункт меню открыт: набор View принадлежит пункту меню
 (`GET /v3/menus/{menuId}/views`), а не таблице. Query — как показан.

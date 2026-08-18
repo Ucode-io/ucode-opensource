@@ -28,6 +28,15 @@ type UiState = {
    */
   tableFilters: Record<string, unknown>;
   /**
+   * Ширины колонок — по паре «таблица + поле».
+   *
+   * Здесь, а не в настройках view: ширина — это про экран человека,
+   * а не про то, как настроен view. У соседа другой монитор, и
+   * растянутая на пол-экрана колонка «Описание» — не общее решение.
+   * Так же её хранила и старая админка (слайс tableSize в localStorage).
+   */
+  columnWidths: Record<string, Record<string, number>>;
+  /**
    * Раскрытые папки меню — по id пункта.
    *
    * Раскрытие живёт здесь, а не в строке меню: уровень меню грузится
@@ -59,6 +68,8 @@ type UiState = {
   setDrawerMode: (mode: DrawerMode) => void;
   setTableLimit: (tableSlug: string, limit: number) => void;
   setTableFilters: (key: string, filters: unknown) => void;
+  /** Ширина колонки. Ноль — вернуть исходную. */
+  setColumnWidth: (tableSlug: string, fieldId: string, width: number) => void;
 };
 
 /**
@@ -104,6 +115,7 @@ export const useUi = create<UiState>()(
       drawerMode: "side",
       tableLimits: {},
       tableFilters: {},
+      columnWidths: {},
       expandedMenus: [],
       dataLanguage: "",
       setTheme: (theme) => set({ theme }),
@@ -122,6 +134,16 @@ export const useUi = create<UiState>()(
         set((s) => ({ tableLimits: { ...s.tableLimits, [tableSlug]: limit } })),
       setTableFilters: (key, filters) =>
         set((s) => ({ tableFilters: { ...s.tableFilters, [key]: filters } })),
+      setColumnWidth: (tableSlug, fieldId, width) =>
+        set((s) => {
+          const table = { ...s.columnWidths[tableSlug] };
+          // Ноль — не ширина, а «как было»: ключ убирается, и колонка
+          // снова берёт значение по умолчанию.
+          if (width > 0) table[fieldId] = width;
+          else delete table[fieldId];
+
+          return { columnWidths: { ...s.columnWidths, [tableSlug]: table } };
+        }),
     }),
     { name: "ucode.ui" },
   ),

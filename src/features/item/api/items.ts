@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError } from "@/shared/lib/toast";
@@ -29,20 +29,37 @@ const EMPTY_PAGE: ItemsPage = { rows: [], count: 0 };
 
 export function useItems(tableSlug: string | undefined, query: ItemsQuery) {
   const slug = tableSlug ?? "";
-  const body = toRequestBody(query);
+  /*
+   * Тело первой страницы и есть ключ кэша: любая правка сортировки,
+   * отбора или поиска обязана дать новый кэш, а перечислять поля
+   * по одному — способ однажды забыть новое.
+   *
+   * Смещение в ключ не входит: страницы лежат под одним ключом, одна
+   * за другой, — иначе прокрутка вниз плодила бы по кэшу на страницу
+   * и вверх было бы нечего показать.
+   */
+  const body = toRequestBody({ ...query, page: 1 });
 
-  const result = useQuery({
-    // Тело запроса целиком и есть ключ: любая правка сортировки или
-    // фильтра обязана дать новый кэш, а перечислять поля по одному —
-    // способ однажды забыть новое.
+  const result = useInfiniteQuery({
     queryKey: keys.items.list(slug, body),
-    queryFn: () => api.post<ItemsResponseDto>(`/v2/object/get-list/${slug}`, { data: body }),
+    queryFn: ({ pageParam }) =>
+      api.post<ItemsResponseDto>(`/v2/object/get-list/${slug}`, {
+        data: { ...body, offset: pageParam * query.limit },
+      }),
     enabled: Boolean(slug),
     staleTime: 60_000,
-    // Смена страницы не должна мигать пустой таблицей: показываем
-    // прежние строки, пока едут новые.
-    placeholderData: (previous) => previous,
-    select: toPage,
+    initialPageParam: 0,
+    /*
+     * Следующая страница есть, пока загруженных строк меньше, чем
+     * сказал `count`. Курсора у ручки нет — только limit и offset, —
+     * поэтому «следующая» это просто следующий номер.
+     *
+     * Пустой ответ тоже останавливает: у таблицы, из которой строки
+     * удаляют прямо сейчас, `count` бывает больше, чем реально есть,
+     * и без этой проверки грид крутил бы запросы до конца страницы.
+     */
+    getNextPageParam: (_last, all) => nextPage(all),
+    select: toPages,
   });
 
   return {
@@ -50,6 +67,12 @@ export function useItems(tableSlug: string | undefined, query: ItemsQuery) {
     isLoading: result.isLoading,
     /** Обновление поверх уже показанных строк — для индикатора, не для скелетона. */
     isFetching: result.isFetching,
+    /** Есть ли что грузить дальше и не грузится ли уже. */
+    hasMore: result.hasNextPage && !result.isFetchingNextPage,
+    loadingMore: result.isFetchingNextPage,
+    loadMore: () => {
+      if (result.hasNextPage && !result.isFetchingNextPage) void result.fetchNextPage();
+    },
     error: result.error,
   };
 }
@@ -91,6 +114,38 @@ export function toPage(dto: ItemsResponseDto): ItemsPage {
     rows: dto.data?.response ?? [],
     count: dto.data?.count ?? 0,
   };
+}
+
+/**
+ * Номер следующего куска. `undefined` — грузить больше нечего.
+ *
+ * Условий два, и второе не для красоты: у таблицы, из которой строки
+ * удаляют прямо сейчас, `count` бывает больше, чем реально есть,
+ * и без проверки «последний кусок что-то принёс» грид крутил бы
+ * запросы до конца страницы.
+ */
+export function nextPage(pages: ItemsResponseDto[]): number | undefined {
+  const last = pages[pages.length - 1];
+  if (!last) return undefined;
+
+  const loaded = pages.reduce((sum, page) => sum + (page.data?.response?.length ?? 0), 0);
+  const grew = (last.data?.response?.length ?? 0) > 0;
+
+  return grew && loaded < (last.data?.count ?? 0) ? pages.length : undefined;
+}
+
+/**
+ * Страницы бесконечной прокрутки → один список.
+ *
+ * `count` берётся у последней: пока человек листает, строки добавляют
+ * и удаляют, и свежее число честнее того, что приехало со стартовой
+ * страницей.
+ */
+export function toPages(data: { pages: ItemsResponseDto[] }): ItemsPage {
+  const rows = data.pages.flatMap((page) => page.data?.response ?? []);
+  const last = data.pages[data.pages.length - 1];
+
+  return { rows, count: last?.data?.count ?? rows.length };
 }
 
 /** Правка одной ячейки. Больше в теле ничего и не должно быть. */

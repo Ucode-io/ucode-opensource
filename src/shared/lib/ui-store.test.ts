@@ -37,3 +37,24 @@ describe("toggleMenu", () => {
     expect(useUi.getState().expandedMenus).toEqual(["clients"]);
   });
 });
+
+describe("setColumnWidth", () => {
+  it("помнит ширину по таблице и возвращает исходную нулём", () => {
+    const { setColumnWidth } = useUi.getState();
+
+    setColumnWidth("orders", "f1", 320);
+    setColumnWidth("orders", "f2", 120);
+    setColumnWidth("clients", "f1", 200);
+
+    expect(useUi.getState().columnWidths).toMatchObject({
+      orders: { f1: 320, f2: 120 },
+      clients: { f1: 200 },
+    });
+
+    // Ноль — это не ширина, а «как было»: ключ убирается, и колонка
+    // снова берёт значение по умолчанию. Соседи не трогаются.
+    setColumnWidth("orders", "f1", 0);
+    expect(useUi.getState().columnWidths.orders).toEqual({ f2: 120 });
+    expect(useUi.getState().columnWidths.clients).toEqual({ f1: 200 });
+  });
+});

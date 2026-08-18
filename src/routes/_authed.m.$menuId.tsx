@@ -100,7 +100,6 @@ const FALLBACK_LIMIT = 20;
 
 const searchSchema = z.object({
   view: z.string().optional(),
-  page: z.number().int().min(1).default(1).catch(1),
   limit: z.number().int().min(MIN_LIMIT).max(MAX_LIMIT).optional().catch(undefined),
   /** «слаг:направление,…» — читаемо в адресной строке; разбор в features/item. */
   sort: z.string().optional().catch(undefined),
@@ -225,7 +224,8 @@ function MenuPage() {
    * таблицы, иначе настройка view. Значение из localStorage проверяется
    * — испорченное руками «0» оставило бы таблицу пустой навсегда.
    */
-  const { tableLimits, setTableLimit, tableFilters, setTableFilters } = useUi();
+  const { tableLimits, setTableLimit, tableFilters, setTableFilters, columnWidths, setColumnWidth } =
+    useUi();
   const rememberedLimit = view ? tableLimits[view.tableSlug] : undefined;
   const limit =
     search.limit ??
@@ -319,7 +319,6 @@ function MenuPage() {
   const openView = (id?: string) =>
     setSearch({
       view: id,
-      page: 1,
       item: undefined,
       tab: undefined,
       sort: undefined,
@@ -332,16 +331,19 @@ function MenuPage() {
   /** Правка отбора: в адрес — чтобы переслать, в память — чтобы вернуться. */
   const applyFilters = (next: Filters) => {
     if (filtersKey) setTableFilters(filtersKey, next);
-    setSearch({ filters: next, page: 1 }, true);
+    setSearch({ filters: next }, true);
   };
 
   const {
     page: rows,
     isLoading: rowsLoading,
     isFetching,
+    hasMore,
+    loadingMore,
+    loadMore,
   } = useItems(supportedView ? view?.tableSlug : undefined, {
     limit,
-    page: search.page,
+    page: 1,
     sorts,
     filters: effectiveFilters,
     search: search.search,
@@ -416,7 +418,7 @@ function MenuPage() {
    * строка, уехавшая на другую страницу, осталась бы отмеченной невидимо
    * — и удалилась бы вместе с теми, что человек видит.
    */
-  const rowSetKey = `${view?.id}|${search.page}|${limit}|${search.sort}|${search.search}|${JSON.stringify(effectiveFilters)}`;
+  const rowSetKey = `${view?.id}|${limit}|${search.sort}|${search.search}|${JSON.stringify(effectiveFilters)}`;
   useEffect(() => setSelected(new Set()), [rowSetKey]);
 
   /**
@@ -498,14 +500,14 @@ function MenuPage() {
                   columns={columns}
                   language={language}
                   sorts={sorts}
-                  onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
+                  onSorts={(next) => setSearch({ sort: formatSorts(next) }, true)}
                   filtersOpen={filtersVisible}
                   filterCount={activeFilters}
                   // Закрытие не стирает сами фильтры: спрятать строку и снять
                   // отбор — разные намерения.
                   onToggleFilters={() => setSearch({ filtersOpen: !filtersVisible }, true)}
                   search={search.search ?? ""}
-                  onSearch={(next) => setSearch({ search: next || undefined, page: 1 }, true)}
+                  onSearch={(next) => setSearch({ search: next || undefined }, true)}
                 />
               )}
 
@@ -652,7 +654,7 @@ function MenuPage() {
               // Любая правка отбора возвращает на первую страницу: на
               // седьмой после сужения выборки обычно пусто.
               onFilters={applyFilters}
-              onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
+              onSorts={(next) => setSearch({ sort: formatSorts(next) }, true)}
             />
           )}
 
@@ -663,6 +665,15 @@ function MenuPage() {
               tableSlug={view.tableSlug}
               columns={columns}
               pinned={pinned}
+              /* Строки догружаются прокруткой: обработчик отдаётся,
+                 только пока есть что грузить. */
+              {...(hasMore ? { onEndReached: loadMore } : {})}
+              /* Ширины колонок — настройка человека, не view: у соседа
+                 другой монитор. Живут в localStorage, по слагу таблицы. */
+              widths={view ? columnWidths[view.tableSlug] : undefined}
+              {...(view
+                ? { onWidth: (fieldId: string, width: number) => setColumnWidth(view.tableSlug, fieldId, width) }
+                : {})}
               rows={rows.rows}
               relations={schema.relations}
               locale={i18n.language}
@@ -678,7 +689,6 @@ function MenuPage() {
                     sort: formatSorts(
                       direction ? [{ field, direction }] : nextSorts(sorts, field),
                     ),
-                    page: 1,
                   },
                   true,
                 )
@@ -741,17 +751,17 @@ function MenuPage() {
           )}
 
           <GridFooter
-            page={search.page}
+            shown={rows.rows.length}
             limit={limit}
             total={rows.count}
+            loadingMore={loadingMore}
             selectedCount={selected.size}
             deleting={remove.isPending}
-            onPage={(next) => setSearch({ page: next })}
-            // Смена размера страницы возвращает на первую: строка, которая
-            // была на седьмой странице по 25, на седьмой по 200 не лежит.
+            // Размер куска — он же настройка view: сколько строк
+            // приезжает за раз и сколько догружается прокруткой.
             onLimit={(next) => {
               setTableLimit(view.tableSlug, next);
-              setSearch({ limit: next, page: 1 });
+              setSearch({ limit: next });
             }}
             onDeleteSelected={() => setConfirming(true)}
           />

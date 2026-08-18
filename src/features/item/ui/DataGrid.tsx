@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   IconArrowNarrowDown,
   IconArrowNarrowUp,
@@ -36,10 +36,19 @@ import { fieldIcon } from "./field-icon";
  * в видимой части оказались короткие значения.
  */
 
-/** Ширины до resize'а. Первая колонка шире: в ней обычно имя записи. */
+/** Ширины по умолчанию. Первая колонка шире: в ней обычно имя записи. */
 const FIRST_WIDTH = 240;
 const WIDTH = 180;
 const PIN_WIDTH = 40;
+/** Уже — и в колонке не остаётся места ни под подпись, ни под значок. */
+const MIN_WIDTH = 80;
+
+/**
+ * За сколько строк до конца заказывать следующий кусок. Столько же
+ * держит в запасе виртуализатор — то есть заказ уходит ровно тогда,
+ * когда первая незагруженная строка вот-вот понадобится.
+ */
+const END_GAP = 10;
 
 /**
  * Высота строки. Дублирует токен --spacing-row (класс h-row): виртуализатор
@@ -100,7 +109,11 @@ type Menu = { slug: string; anchor: DOMRect };
  * а он складывается из ширины колонки с флажками и ширин всех
  * закреплённых слева.
  */
-function pinLayout(columns: Field[], pinned: ReadonlySet<string>) {
+function pinLayout(
+  columns: Field[],
+  pinned: ReadonlySet<string>,
+  widthOf: (column: Field, index: number) => number,
+) {
   if (!pinned.size) return { ordered: columns, lefts: new Map<string, number>(), count: 0 };
 
   const front = columns.filter((column) => pinned.has(column.id));
@@ -112,7 +125,7 @@ function pinLayout(columns: Field[], pinned: ReadonlySet<string>) {
 
   ordered.slice(0, front.length).forEach((column, index) => {
     lefts.set(column.id, left);
-    left += index === 0 ? FIRST_WIDTH : WIDTH;
+    left += widthOf(column, index);
   });
 
   return { ordered, lefts, count: front.length };
@@ -122,6 +135,8 @@ export function DataGrid({
   tableSlug,
   columns,
   pinned,
+  widths,
+  onWidth,
   rows,
   relations,
   locale,
@@ -137,12 +152,28 @@ export function DataGrid({
   onCreate,
   onAddRow,
   creating,
+  onEndReached,
 }: {
   /** Слаг таблицы: ячейка-связь пишет не только в свою строку. */
   tableSlug: string;
   columns: Field[];
+  /**
+   * Докрутили до конца загруженного — пора просить следующий кусок.
+   * Не задан — таблица показывает ровно то, что ей дали.
+   */
+  onEndReached?: (() => void) | undefined;
   /** id закреплённых колонок. Пусто — обычная таблица. */
   pinned?: ReadonlySet<string>;
+  /**
+   * Ширины колонок, заданные человеком: id поля → пиксели. Чего здесь
+   * нет — то по умолчанию.
+   */
+  widths?: Record<string, number> | undefined;
+  /**
+   * Новая ширина колонки. Ноль — вернуть исходную (двойной щелчок
+   * по ручке). Не задан — колонки не тянутся.
+   */
+  onWidth?: ((fieldId: string, width: number) => void) | undefined;
   rows: Item[];
   relations: Relation[];
   /** Локаль интерфейса: форматы дат и чисел. */
@@ -258,7 +289,48 @@ export function DataGrid({
   // Связи ищутся по id на каждой ячейке-ссылке — держим индексом.
   const byId = new Map(relations.map((relation) => [relation.id, relation]));
 
-  const { ordered, lefts, count: pinnedCount } = pinLayout(columns, pinned ?? EMPTY_PINS);
+  /** Элементы <col>: во время перетаскивания ширина пишется прямо в них. */
+  const cols = useRef(new Map<string, HTMLTableColElement>());
+
+  /*
+   * Ширина колонки: заданная человеком, иначе по умолчанию. Первая
+   * шире — в ней обычно имя записи.
+   */
+  const widthOf = (column: Field, index: number) =>
+    widths?.[column.id] ?? (index === 0 ? FIRST_WIDTH : WIDTH);
+
+  const { ordered, lefts, count: pinnedCount } = pinLayout(columns, pinned ?? EMPTY_PINS, widthOf);
+
+  /*
+   * Во время перетаскивания ширина пишется прямо в <col>, а наружу
+   * уходит один раз, на отпускании: она персистится, и запись на каждое
+   * движение мыши — это запись шестьдесят раз в секунду. Заодно грид
+   * не перерисовывается на каждый пиксель.
+   */
+  const startResize = (event: ReactPointerEvent, column: Field, index: number) => {
+    if (!onWidth || event.button !== 0) return;
+    event.preventDefault();
+
+    const col = cols.current.get(column.id);
+    if (!col) return;
+
+    const startX = event.clientX;
+    const startWidth = widthOf(column, index);
+    const widthAt = (clientX: number) => Math.max(MIN_WIDTH, Math.round(startWidth + clientX - startX));
+
+    const onMove = (move: PointerEvent) => {
+      col.style.width = `${widthAt(move.clientX)}px`;
+    };
+    const onUp = (up: PointerEvent) => {
+      document.removeEventListener("pointermove", onMove);
+      document.body.style.cursor = "";
+      onWidth(column.id, widthAt(up.clientX));
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  };
 
   const ids = rows.map(rowKey);
   const checked = ids.filter((id) => selected.has(id));
@@ -278,6 +350,21 @@ export function DataGrid({
   const last = visible[visible.length - 1];
   const before = first ? first.start : 0;
   const after = last ? virtualizer.getTotalSize() - last.end : 0;
+
+  /*
+   * Следующий кусок строк заказывается, когда до конца загруженного
+   * осталось меньше запаса виртуализатора: к моменту, когда человек
+   * докрутит, строки уже здесь, и прокрутка не спотыкается о пустоту.
+   *
+   * Эффект, а не обработчик прокрутки: виртуализатор и так пересчитывает
+   * видимое окно, а второй слушатель scroll стоил бы кадров на каждой
+   * строке. Повторные вызовы безопасны — сам loadMore не делает ничего,
+   * пока предыдущий запрос не вернулся.
+   */
+  const lastIndex = last?.index ?? -1;
+  useEffect(() => {
+    if (onEndReached && lastIndex >= rows.length - END_GAP) onEndReached();
+  }, [onEndReached, lastIndex, rows.length]);
 
   /** Столбцов в строке — для распорок, у которых своих ячеек нет. */
   const span = columns.length + 2;
@@ -383,9 +470,18 @@ export function DataGrid({
              */
             <col
               key={column.id}
-              {...(index === ordered.length - 1
+              ref={(element) => {
+                if (element) cols.current.set(column.id, element);
+                else cols.current.delete(column.id);
+              }}
+              /*
+               * Последней колонке ширина не задаётся, пока её не задали
+               * руками: без неё она растягивается на свободное место,
+               * с ней — слушается человека.
+               */
+              {...(index === ordered.length - 1 && widths?.[column.id] === undefined
                 ? {}
-                : { style: { width: index === 0 ? FIRST_WIDTH : WIDTH } })}
+                : { style: { width: widthOf(column, index) } })}
             />
           ))}
 
@@ -416,6 +512,12 @@ export function DataGrid({
                 left={lefts.get(column.id)}
                 lastPinned={index === pinnedCount - 1}
                 last={index === ordered.length - 1}
+                {...(onWidth
+                  ? {
+                      onResize: (event: ReactPointerEvent) => startResize(event, column, index),
+                      onResetWidth: () => onWidth(column.id, 0),
+                    }
+                  : {})}
                 onSort={onSort}
                 onMenu={
                   columnActions
@@ -780,6 +882,8 @@ function HeaderCell({
   left,
   lastPinned,
   last,
+  onResize,
+  onResetWidth,
   onSort,
   onMenu,
 }: {
@@ -796,6 +900,10 @@ function HeaderCell({
    * шириной по своей подписи, то есть уже соседей.
    */
   last?: boolean;
+  /** Начать перетаскивание правого края. Не задан — колонка не тянется. */
+  onResize?: ((event: ReactPointerEvent<HTMLDivElement>) => void) | undefined;
+  /** Вернуть исходную ширину: двойной щелчок по ручке. */
+  onResetWidth?: (() => void) | undefined;
   onSort: (field: string) => void;
   onMenu?: ((element: HTMLElement) => void) | undefined;
 }) {
@@ -807,7 +915,7 @@ function HeaderCell({
       style={left === undefined ? undefined : { left }}
       /* z-30, а не 20: шапка целиком липкая сверху, и закреплённая
          ячейка обязана оказаться выше проезжающих под ней соседей. */
-      className={`${cell} group/head border-r text-left font-normal ${
+      className={`${cell} group/head relative border-r text-left font-normal ${
         left === undefined
           ? ""
           : `sticky z-30 bg-surface ${lastPinned ? "shadow-[1px_0_0_0_var(--color-border)]" : ""}`
@@ -852,6 +960,22 @@ function HeaderCell({
           </button>
         )}
       </span>
+
+      {/* Ручка ширины — на правом краю заголовка, видна по наведению:
+          полоса во всю высоту читается как граница колонки и спорит
+          с разделителями таблицы. */}
+      {onResize && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("column.resize")}
+          onPointerDown={onResize}
+          onDoubleClick={onResetWidth}
+          className="group/resize absolute top-0 right-0 z-10 flex h-full w-1.5 cursor-col-resize items-center justify-center"
+        >
+          <span className="h-4 w-1 rounded-full bg-border-strong opacity-0 transition-opacity group-hover/head:opacity-60 group-hover/resize:opacity-100" />
+        </div>
+      )}
     </th>
   );
 }

@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { IconCheck, IconChevronLeft, IconChevronRight, IconTrash } from "@tabler/icons-react";
+import { IconCheck, IconLoader2, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
-import { GAP, pageCount, pageItems } from "@/shared/ui/pagination";
 import { Popover } from "@/shared/ui/popover";
 
 /**
- * Подвал таблицы: размер страницы, номера страниц и действия над
- * отмеченными строками.
+ * Подвал таблицы: сколько строк показано, каким куском они грузятся
+ * и действия над отмеченными.
  *
- * Размер страницы виден и переключается — иначе непонятно, почему
- * записей 200, а на экране 50, и человек считает, что данные пропали.
+ * Номеров страниц нет: строки догружаются прокруткой. Счётчик вместо
+ * них обязателен — иначе непонятно, всё ли уже видно, а «показано 60
+ * из 4321» отвечает на это без единого щелчка.
+ *
+ * Размер куска виден и переключается: он же — настройка view
+ * (default_limit), и от него зависит, сколько строк приезжает за раз.
  */
 export const PAGE_SIZES = [20, 50, 100, 200] as const;
 
@@ -19,30 +22,28 @@ export const PAGE_SIZES = [20, 50, 100, 200] as const;
 export const MIN_LIMIT = 1;
 export const MAX_LIMIT = 1000;
 
-const pageButton =
-  "inline-flex size-7 items-center justify-center rounded-md text-sm transition-colors";
-
 export function GridFooter({
-  page,
+  shown,
   limit,
   total,
+  loadingMore,
   selectedCount,
   deleting,
-  onPage,
   onLimit,
   onDeleteSelected,
 }: {
-  page: number;
+  /** Сколько строк уже загружено и лежит в таблице. */
+  shown: number;
   limit: number;
   total: number;
+  /** Едет следующий кусок: счётчик показывает это, а не таблица. */
+  loadingMore?: boolean;
   selectedCount: number;
   deleting: boolean;
-  onPage: (page: number) => void;
   onLimit: (limit: number) => void;
   onDeleteSelected: () => void;
 }) {
   const { t } = useTranslation();
-  const pages = pageCount(total, limit);
 
   return (
     <div className="flex h-11 shrink-0 items-center justify-between gap-4 border-t border-border px-3">
@@ -59,44 +60,10 @@ export function GridFooter({
         )}
       </div>
 
-      <nav className="flex items-center gap-0.5" aria-label={t("table.pages")}>
-        <Step
-          label={t("table.prevPage")}
-          icon={IconChevronLeft}
-          disabled={page <= 1}
-          onClick={() => onPage(page - 1)}
-        />
-
-        {pageItems(page, pages).map((item, index) =>
-          item === GAP ? (
-            // Многоточие — не кнопка: нажимать там нечего.
-            <span key={`${GAP}${index}`} className={`${pageButton} text-fg-subtle`} aria-hidden>
-              …
-            </span>
-          ) : (
-            <button
-              key={item}
-              type="button"
-              aria-current={item === page ? "page" : undefined}
-              onClick={() => onPage(item)}
-              className={`${pageButton} ${
-                item === page
-                  ? "bg-accent-solid text-accent-fg"
-                  : "text-fg-muted hover:bg-surface-hover hover:text-fg"
-              }`}
-            >
-              {item}
-            </button>
-          ),
-        )}
-
-        <Step
-          label={t("table.nextPage")}
-          icon={IconChevronRight}
-          disabled={page >= pages}
-          onClick={() => onPage(page + 1)}
-        />
-      </nav>
+      <p className="flex shrink-0 items-center gap-1.5 text-xs text-fg-muted tabular-nums">
+        {loadingMore && <Icon as={IconLoader2} size={12} className="animate-spin" />}
+        {t("table.shownOf", { shown, total })}
+      </p>
     </div>
   );
 }
@@ -192,29 +159,5 @@ function LimitMenu({
         </Button>
       </form>
     </div>
-  );
-}
-
-function Step({
-  label,
-  icon,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  icon: typeof IconChevronLeft;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={`${pageButton} text-fg-muted hover:bg-surface-hover hover:text-fg disabled:pointer-events-none disabled:opacity-40`}
-    >
-      <Icon as={icon} size={16} />
-    </button>
   );
 }
