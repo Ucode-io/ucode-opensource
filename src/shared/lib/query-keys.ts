@@ -45,6 +45,10 @@ export const keys = {
     profile: (userId: string) => [...keys.settings.all, "profile", userId] as const,
     sessions: (userId: string) => [...keys.settings.all, "sessions", userId] as const,
     project: (projectId: string) => [...keys.settings.all, "project", projectId] as const,
+    /** Роли проекта: их список и права каждой на таблицы. */
+    roles: (projectId: string) => [...keys.settings.all, "roles", projectId] as const,
+    rolePermissions: (projectId: string, roleId: string) =>
+      [...keys.settings.all, "roles", projectId, roleId] as const,
     /** Справочник: LANGUAGE, TIMEZONE, CURRENCY. Общий на проект. */
     options: (projectId: string, type: string) =>
       [...keys.settings.all, "options", projectId, type] as const,

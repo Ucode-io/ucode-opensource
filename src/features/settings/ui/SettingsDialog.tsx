@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { IconBuilding, IconUser, IconX } from "@tabler/icons-react";
+import { IconBuilding, IconShieldLock, IconUser, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
 import { ProfileSettings } from "./ProfileSettings";
 import { ProjectSettings } from "./ProjectSettings";
+import { RoleSettings } from "./RoleSettings";
 
 /**
  * Настройки — окно, а не страница.
@@ -14,13 +15,14 @@ import { ProjectSettings } from "./ProjectSettings";
  * и там же лежит причина: настроек два десятка разделов, а работают
  * люди не в них.
  *
- * Разделов у нас два — профиль и проект. Остальные (роли, окружения,
+ * Разделов у нас три — профиль, проект и роли. Остальные (окружения,
  * ключи, функции, тарифы) появятся своими экранами; пустых пунктов
  * в списке нет: пункт, который ничего не открывает, — это обещание.
  */
 const SECTIONS = [
   { id: "profile", labelKey: "settings.profile", icon: IconUser },
   { id: "project", labelKey: "settings.project", icon: IconBuilding },
+  { id: "roles", labelKey: "settings.roles", icon: IconShieldLock },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -83,9 +85,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </button>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-6">
-            {section === "profile" ? <ProfileSettings /> : <ProjectSettings />}
-          </div>
+          {/* Роли занимают всю площадь и прокручиваются сами: это
+              широкая матрица, а не столбик полей, и общий отступ
+              с прокруткой ей только мешают. */}
+          {section === "roles" ? (
+            <RoleSettings />
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+              {section === "profile" ? <ProfileSettings /> : <ProjectSettings />}
+            </div>
+          )}
         </div>
       </div>
     </div>
