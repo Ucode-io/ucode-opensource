@@ -41,6 +41,7 @@ const view = (columnIds: string[]): View => ({
   navigate: EMPTY_URL_TEMPLATE,
   objectUrl: EMPTY_URL_TEMPLATE,
   pdfUrl: "",
+  infiniteScroll: false,
   raw: { columns: columnIds },
 });
 

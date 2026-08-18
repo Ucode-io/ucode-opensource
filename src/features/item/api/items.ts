@@ -29,36 +29,35 @@ const EMPTY_PAGE: ItemsPage = { rows: [], count: 0 };
 
 export function useItems(tableSlug: string | undefined, query: ItemsQuery) {
   const slug = tableSlug ?? "";
+  const infinite = query.infinite === true;
+
   /*
-   * Тело первой страницы и есть ключ кэша: любая правка сортировки,
-   * отбора или поиска обязана дать новый кэш, а перечислять поля
-   * по одному — способ однажды забыть новое.
+   * Тело запроса и есть ключ кэша: любая правка сортировки, отбора
+   * или поиска обязана дать новый кэш, а перечислять поля по одному —
+   * способ однажды забыть новое.
    *
-   * Смещение в ключ не входит: страницы лежат под одним ключом, одна
-   * за другой, — иначе прокрутка вниз плодила бы по кэшу на страницу
-   * и вверх было бы нечего показать.
+   * При прокрутке смещение из ключа убирается: страницы лежат одна
+   * за другой под общим ключом, иначе прокрутка вниз плодила бы по кэшу
+   * на страницу и вверх было бы нечего показать. При номерах страниц,
+   * наоборот, смещение в ключе обязано быть — это разные экраны.
    */
-  const body = toRequestBody({ ...query, page: 1 });
+  const body = toRequestBody(infinite ? { ...query, page: 1 } : query);
+  const first = Math.max(query.page, 1) - 1;
 
   const result = useInfiniteQuery({
-    queryKey: keys.items.list(slug, body),
+    queryKey: keys.items.list(slug, infinite ? body : { ...body, page: first }),
     queryFn: ({ pageParam }) =>
       api.post<ItemsResponseDto>(`/v2/object/get-list/${slug}`, {
         data: { ...body, offset: pageParam * query.limit },
       }),
     enabled: Boolean(slug),
     staleTime: 60_000,
-    initialPageParam: 0,
-    /*
-     * Следующая страница есть, пока загруженных строк меньше, чем
-     * сказал `count`. Курсора у ручки нет — только limit и offset, —
-     * поэтому «следующая» это просто следующий номер.
-     *
-     * Пустой ответ тоже останавливает: у таблицы, из которой строки
-     * удаляют прямо сейчас, `count` бывает больше, чем реально есть,
-     * и без этой проверки грид крутил бы запросы до конца страницы.
-     */
-    getNextPageParam: (_last, all) => nextPage(all),
+    // Смена страницы не должна мигать пустой таблицей: показываем
+    // прежние строки, пока едут новые.
+    placeholderData: (previous) => previous,
+    initialPageParam: infinite ? 0 : first,
+    // Со страницами следующей порции не бывает: её заказывают номером.
+    getNextPageParam: infinite ? (_last, all) => nextPage(all) : () => undefined,
     select: toPages,
   });
 

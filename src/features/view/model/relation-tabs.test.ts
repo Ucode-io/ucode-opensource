@@ -40,6 +40,7 @@ const view = (patch: Partial<View> = {}): View =>
     navigate: { url: "", params: [] },
     objectUrl: { url: "", params: [] },
     pdfUrl: "",
+  infiniteScroll: false,
     raw: {},
     ...patch,
   }) as View;

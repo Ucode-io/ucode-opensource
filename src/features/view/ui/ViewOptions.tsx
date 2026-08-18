@@ -10,6 +10,7 @@ import {
   IconFileImport,
   IconFilter,
   IconFilterCog,
+  IconInfinity,
   IconGripVertical,
   IconLayoutList,
   IconLink,
@@ -42,6 +43,7 @@ import {
 import type { DataLanguage } from "@/features/workspace";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { toast } from "@/shared/lib/toast";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { CommitInput } from "@/shared/ui/commit-input";
 import { Input } from "@/shared/ui/input";
@@ -113,6 +115,11 @@ export type ViewOptionsHandlers = {
   onObjectUrl?: (template: UrlTemplate) => void;
   /** Адрес PDF записи. Пусто — кнопки в карточке нет. */
   onPdfUrl?: (url: string) => void;
+  /**
+   * Догружать строки прокруткой вместо номеров страниц. Нет обработчика
+   * — нет и переключателя: у вкладки связи свой подвал.
+   */
+  onInfiniteScroll?: (enabled: boolean) => void;
   /** Настроить поле: открывает ту же панель, что и меню колонки. */
   onEditField?: (field: Field, anchor: DOMRect) => void;
   /** Удалить поле из ТАБЛИЦЫ, а не из view. Спрашивает подтверждение вызывающий. */
@@ -658,6 +665,19 @@ function Panel({
           value={fixed.length ? String(fixed.length) : ""}
           onClick={() => open("fixed")}
         />
+      )}
+
+      {/* Переключатель, а не страница: у настройки два состояния,
+          и ради них открывать экран незачем. */}
+      {can.settings && handlers.onInfiniteScroll && (
+        <label className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-fg transition-colors hover:bg-surface-hover">
+          <Icon as={IconInfinity} size={16} className="shrink-0 text-fg-muted" />
+          <span className="flex-1 truncate">{t("view.infiniteScroll")}</span>
+          <Checkbox
+            checked={view.infiniteScroll}
+            onChange={(event) => handlers.onInfiniteScroll?.(event.target.checked)}
+          />
+        </label>
       )}
 
       <PopoverSeparator />

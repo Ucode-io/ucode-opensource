@@ -140,6 +140,8 @@ export function RelationView({
 
   const [sorts, setSorts] = useState<Sort[]>([]);
   const [limit, setLimit] = useState(LIMIT);
+  /** Страница вкладки. У view с прокруткой не используется. */
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   /*
    * Отбор человека. null — его ещё не трогали, и в подшапке стоят чипы,
@@ -204,7 +206,9 @@ export function RelationView({
     loadMore,
   } = useItems(value ? tab.tableSlug : undefined, {
     limit,
-    page: 1,
+    page,
+    // Режим листания у вкладки тот же, что у её view: вкладка и есть view.
+    infinite: tab.view.infiniteScroll,
     sorts,
     filters,
     search,
@@ -247,12 +251,18 @@ export function RelationView({
           columns={columns}
           language={language}
           sorts={sorts}
-          onSorts={setSorts}
+          onSorts={(next) => {
+            setSorts(next);
+            setPage(1);
+          }}
           filtersOpen={filtersOpen}
           filterCount={activeFilterCount(chips)}
           onToggleFilters={() => setFiltersOpen((value) => !value)}
           search={search}
-          onSearch={setSearch}
+          onSearch={(next) => {
+            setSearch(next);
+            setPage(1);
+          }}
         />
 
         {settings && (
@@ -297,8 +307,14 @@ export function RelationView({
           language={language}
           filters={chips}
           sorts={sorts}
-          onFilters={setOwn}
-          onSorts={setSorts}
+          onFilters={(next) => {
+            setOwn(next);
+            setPage(1);
+          }}
+          onSorts={(next) => {
+            setSorts(next);
+            setPage(1);
+          }}
         />
       )}
 
@@ -317,13 +333,14 @@ export function RelationView({
         sorts={sorts}
         onSort={(field, direction) => {
           setSorts(direction ? [{ field, direction }] : nextSorts(sorts, field));
+          setPage(1);
         }}
         onEdit={(guid, slug, value) => update.mutate({ guid, slug, value })}
         // Связанная строка раскрывается на месте, поверх вкладки:
         // у чужой таблицы своего экрана в этом меню нет, а посмотреть
         // на неё целиком нужно чаще, чем перейти в её таблицу.
         onOpenRow={setOpenGuid}
-        {...(hasMore ? { onEndReached: loadMore } : {})}
+        {...(tab.view.infiniteScroll && hasMore ? { onEndReached: loadMore } : {})}
         /*
          * Ссылка на открытую запись проставляется сама: связанную строку
          * заводят ИЗ карточки, и заполнять её вручную значит предложить
@@ -347,13 +364,17 @@ export function RelationView({
       />
 
       <GridFooter
+        {...(tab.view.infiniteScroll ? {} : { page, onPage: setPage })}
         shown={rows.rows.length}
         limit={limit}
         total={rows.count}
         loadingMore={loadingMore}
         selectedCount={0}
         deleting={false}
-        onLimit={setLimit}
+        onLimit={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
         onDeleteSelected={() => {}}
       />
 

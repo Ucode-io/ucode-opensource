@@ -96,6 +96,12 @@ export type ItemsQuery = {
   filters?: Filters | undefined;
   /** Общий поиск по текстовым полям. */
   search?: string | undefined;
+  /**
+   * Догружать следующие порции прокруткой вместо номеров страниц.
+   * Это настройка ЭКРАНА, а не запроса: в тело она не попадает —
+   * ручка в обоих случаях получает limit и offset.
+   */
+  infinite?: boolean | undefined;
 };
 
 /**

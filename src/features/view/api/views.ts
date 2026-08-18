@@ -249,6 +249,8 @@ export type ViewEdit = {
   objectUrl?: UrlTemplate;
   /** Адрес PDF записи. */
   pdfUrl?: string;
+  /** Догружать строки прокруткой вместо номеров страниц. */
+  infiniteScroll?: boolean;
 };
 
 /**
@@ -276,6 +278,7 @@ export function toUpdateBody({
   navigate,
   objectUrl,
   pdfUrl,
+  infiniteScroll,
 }: ViewEdit): Record<string, unknown> {
   const raw = view.raw;
   const trimmed = name?.trim();
@@ -307,6 +310,7 @@ export function toUpdateBody({
     ...(navigate === undefined ? {} : { navigate: toUrlAttribute(navigate) }),
     ...(objectUrl === undefined ? {} : { url_object: toUrlAttribute(objectUrl) }),
     ...(pdfUrl === undefined ? {} : { pdf_url: pdfUrl.trim() }),
+    ...(infiniteScroll === undefined ? {} : { infinite_scroll: infiniteScroll }),
   };
 
   return {
@@ -400,6 +404,7 @@ export function toView(dto: ViewDto): View {
     navigate: toUrlTemplate(dto.attributes?.["navigate"]),
     objectUrl: toUrlTemplate(dto.attributes?.["url_object"]),
     pdfUrl: typeof dto.attributes?.["pdf_url"] === "string" ? dto.attributes["pdf_url"] : "",
+    infiniteScroll: dto.attributes?.["infinite_scroll"] === true,
     raw: { ...dto },
   };
 }

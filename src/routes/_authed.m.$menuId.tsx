@@ -100,6 +100,12 @@ const FALLBACK_LIMIT = 20;
 
 const searchSchema = z.object({
   view: z.string().optional(),
+  /**
+   * Номер страницы. Нужен, пока view листается страницами: у view
+   * с бесконечной прокруткой места, на которое можно вернуться, нет,
+   * и параметр в адресе не появляется.
+   */
+  page: z.number().int().min(1).default(1).catch(1),
   limit: z.number().int().min(MIN_LIMIT).max(MAX_LIMIT).optional().catch(undefined),
   /** «слаг:направление,…» — читаемо в адресной строке; разбор в features/item. */
   sort: z.string().optional().catch(undefined),
@@ -319,6 +325,7 @@ function MenuPage() {
   const openView = (id?: string) =>
     setSearch({
       view: id,
+      page: 1,
       item: undefined,
       tab: undefined,
       sort: undefined,
@@ -331,8 +338,11 @@ function MenuPage() {
   /** Правка отбора: в адрес — чтобы переслать, в память — чтобы вернуться. */
   const applyFilters = (next: Filters) => {
     if (filtersKey) setTableFilters(filtersKey, next);
-    setSearch({ filters: next }, true);
+    setSearch({ filters: next, page: 1 }, true);
   };
+
+  /** Как листается этот view: прокруткой или номерами страниц. */
+  const infinite = view?.infiniteScroll === true;
 
   const {
     page: rows,
@@ -343,7 +353,8 @@ function MenuPage() {
     loadMore,
   } = useItems(supportedView ? view?.tableSlug : undefined, {
     limit,
-    page: 1,
+    page: search.page,
+    infinite,
     sorts,
     filters: effectiveFilters,
     search: search.search,
@@ -418,7 +429,7 @@ function MenuPage() {
    * строка, уехавшая на другую страницу, осталась бы отмеченной невидимо
    * — и удалилась бы вместе с теми, что человек видит.
    */
-  const rowSetKey = `${view?.id}|${limit}|${search.sort}|${search.search}|${JSON.stringify(effectiveFilters)}`;
+  const rowSetKey = `${view?.id}|${search.page}|${limit}|${search.sort}|${search.search}|${JSON.stringify(effectiveFilters)}`;
   useEffect(() => setSelected(new Set()), [rowSetKey]);
 
   /**
@@ -500,14 +511,14 @@ function MenuPage() {
                   columns={columns}
                   language={language}
                   sorts={sorts}
-                  onSorts={(next) => setSearch({ sort: formatSorts(next) }, true)}
+                  onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
                   filtersOpen={filtersVisible}
                   filterCount={activeFilters}
                   // Закрытие не стирает сами фильтры: спрятать строку и снять
                   // отбор — разные намерения.
                   onToggleFilters={() => setSearch({ filtersOpen: !filtersVisible }, true)}
                   search={search.search ?? ""}
-                  onSearch={(next) => setSearch({ search: next || undefined }, true)}
+                  onSearch={(next) => setSearch({ search: next || undefined, page: 1 }, true)}
                 />
               )}
 
@@ -572,6 +583,8 @@ function MenuPage() {
                   onNavigate: (navigate) => updateView.mutate({ view, navigate }),
                   onObjectUrl: (objectUrl) => updateView.mutate({ view, objectUrl }),
                   onPdfUrl: (pdfUrl) => updateView.mutate({ view, pdfUrl }),
+                  onInfiniteScroll: (infiniteScroll) =>
+                    updateView.mutate({ view, infiniteScroll }),
                   onEditField: (field, anchor) => setFieldPanel({ field, anchor }),
                   // Тот же диалог подтверждения, что и у меню колонки:
                   // удаление поля сносит его во всех view вместе с данными.
@@ -654,7 +667,7 @@ function MenuPage() {
               // Любая правка отбора возвращает на первую страницу: на
               // седьмой после сужения выборки обычно пусто.
               onFilters={applyFilters}
-              onSorts={(next) => setSearch({ sort: formatSorts(next) }, true)}
+              onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
             />
           )}
 
@@ -667,7 +680,7 @@ function MenuPage() {
               pinned={pinned}
               /* Строки догружаются прокруткой: обработчик отдаётся,
                  только пока есть что грузить. */
-              {...(hasMore ? { onEndReached: loadMore } : {})}
+              {...(infinite && hasMore ? { onEndReached: loadMore } : {})}
               /* Ширины колонок — настройка человека, не view: у соседа
                  другой монитор. Живут в localStorage, по слагу таблицы. */
               widths={view ? columnWidths[view.tableSlug] : undefined}
@@ -689,6 +702,7 @@ function MenuPage() {
                     sort: formatSorts(
                       direction ? [{ field, direction }] : nextSorts(sorts, field),
                     ),
+                    page: 1,
                   },
                   true,
                 )
@@ -751,17 +765,20 @@ function MenuPage() {
           )}
 
           <GridFooter
+            /* Со страницами подвал листает, с прокруткой — считает. */
+            {...(infinite ? {} : { page: search.page, onPage: (next: number) => setSearch({ page: next }) })}
             shown={rows.rows.length}
             limit={limit}
             total={rows.count}
             loadingMore={loadingMore}
             selectedCount={selected.size}
             deleting={remove.isPending}
-            // Размер куска — он же настройка view: сколько строк
-            // приезжает за раз и сколько догружается прокруткой.
+            /* Размер порции — он же настройка view. Смена возвращает
+               на первую страницу: строка, которая была на седьмой
+               по 25, на седьмой по 200 не лежит. */
             onLimit={(next) => {
               setTableLimit(view.tableSlug, next);
-              setSearch({ limit: next });
+              setSearch({ limit: next, page: 1 });
             }}
             onDeleteSelected={() => setConfirming(true)}
           />

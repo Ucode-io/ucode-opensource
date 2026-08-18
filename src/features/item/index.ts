@@ -2,6 +2,7 @@ export { useDeleteItems, useItem, useItems, useUpdateItem } from "./api/items";
 export { useDrawerLayout } from "./api/layout";
 export { orderColumns } from "./model/layout";
 export { useCreateItem } from "./api/relations";
+export { fileUrl, useUploadFiles } from "./api/files";
 export type { CellEdit, ItemsPage } from "./api/items";
 export { cellKind, editorKind } from "./model/cell-kind";
 export type { CellKind } from "./model/cell-kind";
