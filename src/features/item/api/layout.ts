@@ -85,7 +85,10 @@ export function useDrawerLayout({
     /** Слаг поля-заголовка карточки. Пусто — заголовка нет. */
     heading: useMemo(() => headingSlug(query.data, language), [query.data, language]),
     /** Вкладки связей: связанные строки рядом с полями записи. */
-    relationTabs: useMemo(() => relationTabs(query.data), [query.data]),
+    relationTabs: useMemo(
+      () => relationTabs(query.data, tableSlug),
+      [query.data, tableSlug],
+    ),
     /** Поле `moved` встаёт рядом с `target` — до него или после. */
     reorder: (moved: string, target: string, after: boolean) => {
       if (query.data) update.mutate(moveField(query.data, moved, target, after));

@@ -78,8 +78,16 @@ export type RelationTab = {
   label: string;
   /** Таблица, строки которой показывает вкладка. */
   tableSlug: string;
-  /** Колонка-ссылка на открытую запись В ЭТОЙ таблице. */
+  /**
+   * Колонка-ссылка. ГДЕ она лежит, говорит `direction`:
+   *
+   *   incoming — в чужой таблице, и в ней наш guid: строки отбираются
+   *              по ней, новая строка ею же и привязывается;
+   *   outgoing — в НАШЕЙ строке, и в ней guid чужой: вкладка показывает
+   *              ровно одну строку, ту, на которую мы ссылаемся.
+   */
   fieldSlug: string;
+  direction: "incoming" | "outgoing";
   /** Колонки вкладки: id полей, как в `view.columns`. */
   columnIds: string[];
   /** Можно ли создавать связанные строки. */
@@ -290,37 +298,86 @@ export function moveField(
  * Вкладка без чужой таблицы или без колонки-ссылки пропускается:
  * отбирать строки нечем, и она показала бы всю таблицу целиком.
  */
-export function relationTabs(layout: Layout | undefined): RelationTab[] {
+export function relationTabs(layout: Layout | undefined, tableSlug: string): RelationTab[] {
   return (layout?.tabs ?? [])
     .filter((tab) => tab.type !== SECTION && tab.relation?.permission?.view_permission !== false)
-    .map((tab) => ({
-      id: tab.id ?? "",
-      relationId: tab.relation_id ?? tab.relation?.id ?? "",
-      label: tab.label?.trim() || tab.relation?.title?.trim() || tab.relation?.relation_table_slug || "—",
-      tableSlug: tab.relation?.relation_table_slug ?? "",
-      fieldSlug: linkField(tab.relation),
-      columnIds: tab.relation?.columns ?? [],
-      canCreate: tab.relation?.permission?.create_permission !== false,
-    }))
+    .map((tab) => {
+      const side = sideOf(tab.relation, tableSlug);
+
+      return {
+        id: tab.id ?? "",
+        relationId: tab.relation_id ?? tab.relation?.id ?? "",
+        label:
+          tab.label?.trim() || tab.relation?.title?.trim() || side.tableSlug || "—",
+        tableSlug: side.tableSlug,
+        fieldSlug: side.fieldSlug,
+        direction: side.direction,
+        columnIds: tab.relation?.columns ?? [],
+        /*
+         * Создавать можно только там, где ссылка лежит в чужой строке:
+         * тогда новая строка привязывается тем же полем, которым
+         * отбирается. У обратного направления привязка — это правка
+         * НАШЕЙ строки, и делать её от имени «создать связанную»
+         * значит менять запись, которую человек открыл смотреть.
+         */
+        canCreate:
+          side.direction === "incoming" &&
+          tab.relation?.permission?.create_permission !== false,
+      };
+    })
     .filter((tab) => tab.id && tab.tableSlug && tab.fieldSlug);
 }
 
 /**
- * Колонка-ссылка на НАШУ запись в чужой таблице.
+ * Какую таблицу показывает вкладка, где лежит колонка-ссылка и в какую
+ * сторону она смотрит.
  *
- * Готовое имя, если бэкенд его прислал; иначе — по правилу создания
- * связи: колонка в table_from называется `<слаг table_to>_id`. Наша
- * сторона — та, которая не `relation_table_slug`.
+ * Колонка-ссылка ВСЕГДА живёт в `table_from` и называется
+ * `<слаг table_to>_id` (pkg/helper/relation.go). Отсюда две стороны
+ * одной связи:
+ *
+ *   мы — table_to    чужие строки ссылаются на нас, колонка у них;
+ *   мы — table_from  мы ссылаемся на чужую строку, колонка у нас.
+ *
+ * `relation_table_slug` для этого не годится: у стороны, с которой связь
+ * заводили, он равен НАШЕЙ таблице. Вкладка тогда показывала бы ту же
+ * таблицу, из которой открыта, и «создать связанную строку» вписывало бы
+ * в чужую колонку наш guid — база отвечала на это нарушением внешнего
+ * ключа (fk_<таблица>_<колонка>).
  */
-function linkField(relation: LayoutRelation | undefined): string {
-  if (!relation) return "";
-  if (relation.relation_field_slug) return relation.relation_field_slug;
+function sideOf(
+  relation: LayoutRelation | undefined,
+  tableSlug: string,
+): { tableSlug: string; fieldSlug: string; direction: "incoming" | "outgoing" } {
+  const empty = { tableSlug: "", fieldSlug: "", direction: "incoming" as const };
+  if (!relation) return empty;
 
   const from = relation.table_from?.slug ?? "";
   const to = relation.table_to?.slug ?? "";
-  const own = relation.relation_table_slug === from ? to : from;
 
-  return own ? `${own}_id` : "";
+  /*
+   * Стороны известны — решаем по ним. Recursive (обе стороны — мы)
+   * считается входящей: чужая колонка с нашим guid у неё есть.
+   */
+  if (from && to) {
+    const incoming = to === tableSlug;
+
+    return {
+      tableSlug: incoming ? from : to,
+      fieldSlug: relation.relation_field_slug || `${to}_id`,
+      direction: incoming ? "incoming" : "outgoing",
+    };
+  }
+
+  // Сторон в ответе нет — остаётся то, что бэкенд назвал чужой таблицей.
+  const other = relation.relation_table_slug ?? "";
+  return other && other !== tableSlug
+    ? {
+        tableSlug: other,
+        fieldSlug: relation.relation_field_slug || `${tableSlug}_id`,
+        direction: "incoming",
+      }
+    : empty;
 }
 
 const SECTION = "section";

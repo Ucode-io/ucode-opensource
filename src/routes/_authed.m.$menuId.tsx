@@ -747,6 +747,11 @@ function MenuPage() {
                 key={relationTab.id}
                 tab={relationTab}
                 parentGuid={search.item}
+                /* Вкладке обратного направления нужен не наш guid,
+                   а значение нашей колонки-ссылки. */
+                {...(relationTab.direction === "outgoing" && drawerRow
+                  ? { parentValue: String(drawerRow[relationTab.fieldSlug] ?? "") }
+                  : {})}
                 locale={i18n.language}
                 language={language}
                 canEdit={can.settings}

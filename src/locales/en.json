@@ -121,6 +121,7 @@
   "drawer.mode": "Open in",
   "drawer.noHeading": "No heading",
   "drawer.noMoreRelations": "Every relation is already shown.",
+  "drawer.noRelated": "Nothing is linked yet.",
   "drawer.notFound": "This row is not on the current page — open it from the list.",
   "drawer.open": "Open row",
   "drawer.openPdf": "Open PDF",

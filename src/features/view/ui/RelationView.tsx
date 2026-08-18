@@ -46,6 +46,7 @@ import { columnKey, resolveColumnIds } from "../model/columns";
 export function RelationView({
   tab,
   parentGuid,
+  parentValue,
   locale,
   language,
   canEdit,
@@ -55,6 +56,12 @@ export function RelationView({
   tab: RelationTab;
   /** guid открытой записи. По нему отбираются связанные строки. */
   parentGuid: string;
+  /**
+   * Значение колонки-ссылки в НАШЕЙ строке. Нужно вкладке обратного
+   * направления: там связанная строка одна, и найти её можно только
+   * по guid, который лежит у нас.
+   */
+  parentValue?: string | undefined;
   /** Локаль интерфейса: форматы дат и чисел. */
   locale: string;
   /** Язык данных: подписи полей и вариантов. */
@@ -107,13 +114,21 @@ export function RelationView({
    *
    * Отбор человека домешивается сверху, но связь с открытой записью
    * перекрыть нельзя: вкладка без неё показала бы чужую таблицу целиком.
+   *
+   * Куда смотрит связь, решает direction:
+   *   incoming — чужая колонка со ссылкой на нас;
+   *   outgoing — наша колонка со ссылкой на чужую строку, и тогда
+   *              отбираем чужую таблицу по её же guid.
    */
+  const link = tab.direction === "incoming" ? tab.fieldSlug : "guid";
+  const value = tab.direction === "incoming" ? parentGuid : (parentValue ?? "");
+
   const filters = useMemo(
-    () => ({ ...own, [tab.fieldSlug]: { op: "contains" as const, values: [parentGuid] } }),
-    [own, tab.fieldSlug, parentGuid],
+    () => ({ ...own, [link]: { op: "contains" as const, values: [value] } }),
+    [own, link, value],
   );
 
-  const { page: rows, isLoading } = useItems(parentGuid ? tab.tableSlug : undefined, {
+  const { page: rows, isLoading } = useItems(value ? tab.tableSlug : undefined, {
     limit,
     page,
     sorts,
@@ -131,6 +146,12 @@ export function RelationView({
    */
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
+  /*
+   * У обратной связи ссылка лежит в нашей строке, и пока её не задали,
+   * показывать нечего: отбор по пустому guid вернул бы чужую таблицу
+   * целиком.
+   */
+  if (!value) return <p className="p-6 text-sm text-fg-muted">{t("drawer.noRelated")}</p>;
   if (schemaLoading || isLoading) return <GridSkeleton columns={columns.length || 4} />;
   if (!columns.length) return <p className="p-6 text-sm text-fg-muted">{t("table.noColumns")}</p>;
 

@@ -157,7 +157,7 @@ test("вкладка связи собирается из раскладки, в
     },
   ]);
 
-  expect(relationTabs(next)).toEqual([
+  expect(relationTabs(next, "customer")).toEqual([
     {
       id: "t1",
       relationId: "",
@@ -166,6 +166,7 @@ test("вкладка связи собирается из раскладки, в
       // Не собранное `<родительский слаг>_id`, а настоящее имя колонки:
       // у второй связи на ту же таблицу оно другое.
       fieldSlug: "customer_id",
+      direction: "incoming",
       columnIds: ["c1", "c2"],
       // Права не настраивали — значит можно.
       canCreate: true,
@@ -193,24 +194,59 @@ test("колонка-ссылка выводится из сторон связ�
     },
   ]);
 
-  expect(relationTabs(next)[0]?.fieldSlug).toBe("test_shmest1_id");
+  expect(relationTabs(next, "test_shmest1")[0]?.fieldSlug).toBe("test_shmest1_id");
 });
 
-test("наша сторона — та, которая не relation_table_slug", () => {
+/*
+ * Сторона определяется по НАШЕЙ таблице, а не по relation_table_slug:
+ * у той стороны, с которой связь заводили, он равен нашей же таблице.
+ * Пока читали его, вкладка показывала ту таблицу, из которой открыта,
+ * а «создать связанную строку» вписывало в чужую колонку наш guid —
+ * база отвечала нарушением внешнего ключа.
+ */
+test("мы — table_from: вкладка показывает ЧУЖУЮ таблицу и ссылку в нашей строке", () => {
   const next = withTabs([
     {
       id: "t1",
       type: "relation",
-      // Здесь чужая таблица — table_to, значит наша — table_from.
       relation: {
-        relation_table_slug: "orders",
-        table_from: { slug: "clients" },
-        table_to: { slug: "orders" },
+        // Бэкенд назвал чужой таблицей нашу же — так он делает
+        // на стороне, с которой связь заводили.
+        relation_table_slug: "pivoting",
+        table_from: { slug: "pivoting" },
+        table_to: { slug: "test_shmest1" },
       },
     },
   ]);
 
-  expect(relationTabs(next)[0]?.fieldSlug).toBe("clients_id");
+  expect(relationTabs(next, "pivoting")[0]).toMatchObject({
+    tableSlug: "test_shmest1",
+    fieldSlug: "test_shmest1_id",
+    direction: "outgoing",
+    // Привязка — это правка НАШЕЙ строки, а не создание связанной.
+    canCreate: false,
+  });
+});
+
+test("мы — table_to: строки чужой таблицы ссылаются на нас", () => {
+  const next = withTabs([
+    {
+      id: "t1",
+      type: "relation",
+      relation: {
+        relation_table_slug: "pivoting",
+        table_from: { slug: "pivoting" },
+        table_to: { slug: "test_shmest1" },
+      },
+    },
+  ]);
+
+  expect(relationTabs(next, "test_shmest1")[0]).toMatchObject({
+    tableSlug: "pivoting",
+    fieldSlug: "test_shmest1_id",
+    direction: "incoming",
+    canCreate: true,
+  });
 });
 
 test("запрет на просмотр прячет вкладку, отсутствие прав — нет", () => {
@@ -221,22 +257,25 @@ test("запрет на просмотр прячет вкладку, отсут
     relation: { relation_table_slug: "order", relation_field_slug: "customer_id", permission },
   });
 
-  expect(relationTabs(withTabs([tab({ view_permission: false })]))).toEqual([]);
-  expect(relationTabs(withTabs([tab({ view_permission: true })])).length).toBe(1);
+  expect(relationTabs(withTabs([tab({ view_permission: false })]), "customer")).toEqual([]);
+  expect(relationTabs(withTabs([tab({ view_permission: true })]), "customer").length).toBe(1);
   // Блок permission приходит не отовсюду: его отсутствие — «не настраивали»,
   // а не «нельзя». Иначе вкладки исчезли бы у всех, кто прав не трогал.
-  expect(relationTabs(withTabs([tab(undefined)])).length).toBe(1);
+  expect(relationTabs(withTabs([tab(undefined)]), "customer").length).toBe(1);
 
-  expect(relationTabs(withTabs([tab({ create_permission: false })]))[0]?.canCreate).toBe(false);
+  expect(
+    relationTabs(withTabs([tab({ create_permission: false })]), "customer")[0]?.canCreate,
+  ).toBe(false);
 });
 
 test("вкладка без колонки-ссылки пропускается, а не показывает всю таблицу", () => {
   const next = withTabs([
-    { id: "a", type: "relation", relation: { relation_table_slug: "order" } },
-    { id: "b", type: "relation", relation: { relation_field_slug: "customer_id" } },
+    // Своя же таблица под именем чужой — показывать нечего.
+    { id: "a", type: "relation", relation: { relation_table_slug: "customer" } },
+    { id: "b", type: "relation", relation: {} },
   ]);
 
-  expect(relationTabs(next)).toEqual([]);
+  expect(relationTabs(next, "customer")).toEqual([]);
 });
 
 test("колонки вкладки правятся только у своей вкладки", () => {
@@ -267,7 +306,7 @@ test("вкладка помнит свою связь: по ней её заво
     },
   ]);
 
-  expect(relationTabs(next)[0]?.relationId).toBe("r1");
+  expect(relationTabs(next, "orders")[0]?.relationId).toBe("r1");
 });
 
 test("вкладка добавляется списком, а не в обход: PUT пишет tabs целиком", () => {

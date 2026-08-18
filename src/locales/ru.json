@@ -121,6 +121,7 @@
   "drawer.mode": "Открывать",
   "drawer.noHeading": "Без заголовка",
   "drawer.noMoreRelations": "Все связи уже показаны.",
+  "drawer.noRelated": "Связанной записи нет.",
   "drawer.notFound": "Этой строки нет на текущей странице — откройте её из списка.",
   "drawer.open": "Раскрыть строку",
   "drawer.openPdf": "Открыть PDF",
