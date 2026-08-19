@@ -28,6 +28,7 @@ import { editorKind } from "../model/cell-kind";
 import { blankItem } from "../model/cell-value";
 import { columnWindow, type ColumnWindow } from "../model/column-window";
 import { groupEntries, visibleEntries } from "../model/group";
+import type { TreeMeta } from "../model/tree";
 import type { Sort, SortDirection } from "../model/query";
 import { relationDataKey, type Item } from "../model/types";
 import { rowErrors, type CellError } from "../model/validate";
@@ -168,6 +169,7 @@ export function DataGrid({
   onWidth,
   rows,
   group,
+  tree,
   relations,
   locale,
   language,
@@ -211,6 +213,18 @@ export function DataGrid({
    * смене значения и умеет сворачивать группу. Не задана — плоский список.
    */
   group?: Field | undefined;
+  /**
+   * Дерево: строки уже разложены в порядке обхода (см. model/tree),
+   * таблица рисует отступ по глубине и шеврон у узлов с детьми.
+   * Взаимоисключающе с group — TREE view группировку не настраивает.
+   */
+  tree?:
+    | {
+        meta: ReadonlyMap<string, TreeMeta>;
+        expanded: ReadonlySet<string>;
+        onToggle: (guid: string) => void;
+      }
+    | undefined;
   relations: Relation[];
   /** Локаль интерфейса: форматы дат и чисел. */
   locale: string;
@@ -751,6 +765,13 @@ export function DataGrid({
                       }`}
                     >
                       <span className="flex h-full min-w-0 items-center">
+                        {/* Дерево живёт в первой колонке: отступ по глубине
+                            и шеврон у узла с детьми. Узел без детей получает
+                            распорку той же ширины — значения одной глубины
+                            стоят в столбик, а не лесенкой. */}
+                        {tree && columnIndex === 0 && (
+                          <TreeHandle guid={id} tree={tree} />
+                        )}
                         <Cell
                           field={column}
                           row={row}
@@ -990,6 +1011,51 @@ function Spacer({ height, span }: { height: number; span: number }) {
     <tr aria-hidden>
       <td colSpan={span} className="p-0" style={{ height }} />
     </tr>
+  );
+}
+
+/** Отступ и шеврон узла дерева — в первой колонке строки. */
+function TreeHandle({
+  guid,
+  tree,
+}: {
+  guid: string;
+  tree: {
+    meta: ReadonlyMap<string, TreeMeta>;
+    expanded: ReadonlySet<string>;
+    onToggle: (guid: string) => void;
+  };
+}) {
+  const { t } = useTranslation();
+  const info = tree.meta.get(guid);
+  const open = tree.expanded.has(guid);
+
+  return (
+    <>
+      {info && info.depth > 0 && (
+        <span aria-hidden className="shrink-0" style={{ width: info.depth * 16 }} />
+      )}
+
+      {info?.hasChild ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={t(open ? "tree.collapse" : "tree.expand")}
+          title={t(open ? "tree.collapse" : "tree.expand")}
+          onClick={(event) => {
+            // Шеврон раскрывает узел, а не ячейку под ним.
+            event.stopPropagation();
+            tree.onToggle(guid);
+          }}
+          className="mr-0.5 grid size-5 shrink-0 place-items-center rounded text-fg-muted transition-colors hover:bg-surface-active hover:text-fg"
+        >
+          <Icon as={open ? IconChevronDown : IconChevronRight} size={14} />
+        </button>
+      ) : (
+        /* Распорка вместо шеврона: значения одной глубины — в столбик. */
+        <span aria-hidden className="mr-0.5 size-5 shrink-0" />
+      )}
+    </>
   );
 }
 

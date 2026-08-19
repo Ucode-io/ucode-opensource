@@ -28,8 +28,8 @@ export type ViewType = (typeof VIEW_TYPES)[number];
  */
 const NOT_A_TAB = new Set<string>(["SECTION"]);
 
-/** Экраны, которые в v1 действительно есть. Остальные вкладки видны, но пусты. */
-export const IMPLEMENTED_VIEW_TYPES = new Set<string>(["TABLE"]);
+/** Экраны, которые действительно есть. Остальные вкладки видны, но пусты. */
+export const IMPLEMENTED_VIEW_TYPES = new Set<string>(["TABLE", "TREE"]);
 
 export type View = {
   id: string;

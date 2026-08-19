@@ -135,5 +135,12 @@ export const keys = {
       [...keys.items.all, tableSlug, params] as const,
     detail: (tableSlug: string, id: string) =>
       [...keys.items.all, tableSlug, "detail", id] as const,
+    /**
+     * Дети одного узла TREE view. `parent` пустой — корни. Набор полей
+     * в ключе: ответ содержит ровно запрошенные колонки, и view с другим
+     * набором не должен читать чужой кэш.
+     */
+    tree: (tableSlug: string, parent: string, fields: string) =>
+      [...keys.items.all, tableSlug, "tree", parent, fields] as const,
   },
 } as const;

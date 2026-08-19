@@ -8,6 +8,7 @@ import {
   blankItem,
   GridSkeleton,
   ItemDrawer,
+  TreeGrid,
   GridFooter,
   MAX_LIMIT,
   MIN_LIMIT,
@@ -307,6 +308,15 @@ function MenuPage() {
 
   const supportedView = view ? IMPLEMENTED_VIEW_TYPES.has(view.type) : false;
   /*
+   * TREE — тот же грид, но строки идут деревом по рекурсивной связи,
+   * а данные — из своей ручки (/v2/items/{slug}/tree). Она не читает
+   * ни фильтров, ни поиска, ни сортировки, поэтому их инструментов
+   * у дерева нет — рабочие на вид кнопки без действия хуже отсутствующих.
+   */
+  const treeView = supportedView && view?.type === "TREE";
+  /* Родителя ручка ищет в колонке `<слаг таблицы>_id` — без неё дерева нет. */
+  const treeReady = schema.fields.some((field) => field.slug === `${view?.tableSlug}_id`);
+  /*
    * Размер страницы: из адреса, иначе последний выбранный для этой
    * таблицы, иначе настройка view. Значение из localStorage проверяется
    * — испорченное руками «0» оставило бы таблицу пустой навсегда.
@@ -470,7 +480,7 @@ function MenuPage() {
     loadMore,
     error: rowsError,
     refetch: refetchRows,
-  } = useItems(supportedView && can.read ? view?.tableSlug : undefined, {
+  } = useItems(supportedView && !treeView && can.read ? view?.tableSlug : undefined, {
     limit,
     page: search.page,
     infinite,
@@ -584,7 +594,9 @@ function MenuPage() {
         {/* Число без слова: «16 записей» требует согласования по падежу
             в русском и узбекском, а множественные формы i18next стоят
             трёх ключей на язык ради одного счётчика. */}
-        {supportedView && <span className="text-xs text-fg-muted">· {rows.count}</span>}
+        {supportedView && !treeView && (
+          <span className="text-xs text-fg-muted">· {rows.count}</span>
+        )}
         {isFetching && !rowsLoading && (
           <span className="text-xs text-fg-subtle">{t("common.loading")}</span>
         )}
@@ -627,8 +639,8 @@ function MenuPage() {
           {view && can.read && !viewForbidden && (
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
               {/* Поиск, отбор и сортировка — про таблицу: у нарисованного
-                  заглушкой view искать нечего. */}
-              {supportedView && (
+                  заглушкой view искать нечего, а ручка дерева их не читает. */}
+              {supportedView && !treeView && (
                 <TableToolbar
                   tableSlug={view.tableSlug}
                   columns={columns}
@@ -803,6 +815,37 @@ function MenuPage() {
               : []),
           ]}
         />
+      ) : treeView ? (
+        !treeReady ? (
+          <Notice text={t("table.noTreeRelation")} />
+        ) : (
+          <TreeGrid
+            tableSlug={view.tableSlug}
+            columns={columns}
+            pinned={pinned}
+            widths={view ? columnWidths[view.tableSlug] : undefined}
+            onWidth={(fieldId: string, width: number) =>
+              setColumnWidth(view.tableSlug, fieldId, width)
+            }
+            relations={schema.relations}
+            locale={i18n.language}
+            language={language}
+            selected={selected}
+            onSelect={setSelected}
+            onOpenRow={(guid) => setSearch({ item: guid, tab: undefined })}
+            {...(can.update
+              ? {
+                  onEdit: (guid: string, slug: string, value: unknown) =>
+                    update.mutate({ guid, slug, value }),
+                }
+              : {})}
+            {...(can.addField
+              ? { onAddField: (anchor: DOMRect) => setFieldPanel({ field: null, anchor }) }
+              : {})}
+            /* ponytail: без меню колонки — оно обещает сортировку и фильтр,
+               которых у ручки дерева нет. Поля правятся через настройки view. */
+          />
+        )
       ) : (
         <>
           {filtersVisible && (
