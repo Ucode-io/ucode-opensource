@@ -1,29 +1,36 @@
 import { useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/shared/ui/button";
+import type { TranslationKey } from "@/shared/lib/i18n";
 import { Icon } from "@/shared/ui/icon";
 import { Input } from "@/shared/ui/input";
-import { Popover } from "@/shared/ui/popover";
+import { Popover, PopoverItem } from "@/shared/ui/popover";
+import { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES } from "../model/types";
+import { viewIcon } from "./view-icon";
 
 /**
- * Новая вкладка.
+ * Новая вкладка: имя и список типов, как в старой админке, — выбор типа
+ * и есть создание, отдельной кнопки «создать» нет.
  *
- * Одно поле — имя. В старой админке на этом месте список из восьми типов,
- * а за ним второе всплывающее окно с настройками того типа, который
- * выбрали: у доски группирующее поле, у календаря пара дат, у сайта
- * ссылка. Здесь рисуется только TABLE, и предлагать остальные значит
- * обещать экран, которого нет.
+ * Типы — только те, чьи экраны нарисованы: в старой админке список из
+ * восьми, но предлагать доску или календарь, за которыми стоит «экран
+ * не готов», значит обещать то, чего нет. Список растёт сам — он
+ * читается из IMPLEMENTED_VIEW_TYPES.
+ *
+ * Второго окна с настройками типа (у доски — группирующее поле,
+ * у календаря — пара дат) нет тоже: оно нужно типам, которых здесь нет.
  *
  * Имя необязательно: без него вкладка называется своим типом, ровно как
  * все view, созданные до появления имён.
  */
+const CREATABLE = VIEW_TYPES.filter((type) => IMPLEMENTED_VIEW_TYPES.has(type));
+
 export function ViewCreateButton({
   busy,
   onCreate,
 }: {
   busy: boolean;
-  onCreate: (name: string) => void;
+  onCreate: (name: string, type: string) => void;
 }) {
   const { t } = useTranslation();
 
@@ -45,8 +52,8 @@ export function ViewCreateButton({
     >
       {(close) => (
         <CreateForm
-          onSubmit={(name) => {
-            onCreate(name);
+          onSubmit={(name, type) => {
+            onCreate(name, type);
             close();
           }}
         />
@@ -55,16 +62,19 @@ export function ViewCreateButton({
   );
 }
 
-function CreateForm({ onSubmit }: { onSubmit: (name: string) => void }) {
+function CreateForm({ onSubmit }: { onSubmit: (name: string, type: string) => void }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
 
+  const create = (type: string) => onSubmit(name.trim(), type);
+
   return (
     <form
-      className="flex w-56 flex-col gap-2 p-1"
+      className="flex w-56 flex-col gap-1 p-1"
+      /* Enter в поле имени — самый частый путь: обычная таблица. */
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(name.trim());
+        create(CREATABLE[0] ?? "TABLE");
       }}
     >
       <Input
@@ -74,9 +84,16 @@ function CreateForm({ onSubmit }: { onSubmit: (name: string) => void }) {
         placeholder={t("view.namePlaceholder")}
         aria-label={t("view.name")}
       />
-      <Button type="submit" size="sm">
-        {t("action.create")}
-      </Button>
+
+      {CREATABLE.map((type) => (
+        <PopoverItem
+          key={type}
+          icon={<Icon as={viewIcon(type)} size={16} className="shrink-0" />}
+          onClick={() => create(type)}
+        >
+          {t(`view.type.${type}` as TranslationKey, { defaultValue: type })}
+        </PopoverItem>
+      ))}
     </form>
   );
 }

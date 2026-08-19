@@ -623,9 +623,9 @@ function MenuPage() {
               // Новая вкладка сразу открывается: её создали, чтобы в неё
               // смотреть. Список к этому моменту уже перезапрошен — см.
               // useCreateView, иначе вкладки дёрнулись бы на первую и обратно.
-              onCreate={(name) =>
+              onCreate={(name, type) =>
                 createView.mutate(
-                  { name, language },
+                  { name, language, type },
                   { onSuccess: (created) => created?.id && openView(created.id) },
                 )
               }

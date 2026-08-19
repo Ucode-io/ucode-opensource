@@ -76,9 +76,9 @@ export function useMenuViews(menuId: string) {
  * оказываются оба ключа поля-связи — id поля и id связи, — и колонки
  * нужно разворачивать через resolveColumns, а не по одному ключу.
  *
- * Тип только TABLE: остальные требуют своих настроек (у BOARD —
- * группирующее поле, у CALENDAR — пара дат), без которых вкладка
- * создаётся пустой, а нарисовать их этот экран всё равно не умеет.
+ * Тип — из тех, что мы рисуем (форма создания предлагает только их).
+ * BOARD и CALENDAR требуют своих настроек при создании (группирующее
+ * поле, пара дат) — появятся вместе со своими экранами.
  */
 export function useCreateView({
   menuId,
@@ -95,11 +95,11 @@ export function useCreateView({
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: ({ name, language, relation }: NewView) =>
+    mutationFn: ({ name, language, type, relation }: NewView) =>
       api.post<ViewDto>(`/v2/views/${slug}`, {
         table_slug: slug,
         menu_id: menuId,
-        type: "TABLE",
+        type: type ?? "TABLE",
         order,
         // Имя пишется дважды: в колонку и в attributes на языке данных.
         // Старая админка читает только attributes, мы — сначала их же.
@@ -220,6 +220,8 @@ export type NewView = {
   name: string;
   /** Язык ДАННЫХ для имени. */
   language: string;
+  /** Тип view. Не задан — TABLE: вкладка карточки другой не бывает. */
+  type?: string;
   relation?: { id: string; tableSlug: string };
 };
 
