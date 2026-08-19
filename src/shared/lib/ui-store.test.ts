@@ -36,6 +36,23 @@ describe("toggleMenu", () => {
     toggleMenu("orders");
     expect(useUi.getState().expandedMenus).toEqual(["clients"]);
   });
+
+  it("забывает удалённый пункт, не трогая соседние", () => {
+    const { forgetMenu } = useUi.getState();
+
+    // Стор один на весь модуль, и предыдущий тест оставил в нём своё:
+    // начинаем с известного состояния, а не с чужого.
+    useUi.setState({ expandedMenus: ["orders", "clients"] });
+
+    // Пункт удалили: его id больше ничему не отвечает, и помнить
+    // раскрытие по нему нечего.
+    forgetMenu("orders");
+    expect(useUi.getState().expandedMenus).toEqual(["clients"]);
+
+    // Чужого не трогаем: неизвестный id — это просто ничего.
+    forgetMenu("unknown");
+    expect(useUi.getState().expandedMenus).toEqual(["clients"]);
+  });
 });
 
 describe("setColumnWidth", () => {

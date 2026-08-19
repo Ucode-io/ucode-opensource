@@ -3,6 +3,7 @@ import { IconDots } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
+import { useUi } from "@/shared/lib/ui-store";
 import { useCreateMenu, useDeleteMenu, useUpdateMenu } from "../api/mutations";
 import { actionsFor, typeWordKey, type MenuActionId } from "../model/actions";
 import type { MenuNode } from "../model/types";
@@ -35,6 +36,7 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
   const create = useCreateMenu();
   const update = useUpdateMenu();
   const remove = useDeleteMenu();
+  const forgetMenu = useUi((state) => state.forgetMenu);
 
   const actions = actionsFor(node, isAdmin);
   if (actions.length === 0) return null;
@@ -134,7 +136,19 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
           description={t("menuForm.deleteDescription")}
           confirmLabel={t("action.delete")}
           busy={remove.isPending}
-          onConfirm={() => remove.mutate({ id: node.id }, { onSuccess: () => setDialog(null) })}
+          onConfirm={() =>
+            remove.mutate(
+              { id: node.id },
+              {
+                onSuccess: () => {
+                  // Раскрытие помнится по id: у удалённого пункта ему
+                  // больше нечему отвечать, и в памяти он остался бы навсегда.
+                  forgetMenu(node.id);
+                  setDialog(null);
+                },
+              },
+            )
+          }
           onClose={() => setDialog(null)}
         />
       )}

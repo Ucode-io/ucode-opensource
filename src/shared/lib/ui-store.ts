@@ -44,9 +44,8 @@ type UiState = {
    * до корня — вместе с путём к тому пункту, в котором человек работает.
    *
    * Список, а не карта: закрытая папка из него уходит, и вырасти он
-   * может только до числа одновременно раскрытых. ponytail: id
-   * удалённого пункта останется в списке навсегда, но стоит он строку
-   * и ни на что не влияет.
+   * может только до числа одновременно раскрытых. Удалённый пункт
+   * забывается вместе с самим пунктом — см. forgetMenu.
    */
   expandedMenus: string[];
   /**
@@ -62,6 +61,8 @@ type UiState = {
   setTheme: (theme: Theme) => void;
   toggleSidebar: () => void;
   toggleMenu: (id: string) => void;
+  /** Забыть раскрытие удалённого пункта: его id больше ничему не отвечает. */
+  forgetMenu: (id: string) => void;
   setDataLanguage: (code: string) => void;
   setSidebarWidth: (width: number) => void;
   setDrawerWidth: (width: number) => void;
@@ -121,6 +122,8 @@ export const useUi = create<UiState>()(
       setTheme: (theme) => set({ theme }),
       setDataLanguage: (dataLanguage) => set({ dataLanguage }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      forgetMenu: (id) =>
+        set((s) => ({ expandedMenus: s.expandedMenus.filter((item) => item !== id) })),
       toggleMenu: (id) =>
         set((s) => ({
           expandedMenus: s.expandedMenus.includes(id)
