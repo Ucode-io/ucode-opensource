@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import {
   IconArrowNarrowDown,
   IconArrowNarrowUp,
@@ -17,6 +23,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { editorKind } from "../model/cell-kind";
 import { blankItem } from "../model/cell-value";
+import { columnWindow, type ColumnWindow } from "../model/column-window";
 import type { Sort, SortDirection } from "../model/query";
 import { relationDataKey, type Item } from "../model/types";
 import { rowErrors, type CellError } from "../model/validate";
@@ -35,6 +42,9 @@ import { fieldIcon } from "./field-icon";
  * остальное занимают две распорки сверху и снизу. Ширины при этом
  * остаются на <colgroup>, поэтому колонки не разъезжаются, когда
  * в видимой части оказались короткие значения.
+ *
+ * На широкой таблице так же виртуализируются колонки — тем же приёмом
+ * и в ту же сторону, см. VIRTUAL_FROM и model/column-window.
  */
 
 /** Ширины по умолчанию. Первая колонка шире: в ней обычно имя записи. */
@@ -57,6 +67,20 @@ const END_GAP = 10;
  * обязаны совпадать — иначе строки поедут относительно прокрутки.
  */
 const ROW_HEIGHT = 36;
+
+/**
+ * С какого числа колонок они виртуализируются.
+ *
+ * Ниже порога строка живёт в DOM целиком, и это не лень: последней
+ * колонке ширина не задаётся, она забирает свободное место, и таблица
+ * из трёх полей занимает экран, а не жмётся полосой у левого края.
+ * Распорка же требует известной ширины у каждой колонки — иначе она
+ * не знает, что именно заменяет.
+ *
+ * Порог стоит там, где растягивать уже нечего: два десятка колонок
+ * не влезают ни в один экран, и последняя ведёт себя как остальные.
+ */
+const VIRTUAL_FROM = 20;
 
 /*
  * overflow-hidden обязателен: table-fixed задаёт ширину колонки, но
@@ -337,6 +361,31 @@ export function DataGrid({
   const checked = ids.filter((id) => selected.has(id));
   const allChecked = ids.length > 0 && checked.length === ids.length;
 
+  /*
+   * Колонки виртуализируются только на широкой таблице — см. VIRTUAL_FROM.
+   * Ширины берутся оттуда же, откуда их берёт <colgroup>, поэтому окно
+   * считается по тем же пикселям, что видит человек.
+   *
+   * Отсчёт у виртуализатора идёт от левого края таблицы, а колонка
+   * с флажками сдвигает содержимое на PIN_WIDTH — этот сдвиг покрывает
+   * запас: колонка уже 80 пикселей не бывает.
+   */
+  const virtualColumns = ordered.length >= VIRTUAL_FROM;
+  const columnVirtualizer = useVirtualizer({
+    horizontal: true,
+    count: ordered.length,
+    getScrollElement: () => scroller.current,
+    estimateSize: (index) => widthOf(ordered[index]!, index),
+    overscan: 2,
+    enabled: virtualColumns,
+  });
+
+  const shown = columnWindow(
+    ordered.length,
+    pinnedCount,
+    columnVirtualizer.getVirtualItems().map((item) => item.index),
+  );
+
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller.current,
@@ -478,9 +527,12 @@ export function DataGrid({
               /*
                * Последней колонке ширина не задаётся, пока её не задали
                * руками: без неё она растягивается на свободное место,
-               * с ней — слушается человека.
+               * с ней — слушается человека. На широкой таблице ширина
+               * есть у всех: по ней считается окно и распорки.
                */
-              {...(index === ordered.length - 1 && widths?.[column.id] === undefined
+              {...(index === ordered.length - 1 &&
+              !virtualColumns &&
+              widths?.[column.id] === undefined
                 ? {}
                 : { style: { width: widthOf(column, index) } })}
             />
@@ -504,7 +556,7 @@ export function DataGrid({
               </span>
             </th>
 
-            {ordered.map((column, index) => (
+            {columnCells(ordered, shown, (column, index) => (
               <HeaderCell
                 key={column.id}
                 column={column}
@@ -512,7 +564,7 @@ export function DataGrid({
                 sorts={sorts}
                 left={lefts.get(column.id)}
                 lastPinned={index === pinnedCount - 1}
-                last={index === ordered.length - 1}
+                last={!virtualColumns && index === ordered.length - 1}
                 {...(onWidth
                   ? {
                       onResize: (event: ReactPointerEvent) => startResize(event, column, index),
@@ -579,7 +631,7 @@ export function DataGrid({
                   </span>
                 </td>
 
-                {ordered.map((column, columnIndex) => {
+                {columnCells(ordered, shown, (column, columnIndex) => {
                   const isActive = active?.index === index && active.slug === column.slug;
                   const left = lefts.get(column.id);
 
@@ -664,7 +716,7 @@ export function DataGrid({
                 </span>
               </td>
 
-              {ordered.map((column, columnIndex) => {
+              {columnCells(ordered, shown, (column, columnIndex) => {
                 const isActive = activeDraft && active?.slug === column.slug;
                 const left = lefts.get(column.id);
                 const problem = showErrors ? errors.get(column.slug) : undefined;
@@ -804,6 +856,41 @@ export function DataGrid({
       )}
     </div>
   );
+}
+
+/**
+ * Ячейки одного ряда: закреплённые, распорка, видимые, распорка.
+ *
+ * Распорка — одна ячейка на весь пропущенный кусок (colSpan). Ширины
+ * колонок лежат в <colgroup>, поэтому пропущенные всё равно занимают
+ * своё место, и видимые не съезжают влево на пустоту.
+ *
+ * Общая для шапки, строк и черновика: ряды разные, а раскладка одна,
+ * и разъехаться им друг с другом нельзя.
+ */
+function columnCells(
+  ordered: Field[],
+  shown: ColumnWindow,
+  render: (column: Field, index: number) => ReactNode,
+) {
+  return (
+    <>
+      {ordered.slice(0, shown.pinned).map((column, index) => render(column, index))}
+      {shown.before > 0 && <ColSpacer span={shown.before} />}
+      {ordered
+        .slice(shown.from, shown.to)
+        .map((column, index) => render(column, shown.from + index))}
+      {shown.after > 0 && <ColSpacer span={shown.after} />}
+    </>
+  );
+}
+
+/**
+ * Распорка вместо колонок за краем экрана. Границей снизу — как
+ * у обычной ячейки: иначе линия строки прерывалась бы на её месте.
+ */
+function ColSpacer({ span }: { span: number }) {
+  return <td aria-hidden colSpan={span} className={`${cellBase} p-0`} />;
 }
 
 function Spacer({ height, span }: { height: number; span: number }) {
