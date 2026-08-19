@@ -1,55 +1,153 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { applyTheme, useUi } from "@/shared/lib/ui-store";
 import { ProductPreview } from "./ProductPreview";
 
 /** Общий каркас экранов входа и регистрации: форма слева, бренд справа. */
 export function AuthLayout({ children }: { children: ReactNode }) {
+  /*
+   * Вход всегда светлый, какая бы тема ни стояла у человека.
+   *
+   * Тёмная тема — настройка рабочего места, а до входа рабочего места
+   * ещё нет: экран показывают и тому, у кого своих настроек не будет
+   * вовсе (приглашение, восстановление пароля). Панель с окном продукта
+   * тоже нарисована как светлая витрина, и в тёмной теме витрина
+   * выцветает.
+   *
+   * useLayoutEffect, а не useEffect: тема снимается ДО отрисовки, иначе
+   * при входе в тёмной теме экран моргнёт тёмным на кадр. При уходе
+   * возвращается та, что выбрана в настройках.
+   */
+  useLayoutEffect(() => {
+    applyTheme("light");
+    return () => applyTheme(useUi.getState().theme);
+  }, []);
+
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
       <div className="grid place-items-center p-6">{children}</div>
-      <BrandPanel />
+
+      {/* Панель — карточка с полями, а не половина окна: скруглённый край
+          отделяет её от формы сам, без разделительной линии. */}
+      <div className="hidden p-3 lg:block">
+        <BrandPanel />
+      </div>
     </div>
   );
 }
 
 /**
- * Единственное место в продукте с градиентом. Здесь можно: экран без
- * данных, читать нечего, сканировать нечего.
+ * Панель входа: серое поле, окно продукта и волны внизу.
  *
- * Светлый конец градиента — #0075cf, на нём белый текст даёт 4.72:1.
- * Растянуть градиент до самого бренда #45aeff нельзя: там 2.40:1,
- * и контраст текста стал бы диапазоном вместо значения.
+ * Серый фон, а не заливка брендом: на панели живёт окно продукта, и оно
+ * само по себе цветное. Градиент под ним превращал бы белую карточку
+ * в наклейку поверх картинки, а текст над ней — в текст, чей контраст
+ * зависит от того, куда он попал.
+ *
+ * Цвет остаётся внизу, волнами, и это единственное место в продукте
+ * с градиентом: экран без данных, читать нечего, сканировать нечего.
+ * Текст с ними не пересекается — он сверху, на ровном сером.
  */
 function BrandPanel() {
   const { t } = useTranslation();
 
   return (
-    <div
-      aria-hidden
-      className="relative hidden overflow-hidden bg-linear-160 from-brand-gradient-from from-20% via-brand-gradient-via via-55% to-brand-gradient-to lg:block"
-    >
-      {/* Сетка тонких линий — намёк на таблицу, из которой состоит продукт */}
-      <div
-        className="absolute inset-0 opacity-20"
-        style={{
-          backgroundImage:
-            "linear-gradient(#ffffff26 1px, transparent 1px), linear-gradient(90deg, #ffffff26 1px, transparent 1px)",
-          backgroundSize: "36px 36px",
-        }}
-      />
+    /* Самый тёмный нейтральный токен из палитры: панель должна читаться
+       полем, на котором лежит окно, а не второй карточкой рядом с формой.
+       В тёмной теме он и есть тёмно-серый — картинки-заготовки не нужно. */
+    <div aria-hidden className="relative h-full overflow-hidden rounded-3xl bg-surface-active">
+      <Waves />
 
-      <div className="relative flex h-full flex-col justify-center gap-10 p-12">
-        <div className="flex flex-col gap-3 text-white">
-          <p className="text-2xl font-semibold tracking-tight">{t("auth.tagline")}</p>
-          <p className="max-w-sm text-base text-white/70">{t("auth.taglineNote")}</p>
-        </div>
+      <div className="relative flex flex-col gap-3 p-10 xl:p-12">
+        <p className="text-2xl font-semibold tracking-tight text-fg">{t("auth.tagline")}</p>
+        <p className="max-w-sm text-base text-fg-muted">{t("auth.taglineNote")}</p>
+      </div>
 
-        {/* Макет уезжает вправо за край — так читается как окно продукта,
-            а не как картинка, вставленная в панель. */}
-        <div className="-mr-24">
-          <ProductPreview />
-        </div>
+      {/*
+        Окно продукта прижато к нижнему правому углу и уходит за оба
+        края панели. Так оно читается как настоящее окно, которое видно
+        краем, а не как картинка, поставленная в панель по центру:
+        целиком помещённый макет выглядит меньше самого продукта.
+
+        Обрезает его скруглённый край панели — отсюда overflow-hidden
+        выше и отрицательные отступы здесь.
+      */}
+      <div className="absolute -right-16 bottom-24 left-24 top-40 xl:-right-20 xl:left-32">
+        <ProductPreview />
       </div>
     </div>
+  );
+}
+
+/**
+ * Волны внизу панели: три слоя одной брендовой шкалы.
+ *
+ * SVG, а не картинка: цвета берутся из тех же токенов, что и весь
+ * продукт, и тянутся по ширине панели, какой бы она ни была
+ * (`preserveAspectRatio="none"` — форму волны это не портит, у неё нет
+ * деталей, которым важны пропорции).
+ *
+ * Форма не синусоида, а разлив: гребень у левого края, широкая ложбина
+ * посередине и подъём справа. Симметричная волна читается узором,
+ * а несимметричная — жидкостью, и слои перекрываются как разлитая вода,
+ * а не как гофрокартон.
+ *
+ * У каждой волны свой наклон градиента, и это не украшательство:
+ * три одинаково залитые волны сливаются в одно пятно, а разный наклон
+ * даёт каждой свою светлую сторону — и слои читаются слоями.
+ *
+ *   дальняя   слева направо, наклон не меняется
+ *   средняя   сверху вниз
+ *   ближняя   снизу вверх
+ *
+ * Прозрачность нижних слоёв тоже по делу: там, где они накладываются,
+ * цвет смешивается, и граница между волнами получается мягкой сама —
+ * без обводок и теней.
+ */
+function Waves() {
+  return (
+    <svg
+      /* Высота в пикселях, а не долей панели: волна — рисунок, и высота
+         у него своя. От доли она росла бы вместе с экраном, и на большом
+         мониторе полоса занимала бы пол-панели. */
+      className="absolute inset-x-0 bottom-0 h-[360px] w-full"
+      viewBox="0 0 1200 760"
+      preserveAspectRatio="none"
+      fill="none"
+    >
+      <defs>
+        {/* Наклон задаётся координатами: x — по горизонтали, y — по вертикали. */}
+        <linearGradient id="auth-wave-deep" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="var(--color-brand-gradient-from)" />
+          <stop offset="100%" stopColor="var(--color-brand-gradient-to)" />
+        </linearGradient>
+        <linearGradient id="auth-wave-mid" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--color-accent)" />
+          <stop offset="100%" stopColor="var(--color-brand-gradient-via)" />
+        </linearGradient>
+        <linearGradient id="auth-wave-light" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stopColor="var(--color-brand-gradient-to)" />
+          <stop offset="100%" stopColor="var(--color-accent)" />
+        </linearGradient>
+      </defs>
+
+      {/* Дальняя: гребень у левого края, ложбина посередине, подъём справа. */}
+      <path
+        d="M0 64C120 60 208 124 300 212C398 306 520 296 642 282C760 268 830 372 900 400C982 434 1034 340 1122 344C1152 346 1178 354 1200 362V760H0V64Z"
+        fill="url(#auth-wave-deep)"
+        opacity="0.55"
+      />
+      {/* Средняя — самая пологая: её гребень приходится на ложбину дальней. */}
+      <path
+        d="M0 300C150 297 300 284 430 258C522 240 562 216 642 220C732 225 800 318 882 380C962 438 1082 440 1200 422V760H0V300Z"
+        fill="url(#auth-wave-mid)"
+        opacity="0.75"
+      />
+      {/* Ближняя — цвет бренда в полную силу: он и должен остаться в глазу. */}
+      <path
+        d="M0 470C92 458 172 458 252 526C332 592 352 668 452 694C562 722 702 698 822 640C942 582 1082 560 1200 586V760H0V470Z"
+        fill="url(#auth-wave-light)"
+      />
+    </svg>
   );
 }
