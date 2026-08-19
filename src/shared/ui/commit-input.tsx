@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "./input";
 
 /**
@@ -37,11 +37,35 @@ export function CommitInput({
 }) {
   const [text, setText] = useState(value);
 
-  const commit = () => {
+  /*
+   * Последнее отправленное — чтобы одно значение не уехало дважды:
+   * blur и размонтирование случаются подряд, когда поповер закрывают
+   * кликом мимо.
+   */
+  const sent = useRef<string | null>(null);
+  const latest = useRef({ text, value, allowEmpty, onCommit });
+  latest.current = { text, value, allowEmpty, onCommit };
+
+  const push = (): boolean => {
+    const { text, value, allowEmpty, onCommit } = latest.current;
     const next = text.trim();
-    if (next !== value && (next || allowEmpty)) onCommit(next);
-    else if (!next && !allowEmpty) setText(value);
+    if (next === value || (!next && !allowEmpty) || next === sent.current) return false;
+
+    sent.current = next;
+    onCommit(next);
+    return true;
   };
+
+  const commit = () => {
+    if (!push() && !text.trim() && !allowEmpty) setText(value);
+  };
+
+  /*
+   * Набранное уезжает и при размонтировании: закрыть поповер настроек,
+   * пока фокус ещё в поле, — обычное движение, а blur у исчезнувшего
+   * элемента не случается, и правка молча пропадала.
+   */
+  useEffect(() => () => void push(), []);
 
   return (
     <Input
