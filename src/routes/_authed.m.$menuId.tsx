@@ -753,6 +753,7 @@ function MenuPage() {
           {filtersVisible && (
             <FilterBar
               columns={columns}
+              relations={schema.relations}
               language={language}
               filters={filters}
               sorts={sorts}

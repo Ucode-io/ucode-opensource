@@ -191,8 +191,9 @@ function toFilter(value: unknown): Filter | null {
     const first = range["$in"];
 
     if (Array.isArray(first)) {
-      const exact = first[0];
-      return exact === undefined ? null : { op: "is", values: [String(exact)] };
+      // Все значения, а не первое: по связи отбирают несколькими строками.
+      const exact = first.map(String).filter(Boolean);
+      return exact.length ? { op: "is", values: exact } : null;
     }
 
     const gte = range["$gte"];
@@ -225,8 +226,16 @@ function toCondition(filter: Filter): unknown {
     case "contains":
       return first || undefined;
 
-    case "is":
-      return first ? { $in: [first] } : undefined;
+    /*
+     * Значений может быть несколько: у текста это одно точное совпадение,
+     * у связи — несколько выбранных строк. Форма условия у обоих одна,
+     * `$in`, и бэкенд отбирает по ней через `= ANY` со сравнением строк
+     * (object_builder.go:1278) — то есть колонка с uuid ему по силам.
+     */
+    case "is": {
+      const exact = values.filter(Boolean);
+      return exact.length ? { $in: exact } : undefined;
+    }
 
     case "equals":
       // Третьего состояния нет: пока не выбрали, фильтр не заполнен.

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { IconArrowNarrowDown, IconArrowNarrowUp, IconPlus, IconSearch } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { localized, type Field } from "@/features/table";
+import { localized, type Field, type Relation } from "@/features/table";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { Popover } from "@/shared/ui/popover";
@@ -26,6 +26,7 @@ import { SortPanel } from "./SortPanel";
  */
 export function FilterBar({
   columns,
+  relations,
   language,
   filters,
   sorts,
@@ -34,6 +35,11 @@ export function FilterBar({
   onSorts,
 }: {
   columns: Field[];
+  /**
+   * Связи таблицы. Нет их — нет и отбора по связи: выбирать строку
+   * не из чего, пока неизвестно, в какой таблице искать и чем подписать.
+   */
+  relations?: Relation[];
   language: string;
   filters: Filters;
   sorts: Sort[];
@@ -50,9 +56,18 @@ export function FilterBar({
 }) {
   const { t } = useTranslation();
 
-  const filterable = columns.filter(
-    (column) => filterKind(column) !== null && !locked?.has(column.slug),
-  );
+  const byId = new Map((relations ?? []).map((relation) => [relation.id, relation]));
+  const relationOf = (column: Field) =>
+    column.relationId ? byId.get(column.relationId) : undefined;
+
+  const filterable = columns.filter((column) => {
+    const kind = filterKind(column);
+    if (kind === null || locked?.has(column.slug)) return false;
+
+    // Связь без настроек — это ввод, в котором нечего показать и не из
+    // чего выбрать. Такое поле не предлагаем вовсе.
+    return kind !== "relation" || Boolean(relationOf(column)?.toSlug);
+  });
   const byslug = new Map(filterable.map((column) => [column.slug, column]));
   const count = activeFilterCount(filters);
 
@@ -85,6 +100,7 @@ export function FilterBar({
           <FilterChip
             key={slug}
             field={column}
+            relation={relationOf(column)}
             language={language}
             filter={filters[slug]!}
             onChange={(value) => onFilters({ ...filters, [slug]: value })}

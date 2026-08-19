@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { IconChevronDown, IconDots, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { localized, type Field } from "@/features/table";
+import { localized, type Field, type Relation } from "@/features/table";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
+import { useRelationItems } from "../api/relations";
 import { filterKind, kindOfOperator, operatorsFor } from "../model/filter-kind";
 import { isFilterSet, type Filter, type FilterOperator } from "../model/query";
+import { relationLabel } from "../model/relation";
 import { fieldIcon } from "./field-icon";
 
 /**
@@ -21,12 +23,15 @@ import { fieldIcon } from "./field-icon";
  */
 export function FilterChip({
   field,
+  relation,
   language,
   filter,
   onChange,
   onRemove,
 }: {
   field: Field;
+  /** Связь поля — только у полей-связей: из неё берётся, где искать строки. */
+  relation?: Relation | undefined;
   language: string;
   filter: Filter;
   onChange: (filter: Filter) => void;
@@ -108,7 +113,13 @@ export function FilterChip({
           </div>
 
           <div className="border-t border-border pt-1">
-            <Values field={field} language={language} filter={filter} onChange={onChange} />
+            <Values
+              field={field}
+              relation={relation}
+              language={language}
+              filter={filter}
+              onChange={onChange}
+            />
           </div>
         </div>
       )}
@@ -170,9 +181,19 @@ function summary(
   filter: Filter,
   field: Field,
   language: string,
-  t: (key: TranslationKey) => string,
+  // Тот самый t из useTranslation: подпись условия подставляет число,
+  // а своё сужение до «ключ → строка» такой вызов уже не пропускает.
+  t: ReturnType<typeof useTranslation>["t"],
 ): string {
   const values = filter.values.filter(Boolean);
+
+  /*
+   * У связи в значениях лежат guid'ы, и показывать их на чипе незачем:
+   * подпись строки известна только из ответа чужой таблицы, а ради
+   * надписи на чипе запрашивать её — это запрос на каждый чип при
+   * каждой загрузке страницы. Число выбранных строк говорит то же самое.
+   */
+  if (filterKind(field) === "relation") return t("table.filterChosen", { count: values.length });
 
   if (filter.op === "any") {
     const [first, ...rest] = values.map((item) => {
@@ -190,16 +211,27 @@ function summary(
 
 function Values({
   field,
+  relation,
   language,
   filter,
   onChange,
 }: {
   field: Field;
+  relation: Relation | undefined;
   language: string;
   filter: Filter;
   onChange: (filter: Filter) => void;
 }) {
   const setValues = (values: string[]) => onChange({ ...filter, values });
+
+  /*
+   * Связь спрашивается по полю, а не по условию: `is` у неё то же, что
+   * у точного совпадения по тексту, и ввод для guid'ов от ввода для
+   * текста отличает только тип поля.
+   */
+  if (relation && filterKind(field) === "relation") {
+    return <RelationInput relation={relation} values={filter.values} onChange={setValues} />;
+  }
 
   switch (kindOfOperator(filter.op)) {
     case "set":
@@ -268,6 +300,98 @@ function SetInput({
         {!options.length && (
           <p className="px-1 py-2 text-xs text-fg-subtle">{t("table.noOptions")}</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Отбор по связи: строки чужой таблицы, из которых уезжают guid'ы.
+ *
+ * Тот же список, что и в ячейке-связи, — и та же ручка, и тот же ключ
+ * кэша: выбирать строку для отбора и выбирать её для правки — одно
+ * и то же действие над одними и теми же строками.
+ *
+ * Выбранное показано сверху отдельно: найденное списком уезжает из виду
+ * при следующем поиске, а отбор собирают из нескольких строк. Подпись
+ * известна, только пока строка в ответе; чего нет — показываем куском
+ * guid'а, а не выдумываем: условие могло приехать из адреса или из
+ * настроек view, а сама строка — исчезнуть.
+ */
+function RelationInput({
+  relation,
+  values,
+  onChange,
+}: {
+  relation: Relation;
+  values: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  // Запрос отстаёт от ввода на кадр — как в ячейке-связи: иначе каждая
+  // буква уходит в чужую таблицу.
+  const search = useDeferredValue(query);
+
+  const slugs = relation.viewFieldSlugs;
+  const { items } = useRelationItems(relation.toSlug, search);
+
+  // Серверный поиск идёт только по полям, помеченным как искомые, и на
+  // многих таблицах не отсеивает ничего — отсеиваем и здесь, как в ячейке.
+  const needle = search.trim().toLowerCase();
+  const visible = needle
+    ? items.filter((item) => relationLabel(item, slugs).toLowerCase().includes(needle))
+    : items;
+
+  const labels = new Map(
+    items.map((item) => [String(item["guid"] ?? ""), relationLabel(item, slugs)]),
+  );
+
+  const toggle = (guid: string) =>
+    onChange(values.includes(guid) ? values.filter((item) => item !== guid) : [...values, guid]);
+
+  return (
+    <div className="flex flex-col gap-1 p-1">
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {values.map((guid) => (
+            <button
+              key={guid}
+              type="button"
+              onClick={() => toggle(guid)}
+              title={t("cell.remove")}
+              className="max-w-full truncate rounded-full border border-accent bg-accent-subtle px-2 py-0.5 text-xs text-accent-text transition-opacity hover:opacity-70"
+            >
+              {labels.get(guid) || guid.slice(0, 8)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <input
+        autoFocus
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t("cell.searchRelation")}
+        className="h-7 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg"
+      />
+
+      <div className="max-h-64 overflow-y-auto">
+        {visible.map((item) => {
+          const guid = String(item["guid"] ?? "");
+
+          return (
+            <label
+              key={guid}
+              className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1 text-sm transition-colors hover:bg-surface-hover"
+            >
+              <Checkbox checked={values.includes(guid)} onChange={() => toggle(guid)} />
+              <span className="truncate">{relationLabel(item, slugs) || guid.slice(0, 8)}</span>
+            </label>
+          );
+        })}
+
+        {!visible.length && <p className="px-1 py-2 text-xs text-fg-subtle">{t("table.noRows")}</p>}
       </div>
     </div>
   );

@@ -231,6 +231,18 @@ describe("отбор по умолчанию: карта условий ↔ фи
     expect(fromConditions(toConditions(filters))).toEqual(filters);
   });
 
+  /*
+   * Отбор по связи — те же `is` и `$in`, только значений несколько:
+   * guid'ы выбранных строк. Потерять хвост списка значит показать
+   * строки не по тому условию, которое человек видит на чипе.
+   */
+  it("несколько значений условия «равно» переживают круг целиком", () => {
+    const relation: Filters = { author_id: { op: "is", values: ["guid-1", "guid-2"] } };
+
+    expect(toConditions(relation)).toEqual({ author_id: { $in: ["guid-1", "guid-2"] } });
+    expect(fromConditions(toConditions(relation))).toEqual(relation);
+  });
+
   it("незаполненный фильтр в настройку не попадает", () => {
     expect(toConditions({ title: { op: "contains", values: [] } })).toEqual({});
   });

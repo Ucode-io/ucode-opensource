@@ -340,6 +340,7 @@ export function RelationView({
       {filtersOpen && (
         <FilterBar
           columns={columns}
+          relations={schema.relations}
           language={language}
           filters={chips}
           sorts={sorts}
