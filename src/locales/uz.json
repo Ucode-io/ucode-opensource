@@ -111,6 +111,7 @@
   "cell.jsonInvalid": "Bu JSON emas — tuzating yoki bekor qilish uchun Escape bosing",
   "cell.latitude": "Kenglik",
   "cell.longitude": "Uzunlik",
+  "cell.mapUnavailable": "Xarita yuklanmadi — koordinatalarni pastdagi maydonlarga kiriting.",
   "cell.openLink": "Yangi oynada ochish",
   "cell.openMap": "Xaritada ochish",
   "cell.polygonPoints": "Nuqtalar: {{count}}",

@@ -43,6 +43,7 @@ import type { Item } from "../model/types";
 import { cellError } from "../model/validate";
 import { Cell, fileName, optionColor, optionLabel } from "./Cell";
 import { CodeCell } from "./CodeCell";
+import { MapPicker } from "./MapPicker";
 import { PolygonCell } from "./PolygonCell";
 
 /**
@@ -1361,8 +1362,15 @@ function MapEditor({
 
   return (
     <Anchored anchor={anchor} onClose={commit} onCancel={onClose}>
-      <div className={`${card} border-accent w-64 p-1.5`}>
-        <div className="flex gap-1.5">
+      <div className={`${card} border-accent w-80 p-1.5`}>
+        {/* Точка ставится кликом по карте — как в старой админке; поля
+            ввода остаются для точных координат и правят ту же пару. */}
+        <MapPicker
+          point={draft}
+          onPick={(picked) => set({ lat: String(picked.lat), lon: String(picked.lon) })}
+        />
+
+        <div className="mt-1.5 flex gap-1.5">
           <label className="min-w-0 flex-1">
             <span className="mb-0.5 block text-2xs text-fg-muted">{t("cell.latitude")}</span>
             <input

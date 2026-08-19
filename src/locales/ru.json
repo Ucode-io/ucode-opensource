@@ -111,6 +111,7 @@
   "cell.jsonInvalid": "Это не JSON — исправьте или нажмите Escape, чтобы отменить",
   "cell.latitude": "Широта",
   "cell.longitude": "Долгота",
+  "cell.mapUnavailable": "Карта не загрузилась — координаты можно ввести в поля ниже.",
   "cell.openLink": "Открыть в новой вкладке",
   "cell.openMap": "Открыть на карте",
   "cell.polygonPoints": "Точек: {{count}}",
