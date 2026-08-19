@@ -57,9 +57,6 @@ export function Anchored({
   useEffect(() => {
     const cancel = onCancel ?? onClose;
 
-    const onPointerDown = (event: PointerEvent) => {
-      if (!box.current?.contains(event.target as Node)) onClose();
-    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") cancel();
     };
@@ -72,14 +69,12 @@ export function Anchored({
       if (!box.current?.contains(event.target as Node)) onClose();
     };
 
-    document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     // capture: прокрутка внутри таблицы до window не всплывает.
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onClose);
 
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onClose);
@@ -87,27 +82,38 @@ export function Anchored({
   }, [onClose, onCancel]);
 
   return createPortal(
-    <div
-      ref={box}
-      className="fixed z-50"
-      style={{
-        left: placed?.left ?? anchor.left,
-        top: placed?.top ?? anchor.top,
-        // Редактор не уже ячейки: значение не должно переноситься иначе,
-        // чем оно перенесётся после сохранения.
-        minWidth: anchor.width,
-        /*
-         * До замера блок уже в DOM (иначе нечего мерить), но показывать
-         * его на предварительном месте нельзя. Прячется прозрачностью,
-         * а не visibility: скрытый через visibility элемент не принимает
-         * фокус, и autoFocus внутри редактора молча не срабатывал —
-         * ячейка открывалась, а первое нажатие клавиши уходило странице.
-         */
-        opacity: placed ? 1 : 0,
-      }}
-    >
-      {children}
-    </div>,
+    <>
+      {/*
+       * Прозрачная подложка ловит клик мимо. Раньше закрывал глобальный
+       * pointerdown, но следом прилетал click в то, что лежало под
+       * курсором, — и вместо «закрылось» открывался редактор соседнего
+       * поля. Первый клик теперь только закрывает и никуда не проходит.
+       * Колесо над подложкой — намерение прокрутить, оно тоже закрывает.
+       */}
+      <div aria-hidden className="fixed inset-0 z-50" onPointerDown={onClose} onWheel={onClose} />
+
+      <div
+        ref={box}
+        className="fixed z-50"
+        style={{
+          left: placed?.left ?? anchor.left,
+          top: placed?.top ?? anchor.top,
+          // Редактор не уже ячейки: значение не должно переноситься иначе,
+          // чем оно перенесётся после сохранения.
+          minWidth: anchor.width,
+          /*
+           * До замера блок уже в DOM (иначе нечего мерить), но показывать
+           * его на предварительном месте нельзя. Прячется прозрачностью,
+           * а не visibility: скрытый через visibility элемент не принимает
+           * фокус, и autoFocus внутри редактора молча не срабатывал —
+           * ячейка открывалась, а первое нажатие клавиши уходило странице.
+           */
+          opacity: placed ? 1 : 0,
+        }}
+      >
+        {children}
+      </div>
+    </>,
     document.body,
   );
 }

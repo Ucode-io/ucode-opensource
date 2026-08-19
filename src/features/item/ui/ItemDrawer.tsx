@@ -285,22 +285,7 @@ export function ItemDrawer({
    */
   const groups = useMemo(() => groupBySection(rest, sections), [rest, sections]);
 
-  /*
-   * Редактор закрывается по pointerdown мимо (Anchored), а click по
-   * строке того же поля прилетает следом и открывал его обратно: со
-   * стороны это выглядело как «поповер не закрыть, пока не кликнешь
-   * у края карточки». Клик, только что закрывший редактор этого поля,
-   * не открывает его заново.
-   */
-  const justClosed = useRef<{ slug: string; at: number } | null>(null);
-
   const open = (field: Field, element: HTMLElement) => {
-    const closed = justClosed.current;
-    if (closed && closed.slug === field.slug && performance.now() - closed.at < 400) {
-      justClosed.current = null;
-      return;
-    }
-
     // Флажок переключается на месте — как в таблице.
     if (row && guid && onEdit && editorKind(field) === "boolean") {
       onEdit(guid, field.slug, !row[field.slug]);
@@ -606,6 +591,12 @@ export function ItemDrawer({
                         onClick={(event) => open(field, event.currentTarget)}
                         className="flex min-h-8 min-w-0 flex-1 items-center rounded-md px-1.5 py-1 text-left text-sm transition-colors hover:bg-surface-hover"
                       >
+                        {/*
+                         * Длинный текст свёрнут в одну строку с «…»:
+                         * абзац на пять строк растягивает карточку, и
+                         * соседние поля уезжают за экран. Целиком его
+                         * показывает раскрытый редактор — тот же клик.
+                         */}
                         <Cell
                           field={field}
                           row={row}
@@ -613,7 +604,7 @@ export function ItemDrawer({
                           relations={byId}
                           locale={locale}
                           language={language}
-                          wrap
+                          wrap={cellKind(field.type) !== "longtext"}
                         />
                       </button>
                     )}
@@ -648,10 +639,7 @@ export function ItemDrawer({
               if (guid) onEdit?.(guid, active.slug, value);
             }}
             onLink={onLink ? (item) => onLink(active.slug, item) : undefined}
-            onClose={() => {
-              justClosed.current = { slug: active.slug, at: performance.now() };
-              setActive(null);
-            }}
+            onClose={() => setActive(null)}
           />
         )}
       </aside>
