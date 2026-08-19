@@ -43,8 +43,15 @@ function AppShell() {
       */}
       {/* Без сайдбара карточки нет: отступ и скругление слева не от чего
           отделять, и контент занимает экран целиком. */}
+      {/*
+        overflow-clip, а не hidden. Разница не косметическая: `hidden`
+        заводит контейнер прокрутки — без полосы, но прокручиваемый
+        программно. Всплывающее меню, вылезшее за правый край карточки,
+        браузер «показывал» именно так: уводил всю карточку вбок вместе
+        с таблицей, а вернуть её было нечем. `clip` просто обрезает.
+      */}
       <main
-        className={`flex min-w-0 flex-1 flex-col overflow-hidden bg-surface ${
+        className={`flex min-w-0 flex-1 flex-col overflow-clip bg-surface ${
           sidebarCollapsed ? "" : "m-2 rounded-xl border border-border"
         }`}
       >

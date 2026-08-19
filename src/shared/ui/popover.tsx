@@ -23,6 +23,11 @@ export function Popover({
   const [open, setOpen] = useState(false);
   /** Вверх — когда снизу не помещается: у нижних пунктов сайдбара это норма. */
   const [up, setUp] = useState(false);
+  /**
+   * Правым краем к кнопке — когда справа не помещается: у чипов
+   * в панели настроек view это норма, панель и так стоит у края экрана.
+   */
+  const [end, setEnd] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
 
@@ -34,6 +39,7 @@ export function Popover({
   useLayoutEffect(() => {
     if (!open) {
       setUp(false);
+      setEnd(false);
       return;
     }
 
@@ -45,6 +51,14 @@ export function Popover({
     setUp(trigger.bottom + box.height > window.innerHeight && trigger.top > box.height);
 
     /*
+     * То же вбок — но по краю того, кто меню обрежет, а не по краю окна:
+     * контент лежит в карточке с отступом, и меню, влезающее в экран,
+     * всё равно оказывалось бы срезанным её краем.
+     */
+    const bounds = clipBounds(menu.current);
+    setEnd(trigger.left + box.width > bounds.right && trigger.right - box.width > bounds.left);
+
+    /*
      * Меню лежит внутри своего родителя, и если тот прокручивается
      * (список полей в панели настроек, список пунктов в сайдбаре), край
      * прокрутки его обрезает: видно половину строки, и добраться до
@@ -53,8 +67,23 @@ export function Popover({
      *
      * `nearest` подкручивает ровно тот контейнер, который мешает, и
      * ничего не делает, когда меню и так видно целиком.
+     *
+     * Но только по вертикали. Горизонтальную прокрутку браузер применяет
+     * к карточке контента — у неё `overflow-hidden`, а такой контейнер
+     * scrollIntoView всё равно прокручивает: меню у правого края уводило
+     * вбок весь экран вместе с таблицей, и вернуть его было нечем —
+     * полосы прокрутки у скрытого переполнения нет. Запоминаем смещения
+     * предков и возвращаем на место; всё это до кадра, поэтому не мигает.
      */
+    const scrolled: [Element, number][] = [];
+    for (let node = menu.current?.parentElement; node; node = node.parentElement) {
+      // Нули тоже: именно из нуля контейнер и уезжает.
+      scrolled.push([node, node.scrollLeft]);
+    }
+
     menu.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+
+    for (const [node, left] of scrolled) node.scrollLeft = left;
   }, [open]);
 
   useEffect(() => {
@@ -84,7 +113,7 @@ export function Popover({
           ref={menu}
           role="menu"
           className={`absolute z-50 min-w-48 rounded-lg border border-border bg-surface p-1 shadow-popover ${
-            align === "end" ? "right-0" : "left-0"
+            align === "end" || end ? "right-0" : "left-0"
           } ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
         >
           {children(() => setOpen(false))}
@@ -92,6 +121,28 @@ export function Popover({
       )}
     </div>
   );
+}
+
+/**
+ * Границы, за которые меню не пустят: самый узкий из обрезающих предков,
+ * а если таких нет — окно.
+ *
+ * Обрезает не только `overflow: hidden`: `clip`, `auto` и `scroll` — тоже.
+ * Поэтому проверяется «не visible», а не конкретное значение.
+ */
+function clipBounds(element: HTMLElement | null): { left: number; right: number } {
+  let left = 0;
+  let right = window.innerWidth;
+
+  for (let node = element?.parentElement; node; node = node.parentElement) {
+    if (getComputedStyle(node).overflowX === "visible") continue;
+
+    const rect = node.getBoundingClientRect();
+    left = Math.max(left, rect.left);
+    right = Math.min(right, rect.right);
+  }
+
+  return { left, right };
 }
 
 export function PopoverItem({
