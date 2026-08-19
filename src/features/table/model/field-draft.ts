@@ -520,6 +520,32 @@ const DEFAULT_VALUE_TYPES = new Set([
   "PICK_LIST",
 ]);
 
+/**
+ * Типы, у которых `digit_number` — это ДЛИНА генерируемого значения,
+ * а не разрядность последовательности.
+ *
+ * Разница видна в том, когда настройка работает. У INCREMENT_ID число
+ * задаёт верхнюю границу последовательности и учитывается ровно в момент
+ * создания поля; здесь его читают на КАЖДОЙ вставке, поэтому правится
+ * оно и у заведённого поля.
+ */
+export function hasLength(type: string): boolean {
+  return type === "RANDOM_TEXT" || type === "RANDOM_NUMBERS";
+}
+
+/**
+ * Длина генерируемого значения по умолчанию.
+ *
+ * Ноль здесь не «не задано», а поломка: `GenerateRandomString(prefix, 0)`
+ * при пустой приставке возвращает пустую строку, а вызывающий цикл
+ * крутится, пока она пуста (prepareFunctions.go:59) — вставка не падает,
+ * а виснет. Поэтому длина у таких полей отправляется всегда.
+ */
+export const DEFAULT_LENGTH = 6;
+
+/** Больше не влезает в int64, из которого бэкенд берёт диапазон чисел. */
+export const MAX_LENGTH = 18;
+
 export function hasDefaultValue(type: string): boolean {
   return DEFAULT_VALUE_TYPES.has(type);
 }
@@ -641,6 +667,12 @@ export const FIELD_TYPE_GROUPS: FieldTypeGroup[] = [
       // у количеств и курсов их бывает больше двух.
       { type: "FLOAT_NOLIMIT", label: "Float unlimited" },
       { type: "INCREMENT_ID", label: "Increment id" },
+      // Значение выдаёт бэкенд при вставке: случайная строка заданной
+      // длины и uuid. Живы в последнем поколении старой админки
+      // («Generated string» и «UUID»), в отличие от RANDOM_NUMBERS —
+      // тот остался только у полей, заведённых раньше.
+      { type: "RANDOM_TEXT", label: "Generated string" },
+      { type: "RANDOM_UUID", label: "UUID" },
     ],
   },
   {

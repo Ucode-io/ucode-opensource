@@ -783,9 +783,10 @@ function Panel({
  * `draggable` и три обработчика. Ближайшая библиотека тянет за собой
  * сенсоры, коллизии и модификаторы, которым здесь нечего решать.
  *
- * ponytail: мышь и только мышь. Порядок колонок правит админ и раз
- * в полгода; клавиатурная перестановка появится, если об неё
- * действительно споткнутся.
+ * С клавиатуры переставляют теми же стрелками, что и мышью — тянуть:
+ * ручка списка это кнопка, и на ней ↑/↓ двигают колонку на позицию.
+ * Перетаскивание мышью недоступно тому, кто ей не пользуется, а список
+ * колонок — единственное место в панели, где порядок вообще задаётся.
  *
  * Порядок отдаётся целиком и сразу, как и остальные правки панели:
  * список колонок — одно значение, а не набор независимых.
@@ -807,6 +808,19 @@ function ColumnOrder({
   const { t } = useTranslation();
   const [dragged, setDragged] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+
+  /** Колонку на позицию вверх или вниз. Порядок отдаётся целиком. */
+  const move = (key: string, delta: number) => {
+    const keys = shown.map(columnKey);
+    const from = keys.indexOf(key);
+    const to = from + delta;
+    if (from === -1 || to < 0 || to >= keys.length) return;
+
+    const next = [...keys];
+    const [moved] = next.splice(from, 1);
+    if (moved) next.splice(to, 0, moved);
+    onReorder(next);
+  };
 
   const drop = (target: string) => {
     if (dragged && dragged !== target) {
@@ -849,11 +863,20 @@ function ColumnOrder({
             }`}
           >
             {draggable && (
-              <Icon
-                as={IconGripVertical}
-                size={14}
-                className="shrink-0 cursor-grab text-fg-subtle"
-              />
+              <button
+                type="button"
+                aria-label={t("view.moveColumn")}
+                title={t("view.moveColumn")}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                  // Иначе стрелка прокрутит список под панелью.
+                  event.preventDefault();
+                  move(key, event.key === "ArrowUp" ? -1 : 1);
+                }}
+                className="grid size-5 shrink-0 cursor-grab place-items-center rounded text-fg-subtle transition-colors hover:text-fg"
+              >
+                <Icon as={IconGripVertical} size={14} />
+              </button>
             )}
             <Icon as={fieldIcon(field.type)} size={16} className="shrink-0 text-fg-muted" />
             <span className="flex-1 truncate">

@@ -17,12 +17,14 @@ import { LanguageInput } from "@/shared/ui/language-input";
 import { SelectMenu } from "@/shared/ui/select-menu";
 import { isValidSlug, slugify } from "@/shared/lib/slug";
 import {
+  DEFAULT_LENGTH,
   EMPTY_DRAFT,
   FIELD_TYPE_GROUPS,
   MULTILANGUAGE_TYPES,
   STATUS_GROUPS,
   fieldTypeLabel,
   hasDefaultValue,
+  hasLength,
   hasPrefix,
   isValidPattern,
   newDraft,
@@ -624,16 +626,26 @@ export function FieldEditor({
                   </div>
                 )}
 
-                {/* Число цифр учитывается, когда заводится последовательность;
-                    у заведённого поля правка ничего не переписывает задним
-                    числом, поэтому спрашиваем только при создании. */}
-                {draft.type === "INCREMENT_ID" && !editing && (
+                {/*
+                  Одно и то же `digit_number` у двух разных настроек.
+
+                  У INCREMENT_ID это разрядность последовательности:
+                  учитывается, когда заводится сама последовательность,
+                  и у существующего поля правка ничего не переписывает
+                  задним числом — поэтому спрашиваем только при создании.
+
+                  У генерируемых значений это ДЛИНА, и её читают на каждой
+                  вставке: правится и потом.
+                */}
+                {(hasLength(draft.type) || (draft.type === "INCREMENT_ID" && !editing)) && (
                   <label className="flex h-8 items-center gap-2 px-2">
-                    <span className="flex-1 truncate text-sm text-fg">{t("fieldForm.digits")}</span>
+                    <span className="flex-1 truncate text-sm text-fg">
+                      {t(hasLength(draft.type) ? "fieldForm.valueLength" : "fieldForm.digits")}
+                    </span>
                     <input
                       value={draft.digits}
                       inputMode="numeric"
-                      placeholder="9"
+                      placeholder={hasLength(draft.type) ? String(DEFAULT_LENGTH) : "9"}
                       onChange={(event) => patch({ digits: event.target.value.replace(/\D/g, "") })}
                       className="h-6 w-12 rounded-md border border-border-strong bg-surface px-1.5 text-center text-xs tabular-nums text-fg outline-none focus:border-accent"
                     />

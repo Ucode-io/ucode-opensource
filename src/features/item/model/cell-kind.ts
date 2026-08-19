@@ -158,6 +158,8 @@ export function cellKind(type: string): CellKind {
 const COMPUTED = new Set([
   "INCREMENT_ID",
   "INCREMENT_NUMBER",
+  // Случайная строка: её выдаёт бэкенд при вставке, как и номер.
+  "RANDOM_TEXT",
   /*
    * Собирается по шаблону при вставке. Правку бэкенд не перезапишет —
    * шаблон он читает только на создании, — но править её всё равно

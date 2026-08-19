@@ -4,6 +4,7 @@ import { IconPicker } from "@/features/icons";
 import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/input";
+import { slugify } from "@/shared/lib/slug";
 import { LanguageInput } from "@/shared/ui/language-input";
 
 /**
@@ -38,6 +39,12 @@ export function MenuFormDialog({
 }) {
   const { t } = useTranslation();
   const [value, setValue] = useState(initial);
+  /**
+   * Слаг, тронутый руками, из названия больше не переписывается.
+   * У пункта, который открыли править, он тронут с самого начала:
+   * имя таблицы в базе задаётся один раз.
+   */
+  const [slugTouched, setSlugTouched] = useState(Boolean(initial.slug));
   /*
    * Языки ДАННЫХ проекта, а не локали интерфейса: подпись пункта живёт
    * в attributes.label_<код языка проекта>, теми же ключами, что подписи
@@ -94,7 +101,23 @@ export function MenuFormDialog({
             values={value.labels}
             label={t("menuForm.label")}
             onChange={(code, label) =>
-              setValue((v) => ({ ...v, labels: { ...v.labels, [code]: label } }))
+              setValue((v) => ({
+                ...v,
+                labels: { ...v.labels, [code]: label },
+                /*
+                 * Слаг подставляется из названия — с транслитерацией:
+                 * названия в проектах русские и узбекские, а слаг
+                 * становится ИМЕНЕМ ТАБЛИЦЫ в SQL. Раньше это поле
+                 * оставалось пустым, и латиницу набирали руками
+                 * на каждой таблице.
+                 *
+                 * Берётся первый язык, на котором что-то написано:
+                 * набирают обычно один, а какой именно — дело проекта.
+                 */
+                ...(needsSlug && !slugTouched
+                  ? { slug: slugify(firstLabel({ ...v.labels, [code]: label })) }
+                  : {}),
+              }))
             }
           />
         </div>
@@ -110,7 +133,10 @@ export function MenuFormDialog({
               required
               placeholder="orders"
               value={value.slug}
-              onChange={(event) => setValue((v) => ({ ...v, slug: event.target.value }))}
+              onChange={(event) => {
+                setSlugTouched(true);
+                setValue((v) => ({ ...v, slug: event.target.value }));
+              }}
             />
           </Field>
         )}
@@ -157,12 +183,16 @@ export function MenuFormDialog({
 }
 
 /**
- * Слаг становится именем таблицы в SQL — правит его только человек.
- * Автоподстановка из названия здесь бесполезна: названия у проектов
- * русские, а слаг обязан быть латиницей.
- * ponytail: если понадобится, транслитерация добавляется одним хелпером.
+ * Слаг становится именем таблицы в SQL, поэтому проверяется тем же
+ * правилом, что и слаг поля: латиница, цифры и подчёркивание, первая
+ * буква не цифра.
  */
 const SLUG = /^[a-z][a-z0-9_]*$/;
+
+/** Название на первом заполненном языке: из него и получается слаг. */
+function firstLabel(labels: Record<string, string>): string {
+  return Object.values(labels).find((label) => label.trim()) ?? "";
+}
 
 /**
  * Разрешаем только http и https. Пункт меню рисуется как <a href={…}>,

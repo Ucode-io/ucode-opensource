@@ -6,7 +6,10 @@ import { keys } from "@/shared/lib/query-keys";
 import { reportError, toast } from "@/shared/lib/toast";
 import type { Field } from "../model/types";
 import {
+  DEFAULT_LENGTH,
+  MAX_LENGTH,
   hasDefaultValue,
+  hasLength,
   hasMapSettings,
   hasPhotoSettings,
   hasPrefix,
@@ -233,6 +236,12 @@ function toColumnSettings(draft: FieldDraft): Record<string, unknown> {
  * бэкенд приводит его через cast.ToInt, но строку «08» приведёт к 8,
  * а пустую — к нулю, что значит «девять цифр».
  */
+/** Длина в границах, которые бэкенд умеет: пустое и мусор — к умолчанию. */
+function lengthOf(digits: number): number {
+  if (!Number.isInteger(digits) || digits < 1) return DEFAULT_LENGTH;
+  return Math.min(digits, MAX_LENGTH);
+}
+
 function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
   const digits = Number(draft.digits.trim());
 
@@ -298,9 +307,22 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
     ...(hasScannerSettings(draft.type)
       ? { pressEnter: draft.pressEnter, ...numeric("length", draft.length) }
       : {}),
+    /*
+     * Разрядность последовательности INCREMENT_ID: учитывается в момент,
+     * когда поле заводится, поэтому неверное число просто не отправляем —
+     * бэкенд возьмёт своё (девять).
+     */
     ...(draft.type === "INCREMENT_ID" && Number.isInteger(digits) && digits > 0 && digits < 10
       ? { digit_number: digits }
       : {}),
+    /*
+     * Длина генерируемого значения — наоборот, отправляется ВСЕГДА
+     * и никогда нулём. Ноль здесь вешает вставку: цикл в
+     * prepareFunctions.go:59 крутится, пока сгенерированная строка
+     * пуста, а пустой она при нулевой длине будет всегда
+     * (см. docs/backend-notes.md).
+     */
+    ...(hasLength(draft.type) ? { digit_number: lengthOf(digits) } : {}),
   };
 }
 

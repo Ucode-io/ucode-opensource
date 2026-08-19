@@ -105,7 +105,7 @@ test("в список создаваемых типов не попадает т
   const types = new Set(FIELD_TYPE_GROUPS.flatMap((group) => group.types.map((item) => item.type)));
 
   // Живые в последнем поколении — предлагаем.
-  for (const type of ["PICK_LIST", "TEXT", "QR", "FLOAT_NOLIMIT"]) {
+  for (const type of ["PICK_LIST", "TEXT", "QR", "FLOAT_NOLIMIT", "RANDOM_TEXT", "RANDOM_UUID"]) {
     expect(types.has(type)).toBe(true);
   }
 

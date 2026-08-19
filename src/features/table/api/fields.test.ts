@@ -345,3 +345,37 @@ test("настройки типа уходят числами и только с
 
   expect(scanner.attributes).toMatchObject({ pressEnter: true, length: 13 });
 });
+
+test("длина генерируемого значения отправляется всегда и никогда нулём", () => {
+  // Ноль вешает вставку: цикл в prepareFunctions.go:59 ждёт непустую
+  // строку, а при нулевой длине она пуста всегда.
+  const empty = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Код", slug: "kod", type: "RANDOM_TEXT" },
+    AT,
+  );
+  expect(empty.attributes).toMatchObject({ digit_number: 6 });
+
+  const set = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Код", slug: "kod", type: "RANDOM_TEXT", digits: "12" },
+    AT,
+  );
+  expect(set.attributes).toMatchObject({ digit_number: 12 });
+
+  // Длиннее int64 бэкенд не соберёт — обрезаем до того, что он умеет.
+  const huge = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Код", slug: "kod", type: "RANDOM_TEXT", digits: "40" },
+    AT,
+  );
+  expect(huge.attributes).toMatchObject({ digit_number: 18 });
+
+  /*
+   * У INCREMENT_ID то же имя ключа значит другое — разрядность
+   * последовательности, и она учитывается один раз, при создании.
+   * Не задана — не отправляем: бэкенд возьмёт свои девять.
+   */
+  const increment = toCreateBody(
+    { ...EMPTY_DRAFT, label: "Номер", slug: "nomer", type: "INCREMENT_ID" },
+    AT,
+  );
+  expect(increment.attributes).not.toHaveProperty("digit_number");
+});

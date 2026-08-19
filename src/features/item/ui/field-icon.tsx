@@ -74,6 +74,7 @@ const BY_TYPE: Record<string, TablerIcon> = {
   INTERNATION_PHONE: IconPhone,
   UUID: IconId,
   RANDOM_UUID: IconId,
+  RANDOM_TEXT: IconId,
   PRIMARY_KEY: IconId,
   INCREMENT_ID: IconId,
   INCREMENT_NUMBER: IconId,
