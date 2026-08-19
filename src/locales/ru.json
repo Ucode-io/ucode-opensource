@@ -468,6 +468,7 @@
   "theme.dark": "Тёмная",
   "theme.light": "Светлая",
   "theme.system": "Системная",
+  "tree.addChild": "Добавить дочернюю запись",
   "tree.collapse": "Свернуть",
   "tree.expand": "Раскрыть",
   "view.addParam": "Добавить параметр",

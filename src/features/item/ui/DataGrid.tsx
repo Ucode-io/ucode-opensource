@@ -223,6 +223,8 @@ export function DataGrid({
         meta: ReadonlyMap<string, TreeMeta>;
         expanded: ReadonlySet<string>;
         onToggle: (guid: string) => void;
+        /** Завести дочернюю строку. Нет — кнопки у строк нет. */
+        onAddChild?: ((guid: string) => void) | undefined;
       }
     | undefined;
   relations: Relation[];
@@ -322,18 +324,9 @@ export function DataGrid({
       return;
     }
 
-    /*
-     * Сопровождающая запись связи (`<слаг>_data`) остаётся на экране,
-     * но не уезжает: это не колонка таблицы, а то, что бэкенд дописывает
-     * к ответу. Вставка по несуществующей колонке — 500.
-     */
-    const values: Item = { ...draft };
-    for (const column of columns) {
-      if (editorKind(column) === "relation") delete values[relationDataKey(column.slug)];
-    }
-
     setActive(null);
-    onCreate(values, () => setDraft(null));
+    // `<слаг>_data` из черновика отбрасывает useCreateItem: таких колонок нет.
+    onCreate(draft, () => setDraft(null));
   };
 
   // Связи ищутся по id на каждой ячейке-ссылке — держим индексом.
@@ -785,11 +778,24 @@ export function DataGrid({
                   );
                 })}
 
-                {/* Раскрыть строку. Кнопка появляется по наведению:
-                    значок в каждой строке — рябь на весь экран. */}
+                {/* Раскрыть строку и — в дереве — завести дочернюю.
+                    Кнопки появляются по наведению: значок в каждой
+                    строке — рябь на весь экран. */}
                 <td className={`${pinCell} ${pinRight} ${pinBg}`}>
-                  {onOpenRow && (
-                    <span className="grid h-full place-items-center">
+                  <span className="flex h-full items-center justify-center gap-0.5">
+                    {tree?.onAddChild && (
+                      <button
+                        type="button"
+                        onClick={() => tree.onAddChild?.(id)}
+                        aria-label={t("tree.addChild")}
+                        title={t("tree.addChild")}
+                        className="hidden size-6 place-items-center rounded-md text-fg-subtle transition-colors group-hover/row:grid hover:bg-surface-active hover:text-fg"
+                      >
+                        <Icon as={IconPlus} size={14} />
+                      </button>
+                    )}
+
+                    {onOpenRow && (
                       <button
                         type="button"
                         onClick={() => onOpenRow(id)}
@@ -799,8 +805,8 @@ export function DataGrid({
                       >
                         <Icon as={IconArrowsDiagonal} size={14} />
                       </button>
-                    </span>
-                  )}
+                    )}
+                  </span>
                 </td>
               </tr>
             );

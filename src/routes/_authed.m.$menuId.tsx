@@ -32,6 +32,7 @@ import {
   filtersSchema,
   fromConditions,
   parseFilters,
+  relationDataKey,
   rowErrors,
   toConditions,
   type Filters,
@@ -852,6 +853,25 @@ function MenuPage() {
               ? {
                   onEdit: (guid: string, slug: string, value: unknown) =>
                     update.mutate({ guid, slug, value }),
+                }
+              : {})}
+            {...(can.write
+              ? {
+                  /*
+                   * «Дочерняя запись» — та же карточка создания, но
+                   * родитель уже выбран: значение в колонку-ссылку,
+                   * сама строка — рядом (`<слаг>_data`), из неё ячейка
+                   * берёт подпись. Наружу `_data` не уезжает — его
+                   * отбрасывает useCreateItem.
+                   */
+                  onAddChild: (parent: Item) => {
+                    setShowErrors(false);
+                    setDraft({
+                      ...blankItem(drawerColumns),
+                      [`${view.tableSlug}_id`]: parent.guid ?? null,
+                      [relationDataKey(`${view.tableSlug}_id`)]: parent,
+                    });
+                  },
                 }
               : {})}
             {...(can.addField

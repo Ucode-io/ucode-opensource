@@ -468,6 +468,7 @@
   "theme.dark": "Dark",
   "theme.light": "Light",
   "theme.system": "System",
+  "tree.addChild": "Add a child record",
   "tree.collapse": "Collapse",
   "tree.expand": "Expand",
   "view.addParam": "Add parameter",

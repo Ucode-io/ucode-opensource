@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { Field, Relation } from "@/features/table";
 import { useTreeChildren } from "../api/tree";
 import { flattenTree } from "../model/tree";
+import type { Item } from "../model/types";
 import type { ColumnActions } from "./ColumnMenu";
 import { DataGrid, GridSkeleton } from "./DataGrid";
 
@@ -31,6 +32,7 @@ export function TreeGrid({
   onSelect,
   onOpenRow,
   onEdit,
+  onAddChild,
   onAddField,
   columnActions,
 }: {
@@ -46,6 +48,8 @@ export function TreeGrid({
   onSelect: (next: Set<string>) => void;
   onOpenRow?: (guid: string) => void;
   onEdit?: (guid: string, slug: string, value: unknown) => void;
+  /** Завести дочернюю запись под строкой. Нет — кнопки у строк нет. */
+  onAddChild?: (parent: Item) => void;
   onAddField?: (anchor: DOMRect) => void;
   columnActions?: ColumnActions;
 }) {
@@ -65,6 +69,19 @@ export function TreeGrid({
       if (!next.delete(guid)) next.add(guid);
       return next;
     });
+
+  /*
+   * «Дочерняя запись» сразу раскрывает родителя — так делал и старый
+   * код (createChildTree): созданный ребёнок должен появиться на глазах,
+   * а не спрятаться под свёрнутым узлом.
+   */
+  const addChild = (guid: string) => {
+    const parent = rows.find((row) => row.guid === guid);
+    if (!parent) return;
+
+    setExpanded((prev) => new Set(prev).add(guid));
+    onAddChild?.(parent);
+  };
 
   if (isLoading) return <GridSkeleton columns={columns.length} />;
 
@@ -93,7 +110,7 @@ export function TreeGrid({
       widths={widths}
       onWidth={onWidth}
       rows={rows}
-      tree={{ meta, expanded, onToggle: toggle }}
+      tree={{ meta, expanded, onToggle: toggle, ...(onAddChild ? { onAddChild: addChild } : {}) }}
       relations={relations}
       locale={locale}
       language={language}

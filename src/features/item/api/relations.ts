@@ -52,7 +52,18 @@ export function useCreateItem(tableSlug: string | undefined) {
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: (values: Item) => api.post<unknown>(`/v2/items/${slug}`, { data: values }),
+    /*
+     * Сопровождающие записи связей (`<слаг>_data`) отбрасываются здесь,
+     * один раз на всех вызывающих: это не колонки, а то, что бэкенд
+     * дописывает к ответу, и вставка по такому ключу — 500. В черновике
+     * они лежат затем, чтобы ячейка-связь показывала подпись, а не uuid.
+     */
+    mutationFn: (values: Item) =>
+      api.post<unknown>(`/v2/items/${slug}`, {
+        data: Object.fromEntries(
+          Object.entries(values).filter(([key]) => !key.endsWith("_data")),
+        ),
+      }),
     onError: (error) => reportError(error, "common.createFailed"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.items.all }),
   });
