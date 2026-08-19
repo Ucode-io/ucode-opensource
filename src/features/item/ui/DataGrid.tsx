@@ -268,6 +268,8 @@ export function DataGrid({
   const scroller = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<Active | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  /** Какую ячейку только что закрыл клик мимо — см. open(). */
+  const justClosed = useRef<{ index: number; slug: string; at: number } | null>(null);
 
   /**
    * Черновик новой строки — та же строка таблицы, только её ещё нет
@@ -481,6 +483,22 @@ export function DataGrid({
    * открывать меню незачем; остальное раскрывается поверх таблицы.
    */
   const open = (index: number, field: Field, element: HTMLElement) => {
+    /*
+     * Клик, только что закрывший редактор этой же ячейки (pointerdown
+     * мимо — см. Anchored), не открывает его заново: иначе по раскрытой
+     * ячейке нельзя кликнуть, чтобы закрыть, — она лишь мигает.
+     */
+    const closed = justClosed.current;
+    if (
+      closed &&
+      closed.index === index &&
+      closed.slug === field.slug &&
+      performance.now() - closed.at < 400
+    ) {
+      justClosed.current = null;
+      return;
+    }
+
     const row = index === DRAFT ? draft : rows[index];
     const guid = row?.guid;
     const boolean = editorKind(field) === "boolean";
@@ -709,16 +727,35 @@ export function DataGrid({
             const isSelected = selected.has(id);
 
             /*
+             * Раскрытое поддерево подкрашивается: без фона не видно,
+             * где кончаются дети раскрытого узла и начинаются соседние
+             * корни, — отступ первой колонки уезжает за край экрана
+             * вместе с прокруткой вбок.
+             */
+            const info = tree?.meta.get(id);
+            const inSubtree = Boolean(tree && info && (info.depth > 0 || tree.expanded.has(id)));
+
+            /*
              * Фон отмеченной строки задаётся и на закреплённых ячейках:
              * у них собственный непрозрачный фон, и подсветка строки
              * из-под них не видна.
              */
-            const pinBg = isSelected ? "bg-accent-subtle" : "bg-surface";
+            const pinBg = isSelected
+              ? "bg-accent-subtle"
+              : inSubtree
+                ? "bg-surface-hover"
+                : "bg-surface";
 
             return (
               <tr
                 key={id}
-                className={`group/row ${isSelected ? "bg-accent-subtle" : "hover:bg-surface-hover"}`}
+                className={`group/row ${
+                  isSelected
+                    ? "bg-accent-subtle"
+                    : inSubtree
+                      ? "bg-surface-hover"
+                      : "hover:bg-surface-hover"
+                }`}
               >
                 <td className={`${pinCell} ${pinLeft} ${pinBg}`}>
                   <span className="grid h-full place-items-center">
@@ -970,7 +1007,10 @@ export function DataGrid({
                   })
               : undefined
           }
-          onClose={() => setActive(null)}
+          onClose={() => {
+            justClosed.current = { index: active.index, slug: active.slug, at: performance.now() };
+            setActive(null);
+          }}
         />
       )}
     </div>
