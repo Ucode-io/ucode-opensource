@@ -234,6 +234,24 @@ function MenuPage() {
   );
 
   /*
+   * Колонка группировки (attributes.group_by_columns). Настройка хранит
+   * ключ колонки — id поля или id связи, — а таблице нужна сама колонка
+   * с активным языком: у мультиязычного поля группа считается по тому
+   * варианту, который показан.
+   */
+  const groupColumn = useMemo(() => {
+    if (!view?.groupById) return undefined;
+
+    const field = viewFields.find(
+      (item) => item.id === view.groupById || item.relationId === view.groupById,
+    );
+    if (!field) return undefined;
+
+    const slug = localizeSlug(field.slug, viewFields, codes, language);
+    return columns.find((item) => item.slug === slug);
+  }, [view?.groupById, viewFields, codes, language, columns]);
+
+  /*
    * Вкладки связей в карточке — это view пункта меню с `is_relation_view`
    * (см. features/view/model/relation-tabs). Того же списка, что и вкладки
    * экрана: второго запроса не нужно.
@@ -317,6 +335,21 @@ function MenuPage() {
       })),
     [search.sort, viewFields, codes, language],
   );
+
+  /*
+   * С группировкой поле группы сортируется первым — иначе одинаковые
+   * значения не идут подряд и групп не собрать. Своя сортировка человека
+   * по этому же полю задаёт направление, остальные работают внутри групп.
+   */
+  const querySorts = useMemo(() => {
+    if (!groupColumn) return sorts;
+
+    const own = sorts.find((sort) => sort.field === groupColumn.slug);
+    return [
+      own ?? { field: groupColumn.slug, direction: "asc" as const },
+      ...sorts.filter((sort) => sort.field !== groupColumn.slug),
+    ];
+  }, [groupColumn, sorts]);
 
   /*
    * Фильтры в адресе отсутствуют — берём набор, предложенный админом
@@ -441,7 +474,7 @@ function MenuPage() {
     limit,
     page: search.page,
     infinite,
-    sorts,
+    sorts: querySorts,
     filters: effectiveFilters,
     search: search.search,
   });
@@ -677,6 +710,7 @@ function MenuPage() {
                   onPdfUrl: (pdfUrl) => updateView.mutate({ view, pdfUrl }),
                   onInfiniteScroll: (infiniteScroll) =>
                     updateView.mutate({ view, infiniteScroll }),
+                  onGroupBy: (groupBy) => updateView.mutate({ view, groupBy }),
                   onEditField: (field, anchor) => setFieldPanel({ field, anchor }),
                   // Тот же диалог подтверждения, что и у меню колонки:
                   // удаление поля сносит его во всех view вместе с данными.
@@ -813,6 +847,7 @@ function MenuPage() {
                 ? { onWidth: (fieldId: string, width: number) => setColumnWidth(view.tableSlug, fieldId, width) }
                 : {})}
               rows={rows.rows}
+              group={groupColumn}
               relations={schema.relations}
               locale={i18n.language}
               language={language}

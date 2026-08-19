@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -10,6 +11,8 @@ import {
   IconArrowNarrowUp,
   IconArrowsDiagonal,
   IconCheck,
+  IconChevronDown,
+  IconChevronRight,
   IconDotsVertical,
   IconPlus,
   IconTablePlus,
@@ -24,6 +27,7 @@ import { Icon } from "@/shared/ui/icon";
 import { editorKind } from "../model/cell-kind";
 import { blankItem } from "../model/cell-value";
 import { columnWindow, type ColumnWindow } from "../model/column-window";
+import { groupEntries, visibleEntries } from "../model/group";
 import type { Sort, SortDirection } from "../model/query";
 import { relationDataKey, type Item } from "../model/types";
 import { rowErrors, type CellError } from "../model/validate";
@@ -163,6 +167,7 @@ export function DataGrid({
   widths,
   onWidth,
   rows,
+  group,
   relations,
   locale,
   language,
@@ -200,6 +205,12 @@ export function DataGrid({
    */
   onWidth?: ((fieldId: string, width: number) => void) | undefined;
   rows: Item[];
+  /**
+   * Колонка группировки. Строки уже приходят отсортированными по ней
+   * (это забота запроса), таблица лишь вставляет заголовок на каждой
+   * смене значения и умеет сворачивать группу. Не задана — плоский список.
+   */
+  group?: Field | undefined;
   relations: Relation[];
   /** Локаль интерфейса: форматы дат и чисел. */
   locale: string;
@@ -362,6 +373,27 @@ export function DataGrid({
   const allChecked = ids.length > 0 && checked.length === ids.length;
 
   /*
+   * Свёрнутые группы. Живут в таблице, а не в адресе: свёрнутость — как
+   * прокрутка, состояние взгляда, а не экрана, который пересылают ссылкой.
+   */
+  const [folded, setFolded] = useState<Set<string>>(() => new Set());
+  const toggleGroup = (key: string) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+
+  /** Записи на экране: строки вперемешку с заголовками групп.
+      useMemo не для красоты: виртуализатор рендерит на каждый кадр
+      прокрутки, а это O(строк). */
+  const groupSlug = group?.slug;
+  const entries = useMemo(
+    () => (groupSlug ? visibleEntries(groupEntries(rows, groupSlug), folded) : null),
+    [rows, groupSlug, folded],
+  );
+
+  /*
    * Колонки виртуализируются только на широкой таблице — см. VIRTUAL_FROM.
    * Ширины берутся оттуда же, откуда их берёт <colgroup>, поэтому окно
    * считается по тем же пикселям, что видит человек.
@@ -387,7 +419,7 @@ export function DataGrid({
   );
 
   const virtualizer = useVirtualizer({
-    count: rows.length,
+    count: entries ? entries.length : rows.length,
     getScrollElement: () => scroller.current,
     estimateSize: () => ROW_HEIGHT,
     // Запас сверху и снизу: без него при быстрой прокрутке видно пустоту
@@ -412,9 +444,10 @@ export function DataGrid({
    * пока предыдущий запрос не вернулся.
    */
   const lastIndex = last?.index ?? -1;
+  const total = entries ? entries.length : rows.length;
   useEffect(() => {
-    if (onEndReached && lastIndex >= rows.length - END_GAP) onEndReached();
-  }, [onEndReached, lastIndex, rows.length]);
+    if (onEndReached && lastIndex >= total - END_GAP) onEndReached();
+  }, [onEndReached, lastIndex, total]);
 
   /** Столбцов в строке — для распорок, у которых своих ячеек нет. */
   const span = columns.length + 2;
@@ -604,7 +637,66 @@ export function DataGrid({
           {before > 0 && <Spacer height={before} span={span} />}
 
           {visible.map((virtual) => {
-            const index = virtual.index;
+            const entry = entries?.[virtual.index];
+
+            /*
+             * Заголовок группы — строка на всю ширину. Значение рисует
+             * та же ячейка, что и в теле таблицы: у статуса это цветная
+             * плашка, у связи — подпись по полям показа, и рисовать их
+             * вторым способом значило бы однажды разойтись с колонкой.
+             */
+            if (entry && entry.kind === "header" && group) {
+              const headerRow = rows[entry.row]!;
+              const value = headerRow[group.slug];
+              const empty =
+                value === null ||
+                value === undefined ||
+                value === "" ||
+                (Array.isArray(value) && !value.length);
+              const isFolded = folded.has(entry.key);
+
+              return (
+                <tr key={`group:${entry.row}`} className="bg-surface-hover">
+                  <td colSpan={span} className={`${cellBase} p-0`}>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(entry.key)}
+                      aria-expanded={!isFolded}
+                      /* Липнет к левому краю: у таблицы шире экрана
+                         заголовок иначе уезжает вместе с прокруткой вбок. */
+                      className="sticky left-0 flex h-row max-w-full items-center gap-1.5 px-2 text-sm"
+                    >
+                      <Icon
+                        as={isFolded ? IconChevronRight : IconChevronDown}
+                        size={14}
+                        className="shrink-0 text-fg-muted"
+                      />
+
+                      <span className="flex min-w-0 items-center font-medium">
+                        {empty ? (
+                          <span className="text-fg-subtle">—</span>
+                        ) : (
+                          <Cell
+                            field={group}
+                            row={headerRow}
+                            tableSlug={tableSlug}
+                            relations={byId}
+                            locale={locale}
+                            language={language}
+                          />
+                        )}
+                      </span>
+
+                      {/* Счёт загруженного, а не всей группы: остальная
+                          её часть ещё на сервере. */}
+                      <span className="shrink-0 text-xs text-fg-subtle">{entry.count}</span>
+                    </button>
+                  </td>
+                </tr>
+              );
+            }
+
+            const index = entry ? entry.row : virtual.index;
             const row = rows[index]!;
             const id = ids[index]!;
             const isSelected = selected.has(id);

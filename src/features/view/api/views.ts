@@ -257,6 +257,8 @@ export type ViewEdit = {
   pdfUrl?: string;
   /** Догружать строки прокруткой вместо номеров страниц. */
   infiniteScroll?: boolean;
+  /** Поле группировки. Пустая строка — снять группировку. */
+  groupBy?: string;
 };
 
 /**
@@ -285,6 +287,7 @@ export function toUpdateBody({
   objectUrl,
   pdfUrl,
   infiniteScroll,
+  groupBy,
 }: ViewEdit): Record<string, unknown> {
   const raw = view.raw;
   const trimmed = name?.trim();
@@ -317,6 +320,11 @@ export function toUpdateBody({
     ...(objectUrl === undefined ? {} : { url_object: toUrlAttribute(objectUrl) }),
     ...(pdfUrl === undefined ? {} : { pdf_url: pdfUrl.trim() }),
     ...(infiniteScroll === undefined ? {} : { infinite_scroll: infiniteScroll }),
+    /*
+     * Списком из одного — так настройку хранит и читает старая админка
+     * (attributes.group_by_columns). Уровень у нас один, см. View.groupById.
+     */
+    ...(groupBy === undefined ? {} : { group_by_columns: groupBy ? [groupBy] : [] }),
   };
 
   return {
@@ -411,6 +419,7 @@ export function toView(dto: ViewDto): View {
     objectUrl: toUrlTemplate(dto.attributes?.["url_object"]),
     pdfUrl: typeof dto.attributes?.["pdf_url"] === "string" ? dto.attributes["pdf_url"] : "",
     infiniteScroll: dto.attributes?.["infinite_scroll"] === true,
+    groupById: toGroupById(dto.attributes),
     raw: { ...dto },
   };
 }
@@ -428,6 +437,13 @@ function toFixedColumnIds(attributes: Record<string, unknown> | undefined): stri
   return Object.entries(fixed as Record<string, unknown>)
     .filter(([, value]) => Boolean(value))
     .map(([id]) => id);
+}
+
+/** Первый элемент group_by_columns: группируем по одному полю. */
+function toGroupById(attributes: Record<string, unknown> | undefined): string {
+  const list = attributes?.["group_by_columns"];
+  const first = Array.isArray(list) ? list[0] : undefined;
+  return typeof first === "string" ? first : "";
 }
 
 function toDefaultFilters(attributes: Record<string, unknown> | undefined): Record<string, unknown> {

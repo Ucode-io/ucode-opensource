@@ -37,6 +37,7 @@ const view = (columnIds: string[]): View => ({
   quickFilterIds: [],
   columnIds,
   fixedColumnIds: [],
+  groupById: "",
   defaultFilters: {},
   navigate: EMPTY_URL_TEMPLATE,
   objectUrl: EMPTY_URL_TEMPLATE,

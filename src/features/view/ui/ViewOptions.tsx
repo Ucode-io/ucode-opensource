@@ -18,6 +18,7 @@ import {
   IconPin,
   IconPinnedOff,
   IconSearch,
+  IconStack2,
   IconTable,
   IconTrash,
   IconX,
@@ -64,10 +65,10 @@ import { viewIcon } from "./view-icon";
  *
  * Чего здесь нет и почему:
  *
- *   Группировка (`group_by_columns`) и группировка вкладками
- *   (`group_fields`) — таблица не умеет ни того, ни другого; настройки
- *   при этом не теряются, они лежат в `raw` и уходят обратно нетронутыми.
+ *   Группировка вкладками (`group_fields`) — таблица её не умеет;
+ *   настройка не теряется, лежит в `raw` и уходит обратно нетронутой.
  *   Переключатель, который ничего не меняет, хуже отсутствующего.
+ *   Группировка строк (`group_by_columns`) — есть, страницей «Группировка».
  *
  *   Настройки самой ТАБЛИЦЫ (в старой админке они звались «General»)
  *   лежат отдельной страницей в секции «Данные», за строкой «Таблица»:
@@ -120,6 +121,8 @@ export type ViewOptionsHandlers = {
    * — нет и переключателя: у вкладки связи свой подвал.
    */
   onInfiniteScroll?: (enabled: boolean) => void;
+  /** Поле группировки строк. Пустая строка — без группировки. */
+  onGroupBy?: (fieldId: string) => void;
   /** Настроить поле: открывает ту же панель, что и меню колонки. */
   onEditField?: (field: Field, anchor: DOMRect) => void;
   /** Удалить поле из ТАБЛИЦЫ, а не из view. Спрашивает подтверждение вызывающий. */
@@ -213,6 +216,7 @@ type PanelPage =
   | "defaultFilters"
   | "quickFilters"
   | "fixed"
+  | "group"
   | "fields"
   | "table"
   | "navigation"
@@ -476,6 +480,47 @@ function Panel({
     );
   }
 
+  if (page === "group") {
+    /*
+     * Поле группировки — одно из ПОКАЗАННЫХ: заголовок группы рисует
+     * та же ячейка, что и колонку, а группировка по скрытому полю
+     * показывала бы группы без колонки, из которой они растут.
+     *
+     * Языковые варианты сведены до одного, как на странице колонок:
+     * группа по «Название (en)» и группа по «Название (cyr)» — это
+     * одна настройка, а не три.
+     */
+    const codes = languages.map((item) => item.code);
+    const groupable = matching(collapseLanguages(shown, codes, language), query, language);
+
+    return (
+      <Subpage title={t("view.groupBy")} busy={busy} onBack={back} hint={t("view.groupByHint")}>
+        <FieldSearch value={query} onChange={setQuery} />
+
+        <List>
+          <PopoverItem
+            active={!view.groupById}
+            icon={<Icon as={IconX} size={16} className="shrink-0 text-fg-subtle" />}
+            onClick={() => handlers.onGroupBy?.("")}
+          >
+            {t("view.groupNone")}
+          </PopoverItem>
+
+          {groupable.map((field) => (
+            <PopoverItem
+              key={field.id}
+              active={view.groupById === field.id || view.groupById === field.relationId}
+              icon={<Icon as={fieldIcon(field.type)} size={16} className="shrink-0" />}
+              onClick={() => handlers.onGroupBy?.(columnKey(field))}
+            >
+              {localized(field.labels, language, field.label)}
+            </PopoverItem>
+          ))}
+        </List>
+      </Subpage>
+    );
+  }
+
   if (page === "table") {
     /*
      * Настройки хранилища, а не показа: имя таблицы, кэш, мягкое
@@ -579,6 +624,12 @@ function Panel({
   }
 
   const defaultCount = activeFilterCount(defaultFilters);
+  /** Поле группировки — подписью в строке настроек. Ключ как у колонок. */
+  const grouped = view.groupById
+    ? fields.find(
+        (field) => field.id === view.groupById || field.relationId === view.groupById,
+      )
+    : undefined;
   /* Сколько адресов задано: строка настроек молчит, пока их нет. */
   const navigationCount = [hasUrl(view.navigate), hasUrl(view.objectUrl), Boolean(view.pdfUrl)]
     .filter(Boolean).length;
@@ -664,6 +715,14 @@ function Panel({
           label={t("view.fixColumns")}
           value={fixed.length ? String(fixed.length) : ""}
           onClick={() => open("fixed")}
+        />
+      )}
+      {can.settings && handlers.onGroupBy && (
+        <Row
+          icon={IconStack2}
+          label={t("view.groupBy")}
+          value={grouped ? localized(grouped.labels, language, grouped.label) : ""}
+          onClick={() => open("group")}
         />
       )}
 
