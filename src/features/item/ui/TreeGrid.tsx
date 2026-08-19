@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import type { Field, Relation } from "@/features/table";
+import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icon";
 import { useTreeChildren } from "../api/tree";
 import { flattenTree } from "../model/tree";
 import type { Item } from "../model/types";
@@ -33,6 +36,8 @@ export function TreeGrid({
   onOpenRow,
   onEdit,
   onAddChild,
+  onDeleteSelected,
+  deleting,
   onAddField,
   columnActions,
 }: {
@@ -50,6 +55,9 @@ export function TreeGrid({
   onEdit?: (guid: string, slug: string, value: unknown) => void;
   /** Завести дочернюю запись под строкой. Нет — кнопки у строк нет. */
   onAddChild?: (parent: Item) => void;
+  /** Удалить отмеченные. Нет — панели под таблицей нет вовсе. */
+  onDeleteSelected?: () => void;
+  deleting?: boolean;
   onAddField?: (anchor: DOMRect) => void;
   columnActions?: ColumnActions;
 }) {
@@ -103,26 +111,40 @@ export function TreeGrid({
   }
 
   return (
-    <DataGrid
-      tableSlug={tableSlug}
-      columns={columns}
-      {...(pinned ? { pinned } : {})}
-      widths={widths}
-      onWidth={onWidth}
-      rows={rows}
-      tree={{ meta, expanded, onToggle: toggle, ...(onAddChild ? { onAddChild: addChild } : {}) }}
-      relations={relations}
-      locale={locale}
-      language={language}
-      selected={selected}
-      onSelect={onSelect}
-      /* У дерева свой порядок — обход иерархии, сортировать его нечем. */
-      sorts={[]}
-      onSort={() => {}}
-      {...(onOpenRow ? { onOpenRow } : {})}
-      {...(onEdit ? { onEdit } : {})}
-      {...(onAddField ? { onAddField } : {})}
-      {...(columnActions ? { columnActions } : {})}
-    />
+    <>
+      <DataGrid
+        tableSlug={tableSlug}
+        columns={columns}
+        {...(pinned ? { pinned } : {})}
+        widths={widths}
+        onWidth={onWidth}
+        rows={rows}
+        tree={{ meta, expanded, onToggle: toggle, ...(onAddChild ? { onAddChild: addChild } : {}) }}
+        relations={relations}
+        locale={locale}
+        language={language}
+        selected={selected}
+        onSelect={onSelect}
+        /* У дерева свой порядок — обход иерархии, сортировать его нечем. */
+        sorts={[]}
+        onSort={() => {}}
+        {...(onOpenRow ? { onOpenRow } : {})}
+        {...(onEdit ? { onEdit } : {})}
+        {...(onAddField ? { onAddField } : {})}
+        {...(columnActions ? { columnActions } : {})}
+      />
+
+      {/* Панель появляется вместе с выделением, как в подвале таблицы:
+          пустая полоса действий сбивает с толку. Подвала с страницами
+          у дерева нет — оно листается раскрытием, а не номерами. */}
+      {onDeleteSelected && selected.size > 0 && (
+        <div className="flex h-11 shrink-0 items-center border-t border-border px-3">
+          <Button variant="danger" size="sm" disabled={deleting} onClick={onDeleteSelected}>
+            <Icon as={IconTrash} size={14} />
+            {t("table.deleteSelected", { count: selected.size })}
+          </Button>
+        </div>
+      )}
+    </>
   );
 }

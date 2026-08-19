@@ -877,6 +877,10 @@ function MenuPage() {
             {...(can.addField
               ? { onAddField: (anchor: DOMRect) => setFieldPanel({ field: null, anchor }) }
               : {})}
+            /* Тот же диалог подтверждения, что и у таблицы. */
+            {...(can.delete
+              ? { onDeleteSelected: () => setConfirming(true), deleting: remove.isPending }
+              : {})}
             /* ponytail: без меню колонки — оно обещает сортировку и фильтр,
                которых у ручки дерева нет. Поля правятся через настройки view. */
           />
