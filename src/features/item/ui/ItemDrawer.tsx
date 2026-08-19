@@ -91,6 +91,7 @@ export function ItemDrawer({
   titlePlaceholder,
   footer,
   onEdit,
+  onLink,
   onSettings,
   onReorder,
   onHeading,
@@ -172,6 +173,12 @@ export function ItemDrawer({
    */
   footer?: ReactNode;
   onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
+  /**
+   * Выбранная строка связи — вместо запроса «связать». Нужно черновику
+   * новой записи: строки в базе ещё нет, и PUT ушёл бы по несуществующему
+   * guid (см. ActiveCell.onLink). Не задан — связь уезжает запросом.
+   */
+  onLink?: ((slug: string, item: Item | null) => void) | undefined;
   onSettings?: ((field: Field, anchor: DOMRect) => void) | undefined;
   /**
    * Поле `moved` переставлено к `target` — до него или после.
@@ -278,7 +285,22 @@ export function ItemDrawer({
    */
   const groups = useMemo(() => groupBySection(rest, sections), [rest, sections]);
 
+  /*
+   * Редактор закрывается по pointerdown мимо (Anchored), а click по
+   * строке того же поля прилетает следом и открывал его обратно: со
+   * стороны это выглядело как «поповер не закрыть, пока не кликнешь
+   * у края карточки». Клик, только что закрывший редактор этого поля,
+   * не открывает его заново.
+   */
+  const justClosed = useRef<{ slug: string; at: number } | null>(null);
+
   const open = (field: Field, element: HTMLElement) => {
+    const closed = justClosed.current;
+    if (closed && closed.slug === field.slug && performance.now() - closed.at < 400) {
+      justClosed.current = null;
+      return;
+    }
+
     // Флажок переключается на месте — как в таблице.
     if (row && guid && onEdit && editorKind(field) === "boolean") {
       onEdit(guid, field.slug, !row[field.slug]);
@@ -625,7 +647,11 @@ export function ItemDrawer({
             onEdit={(value) => {
               if (guid) onEdit?.(guid, active.slug, value);
             }}
-            onClose={() => setActive(null)}
+            onLink={onLink ? (item) => onLink(active.slug, item) : undefined}
+            onClose={() => {
+              justClosed.current = { slug: active.slug, at: performance.now() };
+              setActive(null);
+            }}
           />
         )}
       </aside>
