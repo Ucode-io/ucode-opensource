@@ -1,11 +1,12 @@
-import { useRef } from "react";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Chip } from "@/shared/ui/chip";
 import { Icon } from "@/shared/ui/icon";
 import { Input, Select } from "@/shared/ui/input";
 import type { TranslationKey } from "@/shared/lib/i18n";
+import { useRelationRows } from "../api/relation-rows";
 import { useTableSchema } from "../api/schema";
 import {
   AGGREGATES,
@@ -190,11 +191,30 @@ function AggregateEditor({
    * Поля чужой таблицы: и для «по какому полю считать», и для отбора.
    * Запрос ровно один и только когда таблицу выбрали — хук сам сидит
    * выключенным на пустом слаге.
+   *
+   * Настройки связей грузятся не все, а только тех, по которым уже
+   * отбирают: в них лежат поля показа, без которых строку в списке
+   * нечем подписать. Связей у чужой таблицы бывает полтора десятка,
+   * и каждая — отдельный запрос.
    */
-  // Пустой список колонок — чтобы хук не пошёл ещё и за настройками
-  // КАЖДОЙ связи чужой таблицы: здесь нужны только её поля, а связей
-  // у неё бывает полтора десятка.
-  const { schema } = useTableSchema(slug || undefined, []);
+  const [needed, setNeeded] = useState<string[]>([]);
+  const { schema } = useTableSchema(slug || undefined, needed);
+
+  const relationIds = aggregate.filters
+    .map((filter) => filterParts(filter.key).slug)
+    .map((fieldSlug) => schema.fields.find((field) => field.slug === fieldSlug)?.relationId)
+    .filter((id): id is string => Boolean(id));
+
+  /*
+   * Список меняется вслед за полями, а не одновременно с ними: сами
+   * поля приезжают тем же хуком, и пока их нет, id связи неоткуда взять.
+   * Сравнение по строке — чтобы не гонять эффект на новом массиве
+   * с тем же содержимым.
+   */
+  const key = relationIds.join(",");
+  useEffect(() => {
+    setNeeded(key ? key.split(",") : []);
+  }, [key]);
 
   const linked = relations.filter((relation) => relation.toSlug);
   const summable = schema.fields.filter((field) => field.type !== "LOOKUP");
@@ -265,6 +285,7 @@ function AggregateEditor({
         <FilterList
           filters={aggregate.filters}
           fields={schema.fields}
+          relations={schema.relations}
           language={language}
           onChange={(filters) => patch({ filters })}
         />
@@ -295,12 +316,15 @@ const FILTERABLE = new Set(["LOOKUP", "LOOKUPS", "MULTISELECT", "SWITCH", "CHECK
 function FilterList({
   filters,
   fields,
+  relations,
   language,
   onChange,
 }: {
   filters: AggregateFilter[];
   /** Поля ЧУЖОЙ таблицы — той, по которой считаем. */
   fields: Field[];
+  /** Её же связи: по ним ищутся строки для условия по связи. */
+  relations: Relation[];
   language: string;
   onChange: (filters: AggregateFilter[]) => void;
 }) {
@@ -362,6 +386,7 @@ function FilterList({
             {field && (
               <FilterValue
                 field={field}
+                relation={relations.find((item) => item.id === field.relationId)}
                 value={filter.value}
                 language={language}
                 onChange={(value) => patch(index, { value })}
@@ -383,21 +408,18 @@ function filterKey(field: Field): string {
 /**
  * Значение условия. Форма зависит от типа поля, и это не украшение:
  * у выбора это список вариантов, у переключателя — да/нет, у связи —
- * guid'ы строк.
- *
- * ponytail: у связи здесь поле ввода для guid'ов, а не поиск по строкам
- * чужой таблицы, — список строк живёт в features/item, и тянуть его
- * сюда значит замкнуть кольцо между фичами. Уже настроенное условие
- * при этом сохраняется как есть; поиск завести, когда понадобится
- * настраивать такие агрегаты часто.
+ * строки чужой таблицы.
  */
 function FilterValue({
   field,
+  relation,
   value,
   language,
   onChange,
 }: {
   field: Field;
+  /** Связь поля: по ней ищутся строки. Нет — остаётся ввод guid'ов. */
+  relation: Relation | undefined;
   value: unknown;
   language: string;
   onChange: (value: unknown) => void;
@@ -444,6 +466,22 @@ function FilterValue({
     );
   }
 
+  /*
+   * Связь: выбирают строки чужой таблицы, а уезжают их guid'ы.
+   * Настройки связи ещё не приехали — остаётся ввод guid'ов: он честнее
+   * пустого списка, из которого нечего выбрать, и им же правится
+   * условие, заведённое когда-то руками.
+   */
+  if (relation?.toSlug) {
+    return (
+      <RelationPicker
+        relation={relation}
+        picked={asList(value)}
+        onChange={(next) => onChange(next)}
+      />
+    );
+  }
+
   return (
     <Input
       value={asList(value).join(", ")}
@@ -459,6 +497,97 @@ function FilterValue({
       }
       className="h-7 px-1.5 font-mono text-2xs"
     />
+  );
+}
+
+/**
+ * Выбор строк чужой таблицы: поиск и список.
+ *
+ * Отмеченное показывается сверху, потому что найденное списком уезжает
+ * из виду при следующем поиске, а условие собирают из нескольких строк.
+ * Подпись отмеченной строки известна, только пока она в ответе; чего
+ * нет — показываем guid'ом, а не выдумываем: условие было заведено
+ * раньше, и строка могла с тех пор исчезнуть.
+ */
+function RelationPicker({
+  relation,
+  picked,
+  onChange,
+}: {
+  relation: Relation;
+  picked: string[];
+  onChange: (guids: string[]) => void;
+}) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  /*
+   * Запрос отстаёт от ввода на кадр — иначе каждая буква идёт в чужую
+   * таблицу. Тот же приём, что и в ячейке-связи: отменять нечего.
+   */
+  const search = useDeferredValue(query);
+
+  const { rows } = useRelationRows({
+    tableSlug: relation.toSlug,
+    viewFieldSlugs: relation.viewFieldSlugs,
+    search,
+  });
+
+  const labels = new Map(rows.map((row) => [row.guid, row.label]));
+  const toggle = (guid: string) =>
+    onChange(picked.includes(guid) ? picked.filter((item) => item !== guid) : [...picked, guid]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      {picked.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-0.5">
+          {picked.map((guid) => (
+            <button
+              key={guid}
+              type="button"
+              onClick={() => toggle(guid)}
+              title={t("cell.remove")}
+              className="max-w-full rounded-sm transition-opacity hover:opacity-70"
+            >
+              <Chip>{labels.get(guid) || guid.slice(0, 8)}</Chip>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Input
+        value={query}
+        placeholder={t("cell.searchRelation")}
+        aria-label={t("cell.searchRelation")}
+        onChange={(event) => setQuery(event.target.value)}
+        className="h-7 px-1.5 text-xs"
+      />
+
+      <div className="max-h-32 overflow-y-auto">
+        {rows.map((row) => (
+          <button
+            key={row.guid}
+            type="button"
+            onClick={() => toggle(row.guid)}
+            className={`flex h-7 w-full items-center gap-1.5 rounded px-1.5 text-left text-xs transition-colors hover:bg-surface-hover ${
+              picked.includes(row.guid) ? "text-fg" : "text-fg-muted"
+            }`}
+          >
+            {/* Галка значком, а не флажком: строка списка — уже кнопка,
+                а <input> внутри <button> это вложенный интерактив. */}
+            <Icon
+              as={IconCheck}
+              size={14}
+              className={`shrink-0 ${picked.includes(row.guid) ? "text-accent" : "opacity-0"}`}
+            />
+            <span className="truncate">{row.label || row.guid.slice(0, 8)}</span>
+          </button>
+        ))}
+
+        {rows.length === 0 && (
+          <p className="px-1.5 py-1 text-2xs text-fg-subtle">{t("table.noRows")}</p>
+        )}
+      </div>
+    </div>
   );
 }
 

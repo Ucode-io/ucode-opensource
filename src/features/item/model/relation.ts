@@ -1,6 +1,9 @@
 import type { Field } from "@/features/table";
-import { isBlank } from "./cell-value";
+import { relationLabel } from "@/shared/lib/relation-label";
 import { relationDataKey, type Item } from "./types";
+
+// Подпись связанной строки общая с настройками агрегата — см. shared/lib.
+export { relationLabel };
 
 /**
  * Правка связи из таблицы.
@@ -52,13 +55,6 @@ export function relationSelection(
     .filter(isRecord)
     .map((item) => ({ guid: String(item["guid"] ?? ""), label: relationLabel(item, slugs) }))
     .filter((item) => item.guid || item.label);
-}
-
-export function relationLabel(item: Record<string, unknown>, slugs: string[]): string {
-  return slugs
-    .map((slug) => item[slug])
-    .filter((part) => !isBlank(part) && typeof part !== "object")
-    .join(" ");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
