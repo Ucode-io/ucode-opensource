@@ -44,6 +44,8 @@ import {
   collapseLanguages,
   baseSlug,
   languageGroups,
+  localizeKeys,
+  localizeSlug,
   toDraft,
   useCreateField,
   useCreateRelation,
@@ -301,7 +303,20 @@ function MenuPage() {
       : undefined) ??
     view?.defaultLimit ??
     FALLBACK_LIMIT;
-  const sorts = parseSorts(search.sort);
+  /*
+   * Слаги условий переезжают на активный язык данных: сортировка,
+   * заведённая при английском (`title_en`), после переключения на
+   * кириллицу должна бить по `title_cyr` — по той колонке, которую
+   * человек видит. Обычных полей переезд не касается.
+   */
+  const sorts = useMemo(
+    () =>
+      parseSorts(search.sort).map((sort) => ({
+        ...sort,
+        field: localizeSlug(sort.field, viewFields, codes, language),
+      })),
+    [search.sort, viewFields, codes, language],
+  );
 
   /*
    * Фильтры в адресе отсутствуют — берём набор, предложенный админом
@@ -336,13 +351,19 @@ function MenuPage() {
     [view?.defaultFilters],
   );
 
-  /** Отбор, которым управляет человек: он в адресе, он же в подшапке. */
+  /** Отбор, которым управляет человек: он в адресе, он же в подшапке.
+      Слаги мультиязычных полей переезжают на активный язык — как у сортировки. */
   const filters: Filters = useMemo(
     () =>
-      search.filters ??
-      rememberedFilters ??
-      seedFilters(view?.quickFilterIds ?? [], tableFields),
-    [search.filters, rememberedFilters, view?.quickFilterIds, tableFields],
+      localizeKeys(
+        search.filters ??
+          rememberedFilters ??
+          seedFilters(view?.quickFilterIds ?? [], tableFields),
+        viewFields,
+        codes,
+        language,
+      ),
+    [search.filters, rememberedFilters, view?.quickFilterIds, tableFields, viewFields, codes, language],
   );
 
   /** То, что действительно уходит в запрос. Область видимости — сверху. */

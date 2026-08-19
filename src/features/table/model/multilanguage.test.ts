@@ -5,6 +5,8 @@ import {
   fieldLanguage,
   fieldsForLanguage,
   hasMultilanguage,
+  localizeKeys,
+  localizeSlug,
   stripLanguage,
 } from "./multilanguage";
 import { localized } from "./types";
@@ -128,6 +130,42 @@ test("пара без флага — всё равно языковая груп
     "naming_cyr",
     "price",
   ]);
+});
+
+/*
+ * Фильтр и сортировка ключуются слагом, а у мультиязычного поля слаг
+ * на каждом языке свой: условие обязано переехать на вариант активного
+ * языка — иначе после переключения оно молча бьёт по невидимой колонке.
+ */
+test("слаг условия переезжает на вариант активного языка", () => {
+  const fields = [field("title_en", true), field("title_cyr", true), field("price")];
+
+  expect(localizeSlug("title_en", fields, LANGS, "cyr")).toBe("title_cyr");
+  expect(localizeSlug("title_cyr", fields, LANGS, "cyr")).toBe("title_cyr");
+  // Обычное поле — даже с подчёркиванием — не трогается.
+  expect(localizeSlug("price", fields, LANGS, "cyr")).toBe("price");
+  expect(localizeSlug("order_id", fields, LANGS, "cyr")).toBe("order_id");
+});
+
+test("нет варианта на активном языке — слаг остаётся: показывается он же", () => {
+  // Язык добавили в проект позже поля: колонка показывает title_en
+  // (см. fieldsForLanguage), и условие должно бить по ней же.
+  expect(localizeSlug("title_en", [field("title_en", true)], LANGS, "cyr")).toBe("title_en");
+});
+
+test("переезд фильтров сохраняет значения и не давит чужой ключ", () => {
+  const fields = [field("title_en", true), field("title_cyr", true)];
+
+  expect(localizeKeys({ title_en: 1, price: 2 }, fields, LANGS, "cyr")).toEqual({
+    title_cyr: 1,
+    price: 2,
+  });
+  // В адресе лежали оба варианта: выкинуть заданное условие хуже,
+  // чем оставить его на старом языке.
+  expect(localizeKeys({ title_en: 1, title_cyr: 2 }, fields, LANGS, "cyr")).toEqual({
+    title_en: 1,
+    title_cyr: 2,
+  });
 });
 
 /*

@@ -18,6 +18,8 @@ export {
   fieldsForLanguage,
   hasMultilanguage,
   languageGroups,
+  localizeKeys,
+  localizeSlug,
   stripLanguage,
 } from "./model/multilanguage";
 export type { FieldDraft } from "./model/field-draft";

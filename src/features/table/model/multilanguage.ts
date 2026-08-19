@@ -37,9 +37,13 @@ import type { Field } from "./types";
  * Настоящий признак поэтому — форма набора: см. languageGroups.
  */
 export function baseSlug(field: Field, languages: string[]): string | null {
+  return slugBase(field.slug, languages);
+}
+
+function slugBase(slug: string, languages: string[]): string | null {
   for (const code of languages) {
     const suffix = `_${code}`;
-    if (field.slug.endsWith(suffix)) return field.slug.slice(0, -suffix.length);
+    if (slug.endsWith(suffix)) return slug.slice(0, -suffix.length);
   }
 
   return null;
@@ -160,6 +164,59 @@ export function collapseLanguages(fields: Field[], languages: string[], active: 
       ),
     };
   });
+}
+
+/**
+ * Слаг условия, переехавший на вариант активного языка данных.
+ *
+ * Фильтр и сортировка ключуются слагом поля, а у мультиязычного поля
+ * слаг у каждого языка свой: условие, заведённое при английском языке
+ * данных, записано как `title_en`. После переключения на кириллицу
+ * человек смотрит на колонку `title_cyr`, и условие по `title_en`
+ * молча отбирает не то, что видно на экране.
+ *
+ * Переезд только внутри настоящей языковой группы (см. languageGroups)
+ * и только на существующий вариант: нет варианта на активном языке —
+ * слаг остаётся как есть, условие продолжает бить по тому языку,
+ * значения которого и показываются (см. fieldsForLanguage).
+ */
+export function localizeSlug(
+  slug: string,
+  fields: Field[],
+  languages: string[],
+  active: string,
+): string {
+  const base = slugBase(slug, languages);
+  if (base === null || slug === `${base}_${active}`) return slug;
+
+  const variants = languageGroups(fields, languages).get(base);
+  return variants?.some((field) => field.slug === `${base}_${active}`)
+    ? `${base}_${active}`
+    : slug;
+}
+
+/**
+ * То же для карты условий по слагу — фильтров.
+ *
+ * Столкновение ключей не тихое: если условие по активному языку уже
+ * есть (в адресе лежали оба варианта), чужое остаётся на своём слаге —
+ * молча выкинуть заданное условие хуже, чем оставить его на старом языке.
+ */
+export function localizeKeys<T>(
+  map: Record<string, T>,
+  fields: Field[],
+  languages: string[],
+  active: string,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+
+  for (const [slug, value] of Object.entries(map)) {
+    const next = localizeSlug(slug, fields, languages, active);
+    const collides = next !== slug && (next in map || next in out);
+    out[collides ? slug : next] = value;
+  }
+
+  return out;
 }
 
 /**
