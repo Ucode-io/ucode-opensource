@@ -1185,6 +1185,19 @@ function MenuPage() {
           onEdit={(_guid, slug, value) =>
             setDraft((current) => (current ? { ...current, [slug]: value } : current))
           }
+          /*
+           * Связь черновика не уезжает запросом — строки в базе ещё нет.
+           * Выбранная запись ложится рядом со ссылкой (`<слаг>_data`):
+           * из неё ячейка берёт подпись, а наружу её отбрасывает
+           * useCreateItem.
+           */
+          onLink={(slug, item) =>
+            setDraft((current) =>
+              current
+                ? { ...current, [slug]: item?.guid ?? null, [relationDataKey(slug)]: item }
+                : current,
+            )
+          }
           footer={
             <>
               {showErrors && draftErrors.size > 0 && (
