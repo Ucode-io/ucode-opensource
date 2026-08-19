@@ -53,6 +53,19 @@ export type Credentials = {
   password: string;
 };
 
+/**
+ * Вход по телефону: код из SMS вместо пароля. Ключи — те, что ждёт
+ * default-login (`type: "phone"`, session_v2.go), поэтому snake_case:
+ * объект уходит в тело запроса как есть — и при выборе connection'ов
+ * тоже, вторым запросом в /v2/login.
+ */
+export type PhoneCredentials = {
+  type: "phone";
+  phone: string;
+  otp: string;
+  sms_id: string;
+};
+
 /** Вариант выбора внутри одной Connection. */
 export type ConnectionOption = {
   id: string;

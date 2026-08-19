@@ -113,3 +113,8 @@ export type ForgotPasswordDto = {
 export type VerifyEmailDto = {
   verified?: boolean;
 };
+
+/** Ответ /v2/send-code-app: идентификатор отправленного кода. */
+export type SendCodeDto = {
+  sms_id?: string;
+};

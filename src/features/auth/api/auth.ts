@@ -8,6 +8,7 @@ import type {
   Invite,
   LoginContext,
   LoginResult,
+  PhoneCredentials,
   RecoveryStart,
   Registration,
 } from "../model/types";
@@ -17,6 +18,7 @@ import type {
   ForgotPasswordDto,
   LoginResponseDto,
   RegisterCompanyDto,
+  SendCodeDto,
   VerifyEmailDto,
 } from "./dto";
 import { storePermissions } from "../model/permissions";
@@ -29,6 +31,7 @@ import { toConnection, toPermission, toRecoveryStart, toSession } from "./normal
 
 const DEFAULT_LOGIN = "/v3/multicompany/default-login";
 const LOGIN = "/v2/login";
+const SEND_CODE_APP = "/v2/send-code-app";
 const REFRESH = "/v2/refresh";
 const REGISTER_COMPANY = "/company";
 const REGISTER_USER = "/v2/register";
@@ -107,11 +110,41 @@ function interpretLogin(data: DefaultLoginDto): LoginResult {
 }
 
 /**
+ * Вход по телефону, шаг 1: SMS с кодом. Возвращается sms_id — он уходит
+ * вторым шагом вместе с кодом. Заодно ручка проверяет, что пользователь
+ * с таким телефоном существует (register_v2.go, V2SendCodeApp).
+ *
+ * Формат номера жёсткий: `+` и двенадцать цифр (util.IsValidPhone).
+ */
+async function sendPhoneCode(phone: string): Promise<string> {
+  const data = await authApi.post<SendCodeDto>(SEND_CODE_APP, {
+    recipient: phone,
+    type: "PHONE",
+  });
+
+  if (!data.sms_id) throw new Error("Бэкенд не вернул sms_id");
+  return data.sms_id;
+}
+
+/**
+ * Вход по телефону, шаг 2: тот же default-login, что и у пароля, — код
+ * проверяется в нём (authenticateUser, случай WithPhone), и дальше всё
+ * общее: connection'ы или готовая сессия.
+ */
+async function loginWithPhone(credentials: PhoneCredentials): Promise<LoginResult> {
+  const data = await authApi.post<DefaultLoginDto>(DEFAULT_LOGIN, credentials);
+  return interpretLogin(data);
+}
+
+/**
  * Второй шаг: выбранные записи превращаются в tables и отправляются
  * в /v2/login. Одна запись на каждую connection.
+ *
+ * `credentials` — то, чем входили на первом шаге: пароль или телефон
+ * с кодом. /v2/login проверяет их заново, поэтому payload тот же.
  */
 async function loginWithConnections(input: {
-  credentials: Credentials;
+  credentials: Credentials | PhoneCredentials;
   context: LoginContext;
   connections: Connection[];
   selection: ConnectionSelection;
@@ -301,6 +334,14 @@ export function useLogin() {
 
 export function useLoginWithGoogle() {
   return useMutation({ mutationFn: loginWithGoogle });
+}
+
+export function useSendPhoneCode() {
+  return useMutation({ mutationFn: sendPhoneCode });
+}
+
+export function useLoginWithPhone() {
+  return useMutation({ mutationFn: loginWithPhone });
 }
 
 export function useRegister() {
