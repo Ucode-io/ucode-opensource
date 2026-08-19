@@ -817,7 +817,22 @@ function MenuPage() {
         />
       ) : treeView ? (
         !treeReady ? (
-          <Notice text={t("table.noTreeRelation")} />
+          /* Кнопка обязательна: «+» нового поля живёт в шапке грида,
+             а грид без рекурсивной колонки не рисуется — без неё
+             из этого экрана некуда идти. */
+          <Notice
+            text={t("table.noTreeRelation")}
+            actions={
+              can.addField
+                ? [
+                    {
+                      label: t("table.addField"),
+                      onClick: (anchor: DOMRect) => setFieldPanel({ field: null, anchor }),
+                    },
+                  ]
+                : []
+            }
+          />
         ) : (
           <TreeGrid
             tableSlug={view.tableSlug}
