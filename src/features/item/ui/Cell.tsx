@@ -1,6 +1,7 @@
-import { IconExternalLink, IconMapPin, IconPaperclip, IconPlus } from "@tabler/icons-react";
+import { IconCopy, IconExternalLink, IconMapPin, IconPaperclip, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { localized, type Field, type FieldOption, type Relation } from "@/features/table";
+import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Chip, hexToChipColor } from "@/shared/ui/chip";
 import { DynamicIcon } from "@/shared/ui/dynamic-icon";
@@ -189,9 +190,46 @@ export function Cell({
         </span>
       );
 
+    case "longtext":
+      return <LongTextCell value={value} line={line} />;
+
     default:
       return <TextCell value={value} line={line} />;
   }
+}
+
+/**
+ * Многострочный текст: рядом со значением — «скопировать», как в старой
+ * админке (MultiLineCellFormElement). Значение длинное, и выделять его
+ * мышью в обрезанной ячейке — мучение.
+ */
+function LongTextCell({ value, line }: { value: unknown; line: string }) {
+  const { t } = useTranslation();
+
+  if (isBlank(value) || typeof value === "object") return <TextCell value={value} line={line} />;
+
+  const text = String(value);
+
+  return (
+    <span className="flex h-full min-w-0 flex-1 items-center gap-1">
+      <span className={`min-w-0 ${line}`}>{text}</span>
+
+      <button
+        type="button"
+        onClick={(event) => {
+          // Клик по кнопке — только копирование: ячейка не раскрывается.
+          event.stopPropagation();
+          void navigator.clipboard.writeText(text);
+          toast.success(t("cell.copied"));
+        }}
+        aria-label={t("cell.copy")}
+        title={t("cell.copy")}
+        className="ml-auto hidden size-6 shrink-0 place-items-center rounded-md text-fg-muted transition-colors group-hover/row:grid hover:bg-surface-active hover:text-fg"
+      >
+        <Icon as={IconCopy} size={14} />
+      </button>
+    </span>
+  );
 }
 
 /**

@@ -534,7 +534,9 @@ export function ItemDrawer({
                       event.preventDefault();
                       drop();
                     }}
-                    className={`relative flex items-start gap-2 py-0.5 transition-opacity ${
+                    /* group/row — для кнопок по наведению внутри ячейки:
+                       «скопировать» у текста, переходы у ссылки и карты. */
+                    className={`group/row relative flex items-start gap-2 py-0.5 transition-opacity ${
                       dragged === field.slug ? "opacity-40" : ""
                     }`}
                   >
