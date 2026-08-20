@@ -90,7 +90,20 @@ export function Popover({
     if (!open) return;
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      /*
+       * Модальное окно, открытое из меню, лежит порталом в <body> — то
+       * есть DOM-снаружи, хотя по смыслу оно внутри. Без этой проверки
+       * нажатие на его кнопку читалось как «мимо»: меню закрывалось,
+       * уносило с собой окно (оно живёт в поддереве пункта меню), и click
+       * до кнопки уже не долетал. «Выйти из аккаунта?» исчезало, ничего
+       * не сделав.
+       */
+      if (target.closest("[data-modal]")) return;
+
+      if (!root.current?.contains(target)) setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);

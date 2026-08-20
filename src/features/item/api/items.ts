@@ -70,7 +70,17 @@ export function useItems(tableSlug: string | undefined, query: ItemsQuery) {
     hasMore: result.hasNextPage && !result.isFetchingNextPage,
     loadingMore: result.isFetchingNextPage,
     loadMore: () => {
-      if (result.hasNextPage && !result.isFetchingNextPage) void result.fetchNextPage();
+      /*
+       * `cancelRefetch: false` — иначе второй вызов, пришедший, пока
+       * первый ещё летит, ОТМЕНЯЕТ его и шлёт запрос заново: react-query
+       * по умолчанию считает, что повторный вызов важнее. А приходят они
+       * парами всегда — два события прокрутки в одном кадре, два прогона
+       * эффекта в StrictMode, — и в сети видно два запроса за одну
+       * страницу, из которых первый оборван.
+       */
+      if (result.hasNextPage && !result.isFetchingNextPage) {
+        void result.fetchNextPage({ cancelRefetch: false });
+      }
     },
     /**
      * Причина отказа словами. null — всё в порядке.
@@ -157,16 +167,24 @@ export function toPages(data: { pages: ItemsResponseDto[] }): ItemsPage {
   return { rows, count: last?.data?.count ?? rows.length };
 }
 
-/** Правка одной ячейки. Больше в теле ничего и не должно быть. */
-export type CellEdit = { guid: string; slug: string; value: unknown };
+/**
+ * Правка строки: guid и то, что меняется. Больше в теле ничего и не
+ * должно быть.
+ *
+ * Полей обычно одно — это ячейка. Перенос карточки на доске меняет два
+ * сразу (значение колонки и порядок), и уехать они обязаны одним PUT:
+ * два запроса подряд оставляют промежуточное состояние, в котором
+ * карточка уже в новой колонке, но ещё со старым номером.
+ */
+export type RowEdit = { guid: string; values: Record<string, unknown> };
 
 /**
- * Правка ячейки.
+ * Правка строки.
  *
- * Уходит ровно одно поле и guid: бэкенд собирает UPDATE из тех ключей,
- * что пришли (items.go: `if ok { query += ... }`), и остального не
- * трогает. Слать строку целиком нельзя — вернёшь на место чужие правки,
- * сделанные, пока таблица была открыта.
+ * Уходят ровно те поля, что правили, и guid: бэкенд собирает UPDATE из
+ * тех ключей, что пришли (items.go: `if ok { query += ... }`), и
+ * остального не трогает. Слать строку целиком нельзя — вернёшь на место
+ * чужие правки, сделанные, пока таблица была открыта.
  *
  * Значение подставляется в кэш до ответа: ячейка обязана меняться
  * мгновенно, иначе таблица ощущается как форма. При ошибке снимок
@@ -179,8 +197,8 @@ export function useUpdateItem(tableSlug: string | undefined) {
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: ({ guid, slug: field, value }: CellEdit) =>
-      api.put<unknown>(`/v2/items/${slug}`, { data: { guid, [field]: value } }),
+    mutationFn: ({ guid, values }: RowEdit) =>
+      api.put<unknown>(`/v2/items/${slug}`, { data: { guid, ...values } }),
 
     onMutate: async (edit) => {
       // Летящий запрос списка перезапишет наш патч своим старым ответом.
@@ -212,7 +230,7 @@ export function useUpdateItem(tableSlug: string | undefined) {
  * Чужая форма проходит насквозь: под ключом items лежат и одиночные
  * записи, и ответы других ручек.
  */
-export function patchRow(page: unknown, { guid, slug, value }: CellEdit): unknown {
+export function patchRow(page: unknown, { guid, values }: RowEdit): unknown {
   const rows = (page as ItemsResponseDto | undefined)?.data?.response;
   if (!Array.isArray(rows)) return page;
 
@@ -220,7 +238,7 @@ export function patchRow(page: unknown, { guid, slug, value }: CellEdit): unknow
   if (index === -1) return page;
 
   const next = rows.slice();
-  next[index] = { ...rows[index], [slug]: value };
+  next[index] = { ...rows[index], ...values };
 
   const dto = page as ItemsResponseDto;
   return { ...dto, data: { ...dto.data, response: next } };

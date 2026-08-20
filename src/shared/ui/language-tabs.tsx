@@ -1,12 +1,18 @@
+import { Tabs } from "@/shared/ui/tabs";
+
 /**
  * Переключатель языка ДАННЫХ: коды в ряд, выбранный подсвечен.
  *
+ * Та же полоса, что и остальные вкладки приложения (shared/ui/tabs):
+ * свой вид у него был акцентной заливкой — как у активной вкладки связи
+ * до того, как их свели, — и три чужеродных чипа висели в углу шапки.
+ *
  * Кодами, а не полными именами: языков у проекта бывает четыре, а места
- * рядом с кнопками таблицы — на два слова. Полное имя показывается
+ * рядом с кнопками записи — на два слова. Полное имя показывается
  * подсказкой.
  *
- * Ничего не решает сам: и таблица, и карточка переключают один и тот же
- * язык данных, поэтому значение и обработчик приходят снаружи.
+ * Ничего не решает сам: язык данных один на приложение, поэтому значение
+ * и обработчик приходят снаружи.
  */
 export function LanguageTabs({
   languages,
@@ -21,23 +27,14 @@ export function LanguageTabs({
   if (languages.length < 2) return null;
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      {languages.map((language) => (
-        <button
-          key={language.code}
-          type="button"
-          onClick={() => onChange(language.code)}
-          title={language.nativeName}
-          aria-pressed={value === language.code}
-          className={`h-6 rounded-md px-1.5 text-xs transition-colors ${
-            value === language.code
-              ? "bg-accent-subtle text-accent-text"
-              : "text-fg-subtle hover:bg-surface-hover hover:text-fg"
-          }`}
-        >
-          {language.code}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      tabs={languages.map((language) => ({
+        id: language.code,
+        label: language.code,
+        title: language.nativeName,
+      }))}
+      activeId={value}
+      onSelect={onChange}
+    />
   );
 }

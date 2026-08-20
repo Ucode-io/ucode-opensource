@@ -3,9 +3,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  BOARD_ORDER,
+  Board,
   DataGrid,
   FilterBar,
   blankItem,
+  groupValue,
   GridSkeleton,
   ItemDrawer,
   TreeGrid,
@@ -21,6 +24,7 @@ import {
   seedFilters,
   fieldIcon,
   applyRights,
+  itemTitle,
   orderColumns,
   useCreateItem,
   useDeleteItems,
@@ -35,8 +39,10 @@ import {
   relationDataKey,
   rowErrors,
   toConditions,
+  type ColumnActions,
   type Filters,
   type Item,
+  type Sort,
 } from "@/features/item";
 import { useTablePermissions } from "@/features/auth";
 import { IMPLEMENTED_TYPES, SidebarToggleButton, useMenu } from "@/features/sidebar";
@@ -64,10 +70,12 @@ import {
 import {
   ExcelImportDialog,
   IMPLEMENTED_VIEW_TYPES,
+  TAB_VIEW_TYPES,
   RelationView,
   ViewCreateButton,
   ViewOptions,
   ViewTabs,
+  viewIcon,
   columnKey,
   pickView,
   pinnedIds,
@@ -79,6 +87,8 @@ import {
   useDeleteView,
   useExportExcel,
   useMenuViews,
+  tabGroupField,
+  useTabGroup,
   useUpdateView,
   fillTemplate,
   fillUrl,
@@ -89,7 +99,9 @@ import {
 import { useDataLanguages } from "@/features/workspace";
 import { toast } from "@/shared/lib/toast";
 import { useUi } from "@/shared/lib/ui-store";
+import type { TranslationKey } from "@/shared/lib/i18n";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Tabs } from "@/shared/ui/tabs";
 
 /**
  * Экран пункта меню. Маршрут ключуется на menuId, а не на слаге таблицы:
@@ -105,6 +117,17 @@ import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
  * настроек view, и только потом наш собственный запас.
  */
 const FALLBACK_LIMIT = 20;
+
+/**
+ * Порция строк доски. Своя и постоянная: страницами доску не листают —
+ * она догружается прокруткой, и переключателя размера у неё нет вовсе.
+ * Двадцать карточек на пять колонок — это по четыре в каждой, то есть
+ * запрос на каждый оборот колеса.
+ */
+const BOARD_LIMIT = 100;
+
+/** Постоянная ссылка: пустой отбор не должен менять зависимости памяток. */
+const EMPTY_FILTERS: Filters = {};
 
 const searchSchema = z.object({
   view: z.string().optional(),
@@ -124,6 +147,13 @@ const searchSchema = z.object({
   item: z.string().optional().catch(undefined),
   /** Открытая вкладка связи в карточке (id relation view). Пусто — сама карточка. */
   tab: z.string().optional().catch(undefined),
+  /**
+   * Открытая вкладка раскладки (`group_fields`) — значение поля, а не id.
+   * Пусто или неизвестное значение — первая вкладка: набор вариантов
+   * меняется вместе с данными, и ссылка на исчезнувший не должна
+   * оставлять экран пустым.
+   */
+  group: z.string().optional().catch(undefined),
   /*
    * Фильтр — это условие и его аргументы. Аргументы всегда списком
    * строк, каким бы ни было условие: одна форма и в адресе, и в схеме,
@@ -217,7 +247,13 @@ function MenuPage() {
    * совпадение даёт 500.
    */
   const tableFields = useMemo(
-    () => applyRights(schema.fields, drawerLayout.rights),
+    () =>
+      applyRights(schema.fields, drawerLayout.rights).filter(
+        // Колонка порядка карточек — служебная: её заводит бэкенд сам
+        // под доску (pkg/helper/view.go), заполняет тоже он, и место
+        // ей в раскладке доски, а не в списках полей.
+        (field) => field.slug !== BOARD_ORDER,
+      ),
     [schema.fields, drawerLayout.rights],
   );
 
@@ -318,6 +354,16 @@ function MenuPage() {
   /* Родителя ручка ищет в колонке `<слаг таблицы>_id` — без неё дерева нет. */
   const treeReady = schema.fields.some((field) => field.slug === `${view?.tableSlug}_id`);
   /*
+   * BOARD — те же строки обычного get-list, разложенные по значениям
+   * одного поля. Своя пара ручек у доски есть, но она сортирует по
+   * `created_at` раньше, чем по `board_order`, то есть теряет ровно тот
+   * порядок, ради которого доску и двигают мышью; фильтры она понимает
+   * только вида «значение из списка» (docs/backend-notes.md).
+   */
+  const boardView = supportedView && view?.type === "BOARD";
+  /* Колонку порядка заводит бэкенд под BOARD. Нет её — сортировать нечем. */
+  const boardReady = schema.fields.some((field) => field.slug === BOARD_ORDER);
+  /*
    * Размер страницы: из адреса, иначе последний выбранный для этой
    * таблицы, иначе настройка view. Значение из localStorage проверяется
    * — испорченное руками «0» оставило бы таблицу пустой навсегда.
@@ -325,13 +371,14 @@ function MenuPage() {
   const { tableLimits, setTableLimit, tableFilters, setTableFilters, columnWidths, setColumnWidth } =
     useUi();
   const rememberedLimit = view ? tableLimits[view.tableSlug] : undefined;
-  const limit =
-    search.limit ??
-    (rememberedLimit && rememberedLimit >= MIN_LIMIT && rememberedLimit <= MAX_LIMIT
-      ? rememberedLimit
-      : undefined) ??
-    view?.defaultLimit ??
-    FALLBACK_LIMIT;
+  const limit = boardView
+    ? BOARD_LIMIT
+    : search.limit ??
+      (rememberedLimit && rememberedLimit >= MIN_LIMIT && rememberedLimit <= MAX_LIMIT
+        ? rememberedLimit
+        : undefined) ??
+      view?.defaultLimit ??
+      FALLBACK_LIMIT;
   /*
    * Слаги условий переезжают на активный язык данных: сортировка,
    * заведённая при английском (`title_en`), после переключения на
@@ -353,6 +400,14 @@ function MenuPage() {
    * по этому же полю задаёт направление, остальные работают внутри групп.
    */
   const querySorts = useMemo(() => {
+    /*
+     * Доска сортируется своей колонкой порядка и ничем больше: карточки
+     * в ней расставляют руками, и чужая сортировка эту расстановку
+     * прячет. Колонки может ещё не быть — бэкенд заводит её при
+     * сохранении view типа BOARD, — а сортировка по несуществующей
+     * колонке роняет запрос целиком.
+     */
+    if (boardView) return boardReady ? [{ field: BOARD_ORDER, direction: "asc" as const }] : [];
     if (!groupColumn) return sorts;
 
     const own = sorts.find((sort) => sort.field === groupColumn.slug);
@@ -360,7 +415,7 @@ function MenuPage() {
       own ?? { field: groupColumn.slug, direction: "asc" as const },
       ...sorts.filter((sort) => sort.field !== groupColumn.slug),
     ];
-  }, [groupColumn, sorts]);
+  }, [boardView, boardReady, groupColumn, sorts]);
 
   /*
    * Фильтры в адресе отсутствуют — берём набор, предложенный админом
@@ -410,13 +465,51 @@ function MenuPage() {
     [search.filters, rememberedFilters, view?.quickFilterIds, tableFields, viewFields, codes, language],
   );
 
+  /*
+   * Раскладка вкладками (`group_fields`): таблица показывает строки
+   * только выбранной вкладки. Это отбор, а не украшение, — поэтому
+   * условие домешивается туда же, где область видимости view.
+   *
+   * Поля — ВСЕ, а не колонки: раскладывать по скрытой колонке нормально.
+   */
+  const tabGroup = useTabGroup({
+    view,
+    fields: tableFields,
+    relations: schema.relations,
+    language,
+    selected: search.group,
+    /*
+     * Доске вкладки не нужны: из той же настройки она делает КОЛОНКИ —
+     * те же значения, но показанные все сразу, а подписи колонок по
+     * связи берёт из самих строк. Спрашивать ради этого полсотни чужих
+     * строк незачем.
+     */
+    enabled: !boardView,
+  });
+
+  /* Условие вкладки на доске не домешивается — иначе на ней осталась
+     бы одна колонка из десяти. */
+  const tabFilters = boardView ? EMPTY_FILTERS : tabGroup.filters;
+  /** Поле, значения которого стали колонками доски. */
+  const boardField = boardView ? tabGroupField(view, tableFields) : undefined;
+  /** Доску не по чему раскладывать: поле не выбрано в настройках view. */
+  const boardNotReady = boardView && !boardField;
+
   /** То, что действительно уходит в запрос. Область видимости — сверху. */
   const effectiveFilters: Filters = useMemo(
-    () => ({ ...filters, ...defaultFilters }),
-    [filters, defaultFilters],
+    () => ({ ...filters, ...defaultFilters, ...tabFilters }),
+    [filters, defaultFilters, tabFilters],
   );
 
-  const lockedSlugs = useMemo(() => new Set(Object.keys(defaultFilters)), [defaultFilters]);
+  /*
+   * Поля, по которым свой фильтр всё равно перекрыт: область видимости
+   * view и открытая вкладка. Чип по ним соврал бы — он показывал бы
+   * условие, которого в запросе нет.
+   */
+  const lockedSlugs = useMemo(
+    () => new Set([...Object.keys(defaultFilters), ...Object.keys(tabFilters)]),
+    [defaultFilters, tabFilters],
+  );
 
   /** Закреплённые колонки — по id поля: DataGrid знает только их. */
   const pinned = useMemo(
@@ -456,6 +549,7 @@ function MenuPage() {
       page: 1,
       item: undefined,
       tab: undefined,
+      group: undefined,
       sort: undefined,
       filters: undefined,
       search: undefined,
@@ -463,14 +557,47 @@ function MenuPage() {
       filtersOpen: undefined,
     });
 
+  /**
+   * Щелчок по строке открывает карточку — если админ не задал своего
+   * адреса. Задал (`attributes.navigate`) — уводим туда: у проекта своя
+   * страница заказа, и карточка ей не замена.
+   *
+   * Вкладка связи сбрасывается вместе со строкой: у другой записи набор
+   * вкладок тот же, а открытая — уже не та.
+   *
+   * Карточка на экране одна. Таблица под панелью остаётся рабочей, и
+   * строку открывают, не закрыв черновик новой записи, — раньше эти две
+   * карточки просто ложились друг на друга, и открытая строка оказывалась
+   * под «Новой записью». Нетронутый черновик уходит молча; в заполненный
+   * человек что-то ввёл, и молча выбрасывать это нельзя.
+   */
+  const openRow = (guid: string) => {
+    const row = rows.rows.find((item) => item.guid === guid);
+    if (view && row && openRowUrl(view, row)) return;
+
+    if (draftTouched()) {
+      setPendingRow(guid);
+      return;
+    }
+
+    setDraft(null);
+    setSearch({ item: guid, tab: undefined });
+  };
+
   /** Правка отбора: в адрес — чтобы переслать, в память — чтобы вернуться. */
   const applyFilters = (next: Filters) => {
     if (filtersKey) setTableFilters(filtersKey, next);
     setSearch({ filters: next, page: 1 }, true);
   };
 
-  /** Как листается этот view: прокруткой или номерами страниц. */
-  const infinite = view?.infiniteScroll === true;
+  /**
+   * Как листается этот view: прокруткой или номерами страниц.
+   *
+   * Доска — всегда прокруткой: страницу сервер режет по всей доске
+   * сразу, и «страница 2» показала бы десять колонок, в каждой из
+   * которых чужая середина списка.
+   */
+  const infinite = view?.infiniteScroll === true || boardView;
 
   const {
     page: rows,
@@ -481,14 +608,23 @@ function MenuPage() {
     loadMore,
     error: rowsError,
     refetch: refetchRows,
-  } = useItems(supportedView && !treeView && can.read ? view?.tableSlug : undefined, {
-    limit,
-    page: search.page,
-    infinite,
-    sorts: querySorts,
-    filters: effectiveFilters,
-    search: search.search,
-  });
+  } = useItems(
+    /* Пока варианты вкладок едут, спрашивать строки рано: без условия
+       вкладки приехал бы весь список, и тут же — второй запрос с ним.
+       У доски без поля раскладки колонок нет вовсе — и строк спрашивать
+       не для чего. */
+    supportedView && !treeView && can.read && !tabGroup.pending && (!boardView || Boolean(boardField))
+      ? view?.tableSlug
+      : undefined,
+    {
+      limit,
+      page: search.page,
+      infinite,
+      sorts: querySorts,
+      filters: effectiveFilters,
+      search: search.search,
+    },
+  );
 
   /*
    * Строка для карточки. Сначала из уже загруженной страницы — drawer
@@ -505,6 +641,35 @@ function MenuPage() {
 
   /** Открытая вкладка связи. Их набор приходит из раскладки карточки. */
   const relationTab = relationTabs.find((item) => item.id === search.tab);
+
+  /**
+   * Типы, которыми бывает вкладка связи. Набор короче общего: дерево
+   * отбор по связи не понимает и показало бы всю чужую таблицу целиком
+   * (см. TAB_VIEW_TYPES).
+   */
+  const tabTypes = useMemo(
+    () =>
+      TAB_VIEW_TYPES.map((type) => ({
+        type,
+        label: t(`view.type.${type}` as TranslationKey, { defaultValue: type }),
+        icon: viewIcon(type),
+      })),
+    [t],
+  );
+
+  /*
+   * Путь до карточки. Первая крошка — пункт меню: она же подписывает
+   * экран в шапке, и возвращает туда же, где строка была открыта.
+   *
+   * Собирается из того, что уже на экране: имя меню и заголовок строки
+   * лежат в загруженных данных, и ни одного запроса крошки не стоят.
+   */
+  const drawerTrail = [
+    {
+      label: menu?.label ?? t("menu.title"),
+      onClick: () => setSearch({ item: undefined, tab: undefined }),
+    },
+  ];
 
   /*
    * Подшапка открыта, если её открыли явно или в ней уже что-то есть:
@@ -528,7 +693,34 @@ function MenuPage() {
    */
   const [draft, setDraft] = useState<Item | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  /**
+   * Черновик в момент создания. Заводят его по-разному — с умолчаниями
+   * схемы, со ссылкой на родителя в дереве, со значением колонки доски,
+   * — поэтому «нетронутый» здесь не «без значений», а «такой же, каким
+   * начался».
+   */
+  const initialDraft = useRef("");
+  /**
+   * Строка, которую откроют, как только решится судьба черновика.
+   * Пусто — вопрос не задан.
+   */
+  const [pendingRow, setPendingRow] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  /**
+   * Завести черновик. Одно место на все три способа (кнопка в шапке,
+   * «дочерняя» в дереве, «+» в колонке доски): здесь же закрывается
+   * открытая карточка строки — панель на экране одна.
+   */
+  const startDraft = (item: Item) => {
+    setShowErrors(false);
+    setDraft(item);
+    initialDraft.current = JSON.stringify(item);
+    setSearch({ item: undefined, tab: undefined });
+  };
+
+  /** Трогали ли черновик. Нетронутый закрывается без вопросов. */
+  const draftTouched = () => draft !== null && JSON.stringify(draft) !== initialDraft.current;
   /** Строка под урной у правого края — удаление одной, со своим диалогом. */
   const [deletingRow, setDeletingRow] = useState<string | null>(null);
   const remove = useDeleteItems(view?.tableSlug);
@@ -579,6 +771,22 @@ function MenuPage() {
 
     if (field) updateField.mutate({ field, draft, language });
     else createField.mutate({ draft, language });
+  };
+
+  /**
+   * Меню колонки: правки СХЕМЫ, а не запроса. Одно и то же у таблицы
+   * и у дерева — поле принадлежит таблице, а не тому, как её показывают.
+   *
+   * Фильтра здесь нет: он относится к запросу, и у дерева его ручка
+   * не читает. Таблица дописывает его себе сама.
+   */
+  const columnActions: ColumnActions = {
+    // Переименование — единственная правка схемы, которую делают
+    // на бегу: остальное открывает диалог.
+    rename: (field, label) =>
+      updateField.mutate({ field, draft: { ...toDraft(field, language), label }, language }),
+    settings: (field, anchor) => setFieldPanel({ field, anchor }),
+    remove: setDeletingField,
   };
 
   /** Незаполненные обязательные и непрошедшие проверку поля черновика. */
@@ -648,8 +856,15 @@ function MenuPage() {
                   tableSlug={view.tableSlug}
                   columns={columns}
                   language={language}
-                  sorts={sorts}
-                  onSorts={(next) => setSearch({ sort: formatSorts(next), page: 1 }, true)}
+                  sorts={boardView ? [] : sorts}
+                  /* На доске сортировки нет: порядок карточек в колонке
+                     расставлен руками, и своя сортировка его спрячет. */
+                  {...(boardView
+                    ? {}
+                    : {
+                        onSorts: (next: Sort[]) =>
+                          setSearch({ sort: formatSorts(next), page: 1 }, true),
+                      })}
                   filtersOpen={filtersVisible}
                   filterCount={activeFilters}
                   // Закрытие не стирает сами фильтры: спрятать строку и снять
@@ -682,8 +897,7 @@ function MenuPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setShowErrors(false);
-                    setDraft(blankItem(drawerColumns));
+                    startDraft(blankItem(drawerColumns));
                   }}
                   className="mr-1 h-7 shrink-0 rounded-md bg-accent-solid px-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
                 >
@@ -726,6 +940,12 @@ function MenuPage() {
                   onInfiniteScroll: (infiniteScroll) =>
                     updateView.mutate({ view, infiniteScroll }),
                   onGroupBy: (groupBy) => updateView.mutate({ view, groupBy }),
+                  // Смена поля раскладки сбрасывает открытую вкладку:
+                  // её значение принадлежало прежнему полю.
+                  onTabGroup: (tabGroup) => {
+                    updateView.mutate({ view, tabGroup });
+                    setSearch({ group: undefined, page: 1 });
+                  },
                   onEditField: (field, anchor) => setFieldPanel({ field, anchor }),
                   // Тот же диалог подтверждения, что и у меню колонки:
                   // удаление поля сносит его во всех view вместе с данными.
@@ -850,11 +1070,13 @@ function MenuPage() {
             language={language}
             selected={selected}
             onSelect={setSelected}
-            onOpenRow={(guid) => setSearch({ item: guid, tab: undefined })}
+            /* Через ту же дверь, что и таблица: своя ветка мимо openRow
+               проходила и мимо адреса записи, и мимо черновика. */
+            onOpenRow={openRow}
             {...(can.update
               ? {
                   onEdit: (guid: string, slug: string, value: unknown) =>
-                    update.mutate({ guid, slug, value }),
+                    update.mutate({ guid, values: { [slug]: value } }),
                 }
               : {})}
             {...(can.write
@@ -867,8 +1089,7 @@ function MenuPage() {
                    * отбрасывает useCreateItem.
                    */
                   onAddChild: (parent: Item) => {
-                    setShowErrors(false);
-                    setDraft({
+                    startDraft({
                       ...blankItem(drawerColumns),
                       [`${view.tableSlug}_id`]: parent.guid ?? null,
                       [relationDataKey(`${view.tableSlug}_id`)]: parent,
@@ -887,19 +1108,38 @@ function MenuPage() {
                   deleting: remove.isPending,
                 }
               : {})}
-            /* ponytail: без меню колонки — оно обещает сортировку и фильтр,
-               которых у ручки дерева нет. Поля правятся через настройки view. */
+            /* Меню колонки — то же, что у таблицы, минус сортировка
+               и фильтр: их ручка дерева не читает, и в меню их нет.
+               Правки схемы к способу показа отношения не имеют. */
+            columnActions={columnActions}
           />
         )
       ) : (
         <>
+          {/* Раскладка вкладками: строки показываются по одной вкладке
+              за раз. Полоса та же, что и у view, — вкладка есть вкладка,
+              и двух разных на одном экране быть не должно.
+
+              У доски та же настройка рисует колонки, а не вкладки:
+              полоса поверх доски дублировала бы её же шапки. */}
+          {tabGroup.tabs.length > 0 && !boardView && (
+            <div className="flex h-11 shrink-0 items-center border-b border-border px-3">
+              <Tabs
+                tabs={tabGroup.tabs}
+                activeId={tabGroup.activeId}
+                onSelect={(id) => setSearch({ group: id, page: 1 }, true)}
+              />
+            </div>
+          )}
+
           {filtersVisible && (
             <FilterBar
               columns={columns}
               relations={schema.relations}
               language={language}
               filters={filters}
-              sorts={sorts}
+              // Своей сортировки у доски нет: порядок карточек задан руками.
+              sorts={boardView ? [] : sorts}
               // Поля, закрытые отбором по умолчанию: свой фильтр по ним
               // всё равно перекрывается настройкой view, и чип соврал бы.
               locked={lockedSlugs}
@@ -910,7 +1150,13 @@ function MenuPage() {
             />
           )}
 
-          {rowsLoading ? (
+          {/* Пока варианты вкладок едут, запрос строк не запущен вовсе —
+              и пустая таблица врала бы «записей нет». */}
+          {boardNotReady ? (
+            /* Доска без поля раскладки — не пустая сетка: рисовать
+               нечего, пока не выбрано, что считать колонками. */
+            <Notice text={t("board.noGroupField")} />
+          ) : rowsLoading || tabGroup.pending ? (
             <GridSkeleton columns={columns.length} />
           ) : rowsError ? (
             /* Отказ показывается словами сервера. Пустая таблица вместо
@@ -919,6 +1165,54 @@ function MenuPage() {
             <Notice
               text={rowsError}
               actions={[{ label: t("action.retry"), onClick: refetchRows }]}
+            />
+          ) : boardView && boardField ? (
+            <Board
+              tableSlug={view.tableSlug}
+              columns={columns}
+              rows={rows.rows}
+              field={boardField}
+              relations={schema.relations}
+              locale={i18n.language}
+              language={language}
+              hasMore={hasMore || loadingMore}
+              onOpenRow={openRow}
+              /* Перенос карточки — обычная правка строки: значение
+                 колонки и номер позиции одним PUT.
+
+                 Право нужно не только на таблицу, но и на само поле
+                 раскладки: роль, которой запрещено менять статус,
+                 не должна таскать карточки между колонками — так же
+                 считает и старая админка (canDragBoardItems). */
+              {...(can.update && boardField.editable
+                ? {
+                    onMove: (guid: string, values: Record<string, unknown>) =>
+                      update.mutate({ guid, values }),
+                  }
+                : {})}
+              /* Правка поля прямо в карточке — тот же редактор и та же
+                 мутация, что у ячейки таблицы. */
+              {...(can.update
+                ? {
+                    onEdit: (guid: string, slug: string, value: unknown) =>
+                      update.mutate({ guid, values: { [slug]: value } }),
+                    onSettings: (field: Field, anchor: DOMRect) =>
+                      setFieldPanel({ field, anchor }),
+                  }
+                : {})}
+              /* Новая запись сразу в колонку: поле раскладки уже
+                 заполнено, остальное — в карточке. */
+              {...(can.write
+                ? {
+                    onAddCard: (columnId: string) => {
+                      startDraft({
+                        ...blankItem(drawerColumns),
+                        [boardField.slug]: groupValue(boardField, columnId),
+                      });
+                    },
+                  }
+                : {})}
+              {...(hasMore ? { onEndReached: loadMore } : {})}
             />
           ) : (
             <DataGrid
@@ -965,7 +1259,7 @@ function MenuPage() {
               {...(can.update
                 ? {
                     onEdit: (guid: string, slug: string, value: unknown) =>
-                      update.mutate({ guid, slug, value }),
+                      update.mutate({ guid, values: { [slug]: value } }),
                   }
                 : {})}
               /*
@@ -996,43 +1290,25 @@ function MenuPage() {
               {...(hasUrl(view.objectUrl)
                 ? { onAddRow: () => openUrl(fillUrl(view.objectUrl, {})) }
                 : {})}
-              /*
-               * Щелчок по строке открывает карточку — если админ не задал
-               * своего адреса. Задал (attributes.navigate) — уводим туда:
-               * у проекта своя страница заказа, и карточка ей не замена.
-               *
-               * Вкладка связи сбрасывается вместе со строкой: у другой
-               * записи набор вкладок тот же, а открытая — уже не та.
-               */
-              onOpenRow={(guid) => {
-                const row = rows.rows.find((item) => item.guid === guid);
-                if (row && openRowUrl(view, row)) return;
-
-                setSearch({ item: guid, tab: undefined });
-              }}
+              onOpenRow={openRow}
               onAddField={(anchor) => setFieldPanel({ field: null, anchor })}
               columnActions={{
-                // Переименование — единственная правка схемы, которую
-                // делают на бегу: остальное открывает диалог.
-                rename: (field, label) =>
-                  updateField.mutate({
-                    field,
-                    draft: { ...toDraft(field, language), label },
-                    language,
-                  }),
-                settings: (field, anchor) => setFieldPanel({ field, anchor }),
+                ...columnActions,
                 filter: (field) => {
                   const kind = filterKind(field);
                   if (kind) applyFilters({ ...filters, [field.slug]: emptyFilter(kind) });
                 },
-                remove: setDeletingField,
               }}
             />
           )}
 
           {/* Подвал считает и листает загруженное — на отказе считать
-              нечего, и «0 из 0» под сообщением об ошибке только сбивает. */}
-          {!rowsError && (
+              нечего, и «0 из 0» под сообщением об ошибке только сбивает.
+
+              У доски подвала нет вовсе: страницами её не листают, а
+              размер порции у неё свой и не настраивается. Сколько
+              карточек в колонке — написано в её шапке. */}
+          {!rowsError && !boardView && (
           <GridFooter
             /* Со страницами подвал листает, с прокруткой — считает. */
             {...(infinite ? {} : { page: search.page, onPage: (next: number) => setSearch({ page: next }) })}
@@ -1092,6 +1368,7 @@ function MenuPage() {
             : {})}
           sections={drawerLayout.sections}
           heading={drawerLayout.heading}
+          trail={drawerTrail}
           tabs={relationTabs}
           /* Вкладку карточки заводит тот же, кто правит настройки view:
              вкладка и есть view — со своими колонками, отбором и именем.
@@ -1099,7 +1376,8 @@ function MenuPage() {
           {...(can.settings
             ? {
                 addableRelations,
-                onAddTab: (relationId: string, label: string) => {
+                tabTypes,
+                onAddTab: (relationId: string, label: string, type: string) => {
                   const relation = schema.relations.find((item) => item.id === relationId);
                   if (!relation) return;
 
@@ -1107,6 +1385,7 @@ function MenuPage() {
                     {
                       name: label,
                       language,
+                      type,
                       relation: { id: relation.id, tableSlug: relation.toSlug },
                     },
                     { onSuccess: (created) => created?.id && setSearch({ tab: created.id }) },
@@ -1132,6 +1411,17 @@ function MenuPage() {
                 language={language}
                 languages={languages}
                 onLanguage={setLanguage}
+                /* Крошка записи возвращает к самой карточке: вкладка
+                   тогда закрывается, а вместе с ней и раскрытая в ней
+                   связанная строка — она живёт внутри вкладки. */
+                trail={[
+                  ...drawerTrail,
+                  {
+                    label:
+                      itemTitle(drawerRow, drawerLayout.heading) || t("drawer.noHeading"),
+                    onClick: () => setSearch({ tab: undefined }),
+                  },
+                ]}
                 saving={updateView.isPending}
                 /* Настройки вкладки — те же, что у таблицы, и уезжают
                    тем же PUT view: у вкладки своя строка в базе. */
@@ -1144,6 +1434,12 @@ function MenuPage() {
                             name,
                             language: nameLanguage,
                           }),
+                        onType: (type: string) =>
+                          updateView.mutate({ view: relationTab.view, type }),
+                        /* Поле колонок доски. У таблицы та же настройка
+                           разбивает её вкладками — колонка view одна. */
+                        onTabGroup: (tabGroup: string) =>
+                          updateView.mutate({ view: relationTab.view, tabGroup }),
                         onColumns: (columns: string[]) =>
                           updateView.mutate({ view: relationTab.view, columns }),
                         onFixedColumns: (fixedColumns: string[]) =>
@@ -1165,7 +1461,7 @@ function MenuPage() {
           {...(can.update
             ? {
                 onEdit: (guid: string, slug: string, value: unknown) =>
-                  update.mutate({ guid, slug, value }),
+                  update.mutate({ guid, values: { [slug]: value } }),
               }
             : {})}
           onSettings={(field, anchor) => setFieldPanel({ field, anchor })}
@@ -1195,6 +1491,10 @@ function MenuPage() {
           sections={drawerLayout.sections}
           heading=""
           titlePlaceholder={t("table.addRow")}
+          /* Тот же путь, что у открытой строки: без него шапка черновика
+             — пустая полоса с двумя значками. Крошка меню закрывает
+             черновик, потому что возвращает она туда же, в таблицу. */
+          trail={[{ label: menu?.label ?? t("menu.title"), onClick: () => setDraft(null) }]}
           onEdit={(_guid, slug, value) =>
             setDraft((current) => (current ? { ...current, [slug]: value } : current))
           }
@@ -1380,6 +1680,24 @@ function MenuPage() {
             />
           );
         })()}
+
+      {/* Открыть строку, не сохранив черновик новой записи. Спрашиваем,
+          потому что щелчок по строке — это «посмотреть», а не «закрыть»:
+          введённое пропало бы без единого следа. */}
+      {pendingRow && (
+        <ConfirmDialog
+          title={t("table.draftOpenTitle")}
+          description={t("table.draftOpenDescription")}
+          confirmLabel={t("table.draftDiscard")}
+          busy={false}
+          onClose={() => setPendingRow(null)}
+          onConfirm={() => {
+            setDraft(null);
+            setPendingRow(null);
+            setSearch({ item: pendingRow, tab: undefined });
+          }}
+        />
+      )}
 
       {/* Удаление одной строки — урной у правого края. Свой диалог:
           выделение человека здесь ни при чём и не трогается. */}

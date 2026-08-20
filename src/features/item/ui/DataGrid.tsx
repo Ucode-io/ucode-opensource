@@ -125,6 +125,9 @@ const DRAFT = -1;
 /** Пустой набор ошибок: без него у грида без черновика новая Map на рендер. */
 const NO_ERRORS: ReadonlyMap<string, CellError> = new Map();
 
+/** Постоянная ссылка: у дерева сортировки нет, а новый массив — новый рендер. */
+const NO_SORTS: Sort[] = [];
+
 /** Открытое меню колонки. Тоже одно: оно всплывает поверх таблицы. */
 type Menu = { slug: string; anchor: DOMRect };
 
@@ -177,7 +180,7 @@ export function DataGrid({
   language,
   selected,
   onSelect,
-  sorts,
+  sorts = NO_SORTS,
   onSort,
   onAddField,
   columnActions,
@@ -239,9 +242,16 @@ export function DataGrid({
   /** guid отмеченных строк. */
   selected: ReadonlySet<string>;
   onSelect: (next: Set<string>) => void;
-  sorts: Sort[];
-  /** Без направления — клик по заголовку: вверх, вниз, никак. */
-  onSort: (field: string, direction?: SortDirection) => void;
+  sorts?: Sort[];
+  /**
+   * Без направления — клик по заголовку: вверх, вниз, никак.
+   *
+   * Необязателен: у дерева свой порядок — обход иерархии, — и ручка
+   * /tree сортировки не читает вовсе. Без обработчика заголовок
+   * перестаёт быть кнопкой, а меню колонки не предлагает сортировку:
+   * рабочий на вид пункт, который ничего не делает, хуже отсутствующего.
+   */
+  onSort?: ((field: string, direction?: SortDirection) => void) | undefined;
   /** Кнопка «+» в шапке. Панель нового поля всплывает под ней — отсюда якорь. */
   onAddField?: (anchor: DOMRect) => void;
   /** Действия над колонкой. Нет — меню в шапке не появляется. */
@@ -1239,11 +1249,28 @@ function HeaderCell({
   onResize?: ((event: ReactPointerEvent<HTMLDivElement>) => void) | undefined;
   /** Вернуть исходную ширину: двойной щелчок по ручке. */
   onResetWidth?: (() => void) | undefined;
-  onSort: (field: string) => void;
+  /** Сортировать по колонке. Нет — заголовок не кнопка: щёлкать нечему. */
+  onSort?: ((field: string) => void) | undefined;
   onMenu?: ((element: HTMLElement) => void) | undefined;
 }) {
   const { t } = useTranslation();
   const active = sorts.find((sort) => sort.field === column.slug);
+  const title = (
+    <>
+      <Icon as={fieldIcon(column.type)} size={14} />
+      <span className="truncate">{localized(column.labels, language, column.label)}</span>
+
+      {/* Стрелка только у сортированной колонки: значок «можно
+          сортировать» на каждом заголовке — это шум в плотной шапке. */}
+      {active && (
+        <Icon
+          as={active.direction === "asc" ? IconArrowNarrowUp : IconArrowNarrowDown}
+          size={14}
+          className="text-accent-text"
+        />
+      )}
+    </>
+  );
 
   return (
     <th
@@ -1263,24 +1290,19 @@ function HeaderCell({
         распорка в заголовке до него доходит.
       */}
       <span className={`flex h-full items-center ${last ? "min-w-[164px]" : "min-w-0"}`}>
-        <button
-          type="button"
-          onClick={() => onSort(column.slug)}
-          className="flex h-full min-w-0 flex-1 items-center gap-1.5 text-fg-muted transition-colors hover:text-fg"
-        >
-          <Icon as={fieldIcon(column.type)} size={14} />
-          <span className="truncate">{localized(column.labels, language, column.label)}</span>
-
-          {/* Стрелка только у сортированной колонки: значок «можно
-              сортировать» на каждом заголовке — это шум в плотной шапке. */}
-          {active && (
-            <Icon
-              as={active.direction === "asc" ? IconArrowNarrowUp : IconArrowNarrowDown}
-              size={14}
-              className="text-accent-text"
-            />
-          )}
-        </button>
+        {onSort ? (
+          <button
+            type="button"
+            onClick={() => onSort(column.slug)}
+            className="flex h-full min-w-0 flex-1 items-center gap-1.5 text-fg-muted transition-colors hover:text-fg"
+          >
+            {title}
+          </button>
+        ) : (
+          <span className="flex h-full min-w-0 flex-1 items-center gap-1.5 text-fg-muted">
+            {title}
+          </span>
+        )}
 
         {/* Кнопка меню появляется по наведению: в шапке из десяти колонок
             десять одинаковых значков — это рябь, а не подсказка. */}

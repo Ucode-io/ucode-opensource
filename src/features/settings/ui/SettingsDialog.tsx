@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { IconBuilding, IconShieldLock, IconUser, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
+import { Modal } from "@/shared/ui/modal";
 import { ProfileSettings } from "./ProfileSettings";
 import { ProjectSettings } from "./ProjectSettings";
 import { RoleSettings } from "./RoleSettings";
@@ -38,11 +39,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
-      style={{ background: "var(--color-overlay)" }}
-      onPointerDown={(event) => event.target === event.currentTarget && onClose()}
-    >
+    <Modal onClose={onClose}>
       {/* Окно широкое: в правах помещается матрица «таблица × право»,
           а она не сжимается — колонок одиннадцать. На узком экране
           растягивается до его краёв. */}
@@ -100,6 +97,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

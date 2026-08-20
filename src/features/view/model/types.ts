@@ -7,7 +7,7 @@ import type { UrlTemplate } from "./url-template";
  * два пункта могут показывать одну таблицу разными наборами view.
  */
 
-/** Типы, которые отдаёт бэкенд. В v1 рисуется только TABLE. */
+/** Типы, которые отдаёт бэкенд. Рисуются те, что в IMPLEMENTED_VIEW_TYPES. */
 export const VIEW_TYPES = [
   "TABLE",
   "BOARD",
@@ -29,7 +29,23 @@ export type ViewType = (typeof VIEW_TYPES)[number];
 const NOT_A_TAB = new Set<string>(["SECTION"]);
 
 /** Экраны, которые действительно есть. Остальные вкладки видны, но пусты. */
-export const IMPLEMENTED_VIEW_TYPES = new Set<string>(["TABLE", "TREE"]);
+export const IMPLEMENTED_VIEW_TYPES = new Set<string>(["TABLE", "TREE", "BOARD"]);
+
+/**
+ * Типы, которыми бывает ВКЛАДКА СВЯЗИ в карточке записи.
+ *
+ * Совпадает с IMPLEMENTED_VIEW_TYPES, но список свой не зря: дерево
+ * во вкладке устроено иначе, чем на экране. Ручка дерева
+ * (`POST /v2/items/{slug}/tree`) читает из тела ровно ОДНО условие —
+ * родителя (`<slug>_id`), — а всё остальное молча отбрасывает
+ * (object_builder, storage/postgres/ag_grid_tree.go:105 и :203).
+ * Отбор по колонке-ссылке до неё не доезжает, и дерево показало бы ВСЮ
+ * чужую таблицу. Поэтому вкладка строит иерархию на клиенте, из строк,
+ * которые и так загружены с нужным отбором (features/item/model/tree,
+ * groupByParent). Старая админка фильтры в эту ручку шлёт и получает
+ * то самое «всё» — см. docs/backend-notes.md.
+ */
+export const TAB_VIEW_TYPES = VIEW_TYPES.filter((type) => IMPLEMENTED_VIEW_TYPES.has(type));
 
 export type View = {
   id: string;
@@ -140,6 +156,27 @@ export type View = {
    * чем показывается, нельзя.
    */
   groupById: string;
+  /**
+   * Поле, по которому view РАСКЛАДЫВАЕТСЯ (`group_fields`, первый
+   * элемент). Ключ тот же, что и в columns: у поля-связи это id связи.
+   * Пусто — раскладки нет.
+   *
+   * Одно поле — две раскладки, и обе берут его отсюда: таблица делает
+   * из значений вкладки и показывает по одному значению за раз, доска
+   * — колонки и показывает их все сразу. Так же его читает и старая
+   * админка (useBoardProps.jsx: `view.group_fields[0]`).
+   *
+   * Не путать с `groupById`: там строки собираются в группы внутри
+   * одного списка, здесь — список сужается до одного значения, и
+   * остальные строки на экран не приезжают вовсе.
+   *
+   * Колонка таблицы, а не ключ attributes: бэкенд пишет её отдельным
+   * `group_fields = $N` при каждом PUT (view.go, Update).
+   *
+   * Один уровень намеренно: настройка хранит список, но и старая
+   * админка кладёт туда ровно один элемент (useTabGroupProps.jsx).
+   */
+  tabGroupId: string;
   /**
    * View, как его отдал бэкенд. Нужен для записи: PUT перезаписывает
    * строку целиком, причём calendar_from_slug, calendar_to_slug,

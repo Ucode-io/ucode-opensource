@@ -6,6 +6,7 @@ import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/input";
 import { slugify } from "@/shared/lib/slug";
 import { LanguageInput } from "@/shared/ui/language-input";
+import { Modal } from "@/shared/ui/modal";
 
 /**
  * Создание и переименование пункта — одна форма. В старом коде под каждый
@@ -77,11 +78,7 @@ export function MenuFormDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
-      style={{ background: "var(--color-overlay)" }}
-      onPointerDown={(event) => event.target === event.currentTarget && onClose()}
-    >
+    <Modal onClose={onClose}>
       <form
         onSubmit={submit}
         className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-modal"
@@ -178,7 +175,7 @@ export function MenuFormDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 

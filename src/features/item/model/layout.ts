@@ -196,6 +196,22 @@ export function headingSlug(layout: Layout | undefined, language: string): strin
 }
 
 /**
+ * Заголовок записи одной строкой — им подписана карточка в крошках.
+ *
+ * Заголовком карточки бывает только текст, но `layout_heading` хранится
+ * слагом, и после смены типа поля там оказывается что угодно. Объект
+ * и массив тогда встали бы в шапку как `[object Object]`; пусто честнее —
+ * вместо него подставится запасная подпись.
+ */
+export function itemTitle(row: Record<string, unknown> | undefined, heading: string): string {
+  const value = heading ? row?.[heading] : undefined;
+
+  if (value === null || value === undefined || typeof value === "object") return "";
+
+  return String(value);
+}
+
+/**
  * Раскладка с новым полем-заголовком.
  *
  * У мультиязычной таблицы пишется карта по всем языкам сразу: человек

@@ -1,9 +1,9 @@
 import {
   IconChevronDown,
   IconChevronsLeft,
-  IconChevronsRight,
   IconDeviceDesktop,
   IconLanguage,
+  IconLayoutSidebarLeftExpand,
   IconMoon,
   IconSettings,
   IconSun,
@@ -154,7 +154,11 @@ function CollapseButton({ floating }: { floating: boolean }) {
       title={label}
       className="grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle opacity-0 transition-opacity group-hover/aside:opacity-100 hover:bg-surface-hover hover:text-fg focus-visible:opacity-100"
     >
-      <Icon as={floating ? IconChevronsRight : IconChevronsLeft} size={16} />
+      {/* Закрепить — тем же значком, что и кнопка в шапке контента:
+          действие одно (и ключ подписи один), а значков на него было
+          два. Свернуть — стрелками влево: это про направление, и рядом
+          с ним ничего похожего нет. */}
+      <Icon as={floating ? IconLayoutSidebarLeftExpand : IconChevronsLeft} size={16} />
     </button>
   );
 }

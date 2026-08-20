@@ -26,8 +26,8 @@ export const keys = {
      * Строки чужой таблицы для выбора руками (условие агрегата).
      * Поиск в ключе: это и есть запрос.
      */
-    relationRows: (tableSlug: string, search: string) =>
-      [...keys.tables.all, "relation-rows", tableSlug, search] as const,
+    relationRows: (tableSlug: string, search: string, limit: number) =>
+      [...keys.tables.all, "relation-rows", tableSlug, search, limit] as const,
     /** Настройки одной связи: поля показа лежат только в ней. */
     relation: (tableSlug: string, relationId: string) =>
       [...keys.tables.all, "relations", tableSlug, relationId] as const,

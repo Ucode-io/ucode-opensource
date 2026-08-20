@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { localized, type Field } from "@/features/table";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
+import { Modal } from "@/shared/ui/modal";
 import { useImportExcel, useReadExcel } from "../api/excel";
 
 /**
@@ -78,11 +79,7 @@ export function ExcelImportDialog({
   const chosen = Object.values(mapping).filter(Boolean).length;
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
-      style={{ background: "var(--color-overlay)" }}
-      onPointerDown={(event) => event.target === event.currentTarget && onClose()}
-    >
+    <Modal onClose={onClose}>
       <div className="flex max-h-[80vh] w-full max-w-lg flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-modal">
         <h2 className="text-base font-semibold">{t("view.import")}</h2>
 
@@ -153,6 +150,6 @@ export function ExcelImportDialog({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

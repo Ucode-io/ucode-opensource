@@ -104,6 +104,15 @@ function BrandPanel() {
  * цвет смешивается, и граница между волнами получается мягкой сама —
  * без обводок и теней.
  */
+/* Общие для трёх волн — путь описывается один раз, а не дублируется
+   между заливкой и клип-путём шума ниже. */
+const WAVE_DEEP_D =
+  "M0 64C120 60 208 124 300 212C398 306 520 296 642 282C760 268 830 372 900 400C982 434 1034 340 1122 344C1152 346 1178 354 1200 362V760H0V64Z";
+const WAVE_MID_D =
+  "M0 300C150 297 300 284 430 258C522 240 562 216 642 220C732 225 800 318 882 380C962 438 1082 440 1200 422V760H0V300Z";
+const WAVE_LIGHT_D =
+  "M0 470C92 458 172 458 252 526C332 592 352 668 452 694C562 722 702 698 822 640C942 582 1082 560 1200 586V760H0V470Z";
+
 function Waves() {
   return (
     <svg
@@ -129,25 +138,61 @@ function Waves() {
           <stop offset="0%" stopColor="var(--color-brand-gradient-to)" />
           <stop offset="100%" stopColor="var(--color-accent)" />
         </linearGradient>
+        {/* Блик на гребне: objectBoundingBox (по умолчанию) растягивается
+            на bbox своей волны, поэтому «верх» у каждой — свои 35%, а не
+            фиксированная линия по вьюбоксу. Белый — не токен, а блик. */}
+        <linearGradient id="auth-wave-highlight" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+          <stop offset="35%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        {/* Зерно поверх волн: чистый feTurbulence, без цвета, поэтому мимо
+            правила про токены — это текстура, а не заливка. Область шире
+            вьюбокса (x/y -20%), чтобы размытие волн под ним не обрезалось
+            краем фильтра. */}
+        <filter id="auth-wave-noise" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="2" seed="7" stitchTiles="stitch" />
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0" />
+        </filter>
+        {/* Тот же контур волн, но как клип: без него шумовой rect красит
+            весь вьюбокс, включая прозрачные углы вокруг разлива. */}
+        <clipPath id="auth-wave-clip">
+          <path d={WAVE_DEEP_D} />
+          <path d={WAVE_MID_D} />
+          <path d={WAVE_LIGHT_D} />
+        </clipPath>
       </defs>
 
-      {/* Дальняя: гребень у левого края, ложбина посередине, подъём справа. */}
-      <path
-        d="M0 64C120 60 208 124 300 212C398 306 520 296 642 282C760 268 830 372 900 400C982 434 1034 340 1122 344C1152 346 1178 354 1200 362V760H0V64Z"
-        fill="url(#auth-wave-deep)"
-        opacity="0.55"
-      />
-      {/* Средняя — самая пологая: её гребень приходится на ложбину дальней. */}
-      <path
-        d="M0 300C150 297 300 284 430 258C522 240 562 216 642 220C732 225 800 318 882 380C962 438 1082 440 1200 422V760H0V300Z"
-        fill="url(#auth-wave-mid)"
-        opacity="0.75"
-      />
-      {/* Ближняя — цвет бренда в полную силу: он и должен остаться в глазу. */}
-      <path
-        d="M0 470C92 458 172 458 252 526C332 592 352 668 452 694C562 722 702 698 822 640C942 582 1082 560 1200 586V760H0V470Z"
-        fill="url(#auth-wave-light)"
-      />
+      {/* isolation: держит блендинг шума внутри группы — иначе overlay
+          смешивался бы не только с волнами, а со всей панелью под svg. */}
+      <g style={{ isolation: "isolate" }}>
+        {/* ponytail: блюр временно снят по просьбе — вернуть style={{ filter: "blur(6px)" }} на этот <g>. */}
+        <g>
+          {/* Дальняя: гребень у левого края, ложбина посередине, подъём справа. */}
+          <path d={WAVE_DEEP_D} fill="url(#auth-wave-deep)" opacity="0.55" />
+          <path d={WAVE_DEEP_D} fill="url(#auth-wave-highlight)" style={{ mixBlendMode: "soft-light" }} />
+          {/* Средняя — самая пологая: её гребень приходится на ложбину дальней. */}
+          <path d={WAVE_MID_D} fill="url(#auth-wave-mid)" opacity="0.75" />
+          <path d={WAVE_MID_D} fill="url(#auth-wave-highlight)" style={{ mixBlendMode: "soft-light" }} />
+          {/* Ближняя — цвет бренда в полную силу: он и должен остаться в глазу. */}
+          <path d={WAVE_LIGHT_D} fill="url(#auth-wave-light)" />
+          <path d={WAVE_LIGHT_D} fill="url(#auth-wave-highlight)" style={{ mixBlendMode: "soft-light" }} />
+        </g>
+
+        {/* Шум сверху, без размытия: делает разлив матовым и шероховатым,
+            а не гладким. overlay смешивает его с цветом волны под ним, а не
+            просто высветляет — иначе зерно читалось бы белой дымкой.
+            clip-path держит его строго в контуре волн. */}
+        <rect
+          x="0"
+          y="0"
+          width="1200"
+          height="760"
+          clipPath="url(#auth-wave-clip)"
+          filter="url(#auth-wave-noise)"
+          opacity="1"
+          style={{ mixBlendMode: "overlay" }}
+        />
+      </g>
     </svg>
   );
 }

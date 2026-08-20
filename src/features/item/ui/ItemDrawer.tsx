@@ -1,6 +1,16 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import {
   IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
   IconChevronsRight,
   IconFileDescription,
   IconFileTypePdf,
@@ -13,6 +23,7 @@ import {
   IconSquareToggleHorizontal,
   IconTable,
   IconX,
+  type Icon as TablerIcon,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -35,7 +46,9 @@ import { Icon } from "@/shared/ui/icon";
 import { LanguageTabs } from "@/shared/ui/language-tabs";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { ResizeHandle } from "@/shared/ui/resize-handle";
+import { Tabs } from "@/shared/ui/tabs";
 import { cellKind, editorKind } from "../model/cell-kind";
+import { itemTitle } from "../model/layout";
 import type { Item } from "../model/types";
 import { Cell } from "./Cell";
 import { ActiveCell } from "./CellEditor";
@@ -79,6 +92,7 @@ export function ItemDrawer({
   languages,
   sections,
   heading,
+  trail,
   tabs,
   tab,
   onTab,
@@ -86,6 +100,7 @@ export function ItemDrawer({
   onLanguage,
   onAddTab,
   addableRelations,
+  tabTypes,
   onPdf,
   actions,
   titlePlaceholder,
@@ -118,6 +133,18 @@ export function ItemDrawer({
   /** Слаг поля-заголовка. Пусто — заголовка нет, все поля идут списком. */
   heading: string;
   /**
+   * Откуда открыта карточка: предки — таблица, запись, вкладка связи.
+   * Сама карточка дописывается последней крошкой и не нажимается.
+   *
+   * Крошки — готовые подписи и обработчики, а не идентификаторы: путь
+   * знает тот, кто карточку открыл, и запрашивать его заново неоткуда
+   * и незачем — все имена уже показаны на экране.
+   *
+   * Пусто — крошек нет вовсе: одна своя крошка повторяла бы заголовок,
+   * который и так стоит ниже.
+   */
+  trail?: { label: string; onClick: () => void }[] | undefined;
+  /**
    * Вкладки связей: связанные строки рядом с карточкой. Их содержимое
    * рисует вызывающий — это чужая таблица со своими колонками, и знать
    * о ней карточка не обязана. Пусто — вкладок нет, показана только карточка.
@@ -148,7 +175,13 @@ export function ItemDrawer({
    * Завести вкладку по связи. Не задан — «+» в полосе вкладок нет:
    * раскладку правит тот же, кто правит настройки view.
    */
-  onAddTab?: ((relationId: string, label: string) => void) | undefined;
+  onAddTab?: ((relationId: string, label: string, type: string) => void) | undefined;
+  /**
+   * Типы, которыми бывает вкладка связи: подпись и значок на каждый.
+   * Набор знает features/view — карточке о типах view знать незачем,
+   * она только рисует список. Пусто или один — шага выбора нет вовсе.
+   */
+  tabTypes?: { type: string; label: string; icon: TablerIcon }[] | undefined;
   /**
    * Открыть PDF записи. Адрес задаёт админ в настройках view
    * (attributes.pdf_url); не задан — кнопки нет.
@@ -203,7 +236,7 @@ export function ItemDrawer({
   const { t } = useTranslation();
   /** Какое поле правится. Одно на drawer — как и в таблице. */
   const [active, setActive] = useState<{ slug: string; anchor: DOMRect } | null>(null);
-  const { drawerMode, setDrawerMode, drawerWidth, setDrawerWidth } = useUi();
+  const { drawerMode, setDrawerMode, drawerWidth, setDrawerWidth, sidebarCollapsed } = useUi();
   const panel = useRef<HTMLElement>(null);
   const side = drawerMode === "side";
 
@@ -274,6 +307,37 @@ export function ItemDrawer({
    */
   const title = heading ? fields.find((field) => field.slug === heading) : undefined;
   const rest = title ? fields.filter((field) => field !== title) : fields;
+
+  /*
+   * Крошки: путь до карточки и она сама последней. Своя крошка
+   * нажимается только при открытой вкладке связи — тогда она возвращает
+   * к самой записи. Без вкладки нажимать нечего: мы уже здесь.
+   */
+  /*
+   * Вкладки карточки. Первая — сама запись: у неё нет своего view,
+   * и в старой админке она тоже стоит в этом ряду.
+   */
+  const tabItems = useMemo(
+    () => [
+      { id: "", label: t("drawer.record"), icon: IconLayoutList },
+      ...(tabs ?? []).map((item) => ({
+        id: item.id,
+        label: item.label,
+        /* Вкладка на одну строку — не таблица: у обратной связи
+           в нашей колонке лежит ровно один чужой guid. */
+        icon: item.direction === "outgoing" ? IconFileDescription : IconTable,
+      })),
+    ],
+    [tabs, t],
+  );
+
+  const crumbs = [
+    ...(trail ?? []),
+    {
+      label: itemTitle(row, title?.slug ?? "") || titlePlaceholder || t("drawer.noHeading"),
+      ...(tab && onTab ? { onClick: () => onTab("") } : {}),
+    },
+  ];
   // Связи ищутся по id на каждом поле-ссылке — держим индексом.
   const byId = new Map(relations.map((relation) => [relation.id, relation]));
 
@@ -334,7 +398,16 @@ export function ItemDrawer({
       <aside
         ref={panel}
         style={side ? { width: drawerWidth } : undefined}
-        className={`fixed z-50 flex flex-col bg-surface ${MODE_CLASS[drawerMode]}`}
+        /*
+         * Свёрнутый сайдбар убирает отступ и скругление у контента
+         * (`_authed.tsx`: отделять карточку слева не от чего) — панель
+         * следует за ним и тоже прижимается к краю. Иначе она осталась
+         * бы единственной плавающей поверхностью на экране, где всё
+         * остальное лежит встык.
+         */
+        className={`fixed z-50 flex flex-col bg-surface ${
+          side && sidebarCollapsed ? SIDE_FLUSH : MODE_CLASS[drawerMode]
+        }`}
       >
         {side && (
           <ResizeHandle
@@ -359,7 +432,9 @@ export function ItemDrawer({
           />
         )}
 
-        <header className="flex h-header shrink-0 items-center gap-1 px-2">
+        {/* Отступы и граница — как у шапки страницы: это тот же ряд,
+            только в панели. */}
+        <header className="flex h-header shrink-0 items-center gap-1 border-b border-border px-4">
           <IconButton
             icon={side ? IconChevronsRight : IconX}
             label={t("action.close")}
@@ -396,23 +471,66 @@ export function ItemDrawer({
             )}
           </Popover>
 
-          {/* PDF записи: адрес задан в настройках view, и печатная форма
-              нужна прямо здесь — с открытой карточкой, а не после
-              возврата в таблицу. */}
-          {onPdf && <IconButton icon={IconFileTypePdf} label={t("drawer.openPdf")} onClick={onPdf} />}
+          {/*
+           * Путь до карточки. Открытая поверх вкладки связанная строка
+           * прячет собой и таблицу, и запись, из которой её раскрыли,
+           * — крошки единственное, что показывает, где мы находимся.
+           *
+           * Одна крошка не рисуется: она повторяла бы заголовок ниже.
+           */}
+          {crumbs.length > 1 && (
+            <nav
+              aria-label={t("drawer.trail")}
+              className="flex min-w-0 flex-1 items-center gap-0.5 text-xs text-fg-muted"
+            >
+              {crumbs.map((crumb, index) => (
+                <Fragment key={index}>
+                  {index > 0 && (
+                    <Icon as={IconChevronRight} size={12} className="shrink-0 text-fg-subtle" />
+                  )}
 
-          {/* Действия над этой строкой. Слева от переключателя языка,
-              потому что это действие над записью, а не над показом. */}
-          {actions}
-
-          {/* Переключатель языка данных общий на всё приложение: он же
-              стоит над таблицей, и разъехавшись, они показывали бы
-              карточку и список на разных языках. */}
-          {multilingual && onLanguage && (
-            <div className="ml-auto">
-              <LanguageTabs languages={languages} value={language} onChange={onLanguage} />
-            </div>
+                  {crumb.onClick ? (
+                    <button
+                      type="button"
+                      onClick={crumb.onClick}
+                      className="min-w-0 truncate rounded px-1 py-0.5 transition-colors hover:bg-surface-hover hover:text-fg"
+                    >
+                      {crumb.label}
+                    </button>
+                  ) : (
+                    <span className="min-w-0 truncate px-1 py-0.5 text-fg">{crumb.label}</span>
+                  )}
+                </Fragment>
+              ))}
+            </nav>
           )}
+
+          {/*
+           * Правая группа шапки: сначала показ, потом действия.
+           *
+           * Переключатель языка — про то, КАК показана запись, и стоит
+           * он первым, рядом с крошками: те тоже про показ. PDF и действия
+           * — про саму запись, и они у самого края, где их и ищут.
+           *
+           * Группа одна на все три: без неё язык прижимался к правому
+           * краю в одиночку, а действия оставались посреди шапки —
+           * и по три кнопки в разных её местах читались как три разных
+           * ряда.
+           */}
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {multilingual && onLanguage && (
+              <LanguageTabs languages={languages} value={language} onChange={onLanguage} />
+            )}
+
+            {/* PDF записи: адрес задан в настройках view, и печатная форма
+                нужна прямо здесь — с открытой карточкой, а не после
+                возврата в таблицу. */}
+            {onPdf && (
+              <IconButton icon={IconFileTypePdf} label={t("drawer.openPdf")} onClick={onPdf} />
+            )}
+
+            {actions}
+          </div>
         </header>
 
         {/*
@@ -422,29 +540,16 @@ export function ItemDrawer({
          * не переключает.
          */}
         {row && ((tabs && tabs.length > 0) || onAddTab) && (
-          <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-3">
-            {/* Прокручивается только сам ряд вкладок: «+» рядом с ним,
-                а не внутри — всплывашка, открытая из прокручиваемого
-                контейнера, обрезается его краями. */}
-            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-              <Tab
-                icon={IconLayoutList}
-                label={t("drawer.record")}
-                active={!tab}
-                onClick={() => onTab?.("")}
-              />
-              {(tabs ?? []).map((item) => (
-                <Tab
-                  key={item.id}
-                  /* Вкладка на одну строку — не таблица: у обратной связи
-                     в нашей колонке лежит ровно один чужой guid. */
-                  icon={item.direction === "outgoing" ? IconFileDescription : IconTable}
-                  label={item.label}
-                  active={tab === item.id}
-                  onClick={() => onTab?.(item.id)}
-                />
-              ))}
-            </div>
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+            {/* Прокрутку и плашку активной вкладки держит сама полоса
+                (shared/ui/tabs). «+» стоит рядом с ней, а не внутри:
+                всплывашка, открытая из прокручиваемого контейнера,
+                обрезается его краями. */}
+            <Tabs
+              tabs={tabItems}
+              activeId={tab ?? ""}
+              onSelect={(id) => onTab?.(id)}
+            />
 
             {/* Новая вкладка — это связь, которую ещё не показали:
                 бэкенд заводит вкладки сам, но только тем связям,
@@ -454,6 +559,7 @@ export function ItemDrawer({
                 relations={addableRelations ?? []}
                 shown={new Set((tabs ?? []).map((item) => item.relationId).filter(Boolean))}
                 language={language}
+                types={tabTypes ?? []}
                 onAdd={onAddTab}
               />
             )}
@@ -667,13 +773,23 @@ const MODE_ICON = {
  * Сбоку — панель у правого края, тянется за левый край. По центру —
  * карточка над таблицей. Во весь экран — без скруглений и границ:
  * это уже не панель поверх экрана, а сам экран.
+ *
+ * У панели сбоку тот же отступ и тот же радиус, что у карточки контента
+ * (`_authed.tsx`: `m-2 rounded-xl`): приклеенная к краю окна, она была
+ * единственной поверхностью приложения со своими правилами — шапка
+ * страницы начиналась на 8px ниже шапки панели, а скруглённый угол
+ * контента уезжал под неё. Радиус 12px — тот, который DESIGN.md
+ * и назначает drawer'у.
  */
 const MODE_CLASS = {
-  side: "inset-y-0 right-0 border-l border-border shadow-modal",
+  side: "inset-y-2 right-2 rounded-xl border border-border shadow-modal",
   center:
     "inset-y-8 left-1/2 w-[min(1100px,calc(100%-4rem))] -translate-x-1/2 rounded-xl border border-border shadow-modal",
   full: "inset-0",
 } as const;
+
+/** Панель сбоку без сайдбара: встык к краю окна, как и сам контент. */
+const SIDE_FLUSH = "inset-y-0 right-0 border-l border-border shadow-modal";
 
 /** Шире этого drawer забирает экран себе — сайдбар уступает место. */
 const SIDEBAR_YIELDS_AT = 800;
@@ -799,39 +915,6 @@ function Heading({
 }
 
 /**
- * Вкладка карточки — со значком, как вкладки view над таблицей: полоса
- * вкладок в карточке и полоса вкладок экрана читаются как одно и то же
- * средство, и выглядеть они должны одинаково.
- */
-function Tab({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: typeof IconTable;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-sm transition-colors ${
-        active
-          ? "bg-accent-subtle text-accent-text"
-          : "text-fg-muted hover:bg-surface-hover hover:text-fg"
-      }`}
-    >
-      <Icon as={icon} size={14} />
-      {label}
-    </button>
-  );
-}
-
-/**
  * Типы, которыми бывает заголовок карточки. Тот же набор, что и в старой
  * админке: заголовок — это название строки, а не её дата или галочка.
  */
@@ -952,10 +1035,12 @@ function IconButton({
 /**
  * «+» в полосе вкладок: показать связь этой таблицы.
  *
- * Выбор — таблица связи, как и в старой админке: там «+ View» в карточке
- * тоже требует выбрать связь, и без неё не создаёт ничего
- * (useViewCreatePopupProps.jsx — `setError("table_slug")`). Типа view
- * здесь нет: в старой их восемь, но нарисован из них один.
+ * Два шага: связь, потом тип. Связь обязательна — как и в старой админке,
+ * где «+ View» в карточке без неё не создаёт ничего
+ * (useViewCreatePopupProps.jsx — `setError("table_slug")`). Тип раньше
+ * не спрашивался вовсе, и вкладка молча получалась таблицей.
+ *
+ * Тип один — шага нет: список из одного пункта ничего не выбирает.
  *
  * Уже показанные связи из списка не убираются, только помечаются:
  * две вкладки на одну связь — это «все заказы» и «заказы за месяц»,
@@ -966,15 +1051,19 @@ function AddTabButton({
   relations,
   shown,
   language,
+  types,
   onAdd,
 }: {
   relations: Relation[];
   shown: ReadonlySet<string | undefined>;
   language: string;
-  onAdd: (relationId: string, label: string) => void;
+  /** Типы вкладки: подпись и значок. Пусто или один — шаг пропускается. */
+  types: { type: string; label: string; icon: TablerIcon }[];
+  onAdd: (relationId: string, label: string, type: string) => void;
 }) {
   const { t } = useTranslation();
-  const list = relations;
+  /** Выбранная связь: пока её нет, показан первый шаг. */
+  const [picked, setPicked] = useState<{ id: string; label: string } | null>(null);
 
   return (
     <Popover
@@ -984,7 +1073,12 @@ function AddTabButton({
       trigger={({ toggle }) => (
         <button
           type="button"
-          onClick={toggle}
+          onClick={() => {
+            // Каждое открытие — с первого шага: выбор прошлого раза
+            // к новой вкладке отношения не имеет.
+            setPicked(null);
+            toggle();
+          }}
           aria-label={t("drawer.addTab")}
           title={t("drawer.addTab")}
           className="grid size-6 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
@@ -993,37 +1087,78 @@ function AddTabButton({
         </button>
       )}
     >
-      {(close) => (
-        <div className="max-h-72 w-56 overflow-y-auto">
-          <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.addTabHint")}</p>
+      {(close) => {
+        const create = (relationId: string, label: string, type: string) => {
+          onAdd(relationId, label, type);
+          setPicked(null);
+          close();
+        };
 
-          {list.map((relation) => {
-            /* Имя связи, а не таблицы: у двух связей на одну таблицу
-               иначе два одинаковых пункта. Та же цепочка, что и у самой
-               вкладки (model/layout, relationTabs). */
-            const label =
-              relation.title ||
-              localized(relation.toLabels, language, relation.toLabel || relation.toSlug);
-
-            return (
-              <PopoverItem
-                key={relation.id}
-                active={shown.has(relation.id)}
-                onClick={() => {
-                  onAdd(relation.id, label);
-                  close();
-                }}
+        if (picked) {
+          return (
+            <div className="max-h-72 w-56 overflow-y-auto">
+              {/* Шаг назад, а не отдельное окно: выбранная связь написана
+                  в заголовке — из него видно, к чему выбирается тип. */}
+              <button
+                type="button"
+                onClick={() => setPicked(null)}
+                className="flex h-8 w-full items-center gap-1 rounded-md px-1 text-left text-xs text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
               >
-                {label}
-              </PopoverItem>
-            );
-          })}
+                <Icon as={IconChevronLeft} size={14} className="shrink-0" />
+                <span className="truncate">{picked.label}</span>
+              </button>
 
-          {!list.length && (
-            <p className="px-2 py-2 text-xs text-fg-subtle">{t("drawer.noRelations")}</p>
-          )}
-        </div>
-      )}
+              {types.map((item) => (
+                <PopoverItem
+                  key={item.type}
+                  icon={<Icon as={item.icon} size={16} className="shrink-0" />}
+                  onClick={() => create(picked.id, picked.label, item.type)}
+                >
+                  {item.label}
+                </PopoverItem>
+              ))}
+            </div>
+          );
+        }
+
+        return (
+          <div className="max-h-72 w-56 overflow-y-auto">
+            <p className="px-2 py-1 text-2xs text-fg-subtle">{t("drawer.addTabHint")}</p>
+
+            {relations.map((relation) => {
+              /* Имя связи, а не таблицы: у двух связей на одну таблицу
+                 иначе два одинаковых пункта. Та же цепочка, что и у самой
+                 вкладки (model/layout, relationTabs). */
+              const label =
+                relation.title ||
+                localized(relation.toLabels, language, relation.toLabel || relation.toSlug);
+
+              return (
+                <PopoverItem
+                  key={relation.id}
+                  active={shown.has(relation.id)}
+                  trailing={
+                    types.length > 1 ? (
+                      <Icon as={IconChevronRight} size={14} className="text-fg-subtle" />
+                    ) : undefined
+                  }
+                  onClick={() =>
+                    types.length > 1
+                      ? setPicked({ id: relation.id, label })
+                      : create(relation.id, label, types[0]?.type ?? "TABLE")
+                  }
+                >
+                  {label}
+                </PopoverItem>
+              );
+            })}
+
+            {!relations.length && (
+              <p className="px-2 py-2 text-xs text-fg-subtle">{t("drawer.noRelations")}</p>
+            )}
+          </div>
+        );
+      }}
     </Popover>
   );
 }

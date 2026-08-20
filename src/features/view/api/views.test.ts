@@ -106,3 +106,27 @@ test("закреплённые колонки лежат объектом, а с
   expect(toView({ id: "v", attributes: { fixedColumns: { f1: true, f2: false } } }).fixedColumnIds)
     .toEqual(["f1"]);
 });
+
+/*
+ * Раскладка вкладками лежит колонкой таблицы, а не в attributes: бэкенд
+ * пишет её отдельным `group_fields = $N` при каждом PUT.
+ */
+test("поле раскладки вкладками читается из group_fields", () => {
+  expect(toView({ id: "v", group_fields: ["rel-1"] }).tabGroupId).toBe("rel-1");
+  expect(toView({ id: "v" }).tabGroupId).toBe("");
+  expect(toView({ id: "v", group_fields: [] }).tabGroupId).toBe("");
+});
+
+test("правка раскладки вкладками не трогает attributes и колонки", () => {
+  const body = toUpdateBody({ view: stored, tabGroup: "rel-1" });
+
+  expect(body["group_fields"]).toEqual(["rel-1"]);
+  expect(body["columns"]).toEqual(["a", "b"]);
+  expect(body["attributes"]).toEqual({ name_ru: "Приемка", quick_filters: [], summaries: ["x"] });
+});
+
+test("снятие раскладки шлёт пустой список, а не молчит", () => {
+  // Молчание вернуло бы прежнее значение из raw: PUT собирается поверх него.
+  expect(toUpdateBody({ view: stored, tabGroup: "" })["group_fields"]).toEqual([]);
+  expect(toUpdateBody({ view: stored, columns: ["b"] })["group_fields"]).toEqual(["g"]);
+});

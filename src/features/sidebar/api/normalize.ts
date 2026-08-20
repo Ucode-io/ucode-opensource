@@ -38,8 +38,10 @@ export function pickLabels(attributes: Record<string, unknown> | undefined): Rec
  * (LayoutSidebar/AppSidebarComponentV2.jsx:168 — `label_${i18n.language}`).
  * Но хранится она ключом `label_<код языка ПРОЕКТА>`, а коды проекта
  * с ru/en/uz совпадают не всегда — у проекта на en+cyr локали `ru` там
- * нет вовсе. Тогда подпись берётся на языке данных, и пункт остаётся
- * подписанным, а не откатывается к базовой колонке.
+ * нет вовсе. Тогда подпись берётся на основном языке проекта, и пункт
+ * остаётся подписанным, а не откатывается к базовой колонке.
+ *
+ * Именно на основном, а не на выбранном в карточке: см. useLabelLanguages.
  */
 function pickLabel(dto: MenuDto, languages: string[]): string {
   const labels = pickLabels(dto.attributes);

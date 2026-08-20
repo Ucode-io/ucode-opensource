@@ -48,7 +48,12 @@ export function TableToolbar({
   columns: Field[];
   language: string;
   sorts: Sort[];
-  onSorts: (sorts: Sort[]) => void;
+  /**
+   * Своя сортировка. Не задана — кнопки нет: доска расставлена руками
+   * (`board_order`), и любая другая сортировка эту расстановку просто
+   * спрятала бы.
+   */
+  onSorts?: ((sorts: Sort[]) => void) | undefined;
   filtersOpen: boolean;
   filterCount: number;
   onToggleFilters: () => void;
@@ -74,22 +79,24 @@ export function TableToolbar({
         onClick={onToggleFilters}
       />
 
-      <Popover
-        align="end"
-        trigger={({ open, toggle }) => (
-          <ToolButton
-            icon={IconArrowsSort}
-            label={t("table.sort")}
-            open={open}
-            on={sorts.length > 0}
-            onClick={toggle}
-          />
-        )}
-      >
-        {() => (
-          <SortPanel columns={columns} language={language} sorts={sorts} onChange={onSorts} />
-        )}
-      </Popover>
+      {onSorts && (
+        <Popover
+          align="end"
+          trigger={({ open, toggle }) => (
+            <ToolButton
+              icon={IconArrowsSort}
+              label={t("table.sort")}
+              open={open}
+              on={sorts.length > 0}
+              onClick={toggle}
+            />
+          )}
+        >
+          {() => (
+            <SortPanel columns={columns} language={language} sorts={sorts} onChange={onSorts} />
+          )}
+        </Popover>
+      )}
     </div>
   );
 }

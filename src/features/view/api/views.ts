@@ -26,6 +26,8 @@ type ViewDto = {
   /** Строка, а не число: в настройках это свободное поле ввода. */
   default_limit?: string | number;
   columns?: string[];
+  /** Поле раскладки вкладками. Колонка таблицы, а не ключ attributes. */
+  group_fields?: string[];
   attributes?: Record<string, unknown>;
 };
 
@@ -77,8 +79,10 @@ export function useMenuViews(menuId: string) {
  * нужно разворачивать через resolveColumns, а не по одному ключу.
  *
  * Тип — из тех, что мы рисуем (форма создания предлагает только их).
- * BOARD и CALENDAR требуют своих настроек при создании (группирующее
- * поле, пара дат) — появятся вместе со своими экранами.
+ * Настроек в теле нет и у доски: поле, по которому она раскладывается
+ * на колонки, выбирают в настройках уже созданного view, а колонку
+ * порядка (`board_order`) бэкенд заводит сам, увидев тип BOARD
+ * (storage/postgres/view.go:66).
  */
 export function useCreateView({
   menuId,
@@ -220,7 +224,7 @@ export type NewView = {
   name: string;
   /** Язык ДАННЫХ для имени. */
   language: string;
-  /** Тип view. Не задан — TABLE: вкладка карточки другой не бывает. */
+  /** Тип view. Не задан — TABLE: самый частый выбор и у экрана, и у вкладки. */
   type?: string;
   relation?: { id: string; tableSlug: string };
 };
@@ -261,6 +265,8 @@ export type ViewEdit = {
   infiniteScroll?: boolean;
   /** Поле группировки. Пустая строка — снять группировку. */
   groupBy?: string;
+  /** Поле раскладки вкладками. Пустая строка — убрать вкладки. */
+  tabGroup?: string;
 };
 
 /**
@@ -290,6 +296,7 @@ export function toUpdateBody({
   pdfUrl,
   infiniteScroll,
   groupBy,
+  tabGroup,
 }: ViewEdit): Record<string, unknown> {
   const raw = view.raw;
   const trimmed = name?.trim();
@@ -335,6 +342,12 @@ export function toUpdateBody({
     attributes,
     ...(trimmed === undefined ? {} : { name: trimmed }),
     ...(type === undefined ? {} : { type }),
+    /*
+     * Колонка таблицы, а не ключ attributes: бэкенд пишет её отдельным
+     * `group_fields = $N`. Нетронутой она уезжает через `raw`, поэтому
+     * подменяется только когда правили именно её.
+     */
+    ...(tabGroup === undefined ? {} : { group_fields: tabGroup ? [tabGroup] : [] }),
   };
 }
 
@@ -422,6 +435,7 @@ export function toView(dto: ViewDto): View {
     pdfUrl: typeof dto.attributes?.["pdf_url"] === "string" ? dto.attributes["pdf_url"] : "",
     infiniteScroll: dto.attributes?.["infinite_scroll"] === true,
     groupById: toGroupById(dto.attributes),
+    tabGroupId: typeof dto.group_fields?.[0] === "string" ? dto.group_fields[0] : "",
     raw: { ...dto },
   };
 }

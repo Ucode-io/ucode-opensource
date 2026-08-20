@@ -13,6 +13,8 @@ import {
   IconInfinity,
   IconGripVertical,
   IconLayoutList,
+  IconLayoutColumns,
+  IconLayoutNavbar,
   IconLink,
   IconLoader2,
   IconPin,
@@ -51,9 +53,10 @@ import { Input } from "@/shared/ui/input";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
+import { TAB_GROUP_TYPES, tabGroupField } from "../api/tab-group";
 import { columnKey, moveBefore } from "../model/columns";
 import { hasUrl, type UrlTemplate } from "../model/url-template";
-import { IMPLEMENTED_VIEW_TYPES, VIEW_TYPES, type View } from "../model/types";
+import { IMPLEMENTED_VIEW_TYPES, TAB_VIEW_TYPES, VIEW_TYPES, type View } from "../model/types";
 import { viewIcon } from "./view-icon";
 
 /**
@@ -64,11 +67,6 @@ import { viewIcon } from "./view-icon";
  * поверх первого закрывал бы то, что настраивают.
  *
  * Чего здесь нет и почему:
- *
- *   Группировка вкладками (`group_fields`) — таблица её не умеет;
- *   настройка не теряется, лежит в `raw` и уходит обратно нетронутой.
- *   Переключатель, который ничего не меняет, хуже отсутствующего.
- *   Группировка строк (`group_by_columns`) — есть, страницей «Группировка».
  *
  *   Настройки самой ТАБЛИЦЫ (в старой админке они звались «General»)
  *   лежат отдельной страницей в секции «Данные», за строкой «Таблица»:
@@ -108,7 +106,7 @@ export type ViewOptionsHandlers = {
   onFixedColumns: (columnIds: string[]) => void;
   /** Отбор, с которым таблица открывается. Пустой — отбора нет. */
   onDefaultFilters: (filters: Filters) => void;
-  /** Смена типа. Нет — строки «Тип» нет: у вкладки тип всегда таблица. */
+  /** Смена типа. Нет обработчика — строки «Тип» нет вовсе. */
   onType?: (type: string) => void;
   /** Куда уводит щелчок по строке. Пустой адрес — открывается карточка. */
   onNavigate?: (template: UrlTemplate) => void;
@@ -123,6 +121,8 @@ export type ViewOptionsHandlers = {
   onInfiniteScroll?: (enabled: boolean) => void;
   /** Поле группировки строк. Пустая строка — без группировки. */
   onGroupBy?: (fieldId: string) => void;
+  /** Поле раскладки вкладками. Пустая строка — без вкладок. */
+  onTabGroup?: (fieldId: string) => void;
   /** Настроить поле: открывает ту же панель, что и меню колонки. */
   onEditField?: (field: Field, anchor: DOMRect) => void;
   /** Удалить поле из ТАБЛИЦЫ, а не из view. Спрашивает подтверждение вызывающий. */
@@ -217,6 +217,7 @@ type PanelPage =
   | "quickFilters"
   | "fixed"
   | "group"
+  | "tabGroup"
   | "fields"
   | "table"
   | "navigation"
@@ -266,6 +267,12 @@ function Panel({
   const back = () => open(null);
   const types = switchableTypes(view);
   const typeLabel = t(`view.type.${view.type}` as TranslationKey, { defaultValue: view.type });
+  /*
+   * Доска раскладывает те же строки по колонкам, поэтому настройка
+   * `group_fields` у неё называется своими словами: у таблицы это
+   * вкладки, у доски — колонки. Настройка одна, экран разный.
+   */
+  const isBoard = view.type === "BOARD";
 
   if (page === "type") {
     return (
@@ -521,6 +528,69 @@ function Panel({
     );
   }
 
+  if (page === "tabGroup") {
+    /*
+     * Раскладка вкладками — не группировка: список сужается до одного
+     * значения, и остальные строки на экран не приезжают. Поэтому
+     * поля здесь ВСЕ, а не показанные: раскладывать по скрытой колонке
+     * — обычное дело («только заказы этого склада»), а колонка со складом
+     * в таблице при этом лишняя.
+     *
+     * Годятся только поля с конечным набором значений — те же пять типов,
+     * что и в старой админке. По строке вкладок не сделать: их было бы
+     * столько же, сколько записей.
+     */
+    const groupable = matching(
+      fields.filter((field) => TAB_GROUP_TYPES.has(field.type)),
+      query,
+      language,
+    );
+
+    return (
+      <Subpage
+        title={t(isBoard ? "view.boardGroup" : "view.tabGroup")}
+        busy={busy}
+        onBack={back}
+        hint={t(isBoard ? "view.boardGroupHint" : "view.tabGroupHint")}
+      >
+        <FieldSearch value={query} onChange={setQuery} />
+
+        <List>
+          {/* У доски «без раскладки» не бывает: без поля у неё нет
+              и колонок, а значит и самой доски. */}
+          {!isBoard && (
+            <PopoverItem
+              active={!view.tabGroupId}
+              icon={<Icon as={IconX} size={16} className="shrink-0 text-fg-subtle" />}
+              onClick={() => handlers.onTabGroup?.("")}
+            >
+              {t("view.tabGroupNone")}
+            </PopoverItem>
+          )}
+
+          {groupable.map((field) => (
+            <PopoverItem
+              key={field.id}
+              active={view.tabGroupId === field.id || view.tabGroupId === field.relationId}
+              icon={<Icon as={fieldIcon(field.type)} size={16} className="shrink-0" />}
+              /* Ключ тот же, что и у колонок: у связи это id связи —
+                 так эту настройку пишет и читает старая админка. */
+              onClick={() => handlers.onTabGroup?.(columnKey(field))}
+            >
+              {localized(field.labels, language, field.label)}
+            </PopoverItem>
+          ))}
+
+          {/* Список пуст не «потому что не нашлось», а потому что таблице
+              нечем: без подходящих полей человек искал бы опечатку в поиске. */}
+          {!groupable.length && !query && (
+            <p className="px-2 py-1.5 text-2xs text-fg-subtle">{t("view.tabGroupEmpty")}</p>
+          )}
+        </List>
+      </Subpage>
+    );
+  }
+
   if (page === "table") {
     /*
      * Настройки хранилища, а не показа: имя таблицы, кэш, мягкое
@@ -631,12 +701,20 @@ function Panel({
    * Переключатель, который ничего не меняет, хуже отсутствующего.
    */
   const isTree = view.type === "TREE";
+  /*
+   * Настройки таблицы, которых у доски нет: закреплённых колонок
+   * (колонок нет вовсе), номеров страниц (доска листается прокруткой)
+   * и группировки строк — на доске за неё отвечают сами колонки.
+   */
+  const isGrid = !isTree && !isBoard;
   /** Поле группировки — подписью в строке настроек. Ключ как у колонок. */
   const grouped = view.groupById
     ? fields.find(
         (field) => field.id === view.groupById || field.relationId === view.groupById,
       )
     : undefined;
+  /** Поле раскладки вкладками — подписью в строке настроек. */
+  const tabGrouped = tabGroupField(view, fields);
   /* Сколько адресов задано: строка настроек молчит, пока их нет. */
   const navigationCount = [hasUrl(view.navigate), hasUrl(view.objectUrl), Boolean(view.pdfUrl)]
     .filter(Boolean).length;
@@ -716,7 +794,7 @@ function Panel({
           />
         </>
       )}
-      {can.fixColumn && (
+      {can.fixColumn && !isBoard && (
         <Row
           icon={IconPin}
           label={t("view.fixColumns")}
@@ -724,7 +802,7 @@ function Panel({
           onClick={() => open("fixed")}
         />
       )}
-      {can.settings && handlers.onGroupBy && !isTree && (
+      {can.settings && handlers.onGroupBy && isGrid && (
         <Row
           icon={IconStack2}
           label={t("view.groupBy")}
@@ -732,10 +810,20 @@ function Panel({
           onClick={() => open("group")}
         />
       )}
+      {/* Раскладка вкладками — своё право роли (`tab_group`), отдельное
+          от настройки view: так их и выдаёт бэкенд. */}
+      {can.settings && can.tabGroup && handlers.onTabGroup && !isTree && (
+        <Row
+          icon={isBoard ? IconLayoutColumns : IconLayoutNavbar}
+          label={t(isBoard ? "view.boardGroup" : "view.tabGroup")}
+          value={tabGrouped ? localized(tabGrouped.labels, language, tabGrouped.label) : ""}
+          onClick={() => open("tabGroup")}
+        />
+      )}
 
       {/* Переключатель, а не страница: у настройки два состояния,
           и ради них открывать экран незачем. */}
-      {can.settings && handlers.onInfiniteScroll && !isTree && (
+      {can.settings && handlers.onInfiniteScroll && isGrid && (
         <label className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-fg transition-colors hover:bg-surface-hover">
           <Icon as={IconInfinity} size={16} className="shrink-0 text-fg-muted" />
           <span className="flex-1 truncate">{t("view.infiniteScroll")}</span>
@@ -1177,7 +1265,11 @@ function matching(fields: Field[], query: string, language: string): Field[] {
  * админке, иначе некуда вернуть.
  */
 function switchableTypes(view: View): string[] {
-  return VIEW_TYPES.filter((type) => IMPLEMENTED_VIEW_TYPES.has(type) || type === view.type);
+  /* У вкладки связи набор свой и короче: дерево отбор по связи не понимает
+     (см. TAB_VIEW_TYPES) и показало бы всю чужую таблицу. */
+  const allowed = view.isRelationView ? new Set(TAB_VIEW_TYPES) : IMPLEMENTED_VIEW_TYPES;
+
+  return VIEW_TYPES.filter((type) => allowed.has(type) || type === view.type);
 }
 
 /** Поля, показанные во view, в порядке view. Та же логика, что в resolveColumns. */

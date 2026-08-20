@@ -5,7 +5,7 @@ import type { Field, Relation } from "@/features/table";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
 import { useTreeChildren } from "../api/tree";
-import { flattenTree } from "../model/tree";
+import { flattenTree, groupByParent } from "../model/tree";
 import type { Item } from "../model/types";
 import type { ColumnActions } from "./ColumnMenu";
 import { DataGrid, GridSkeleton } from "./DataGrid";
@@ -21,10 +21,16 @@ import { DataGrid, GridSkeleton } from "./DataGrid";
  * Сортировки и фильтров у дерева нет намеренно: ручка /tree их
  * не читает вовсе, а рабочий на вид фильтр над списком, который на него
  * не отвечает, хуже отсутствующего.
+ *
+ * Меню колонки при этом есть, и это не противоречие: переименовать поле,
+ * открыть его настройки и удалить — правки СХЕМЫ, а не запроса, и дереву
+ * они нужны ровно так же. Отсутствуют в нём только сортировка и фильтр,
+ * и отсутствуют сами: см. ColumnMenu.
  */
 export function TreeGrid({
   tableSlug,
   columns,
+  rows: loaded,
   pinned,
   widths,
   onWidth,
@@ -44,6 +50,17 @@ export function TreeGrid({
 }: {
   tableSlug: string;
   columns: Field[];
+  /**
+   * Готовые строки вместо похода за детьми. Иерархия собирается из них
+   * же, по колонке `<слаг>_id`; строка, чьего родителя в наборе нет,
+   * встаёт в корень (см. groupByParent).
+   *
+   * Нужно вкладке связи: там строки уже загружены с отбором по ссылке,
+   * а ручка дерева такой отбор не понимает — она читает из тела только
+   * родителя (docs/backend-notes.md). Не задано — дети грузятся ручкой,
+   * по одному запросу на раскрытый узел.
+   */
+  rows?: Item[] | undefined;
   pinned?: ReadonlySet<string>;
   widths?: Record<string, number> | undefined;
   onWidth?: ((fieldId: string, width: number) => void) | undefined;
@@ -67,11 +84,20 @@ export function TreeGrid({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
-  const { childrenOf, isLoading, error, refetch } = useTreeChildren(
-    tableSlug,
+  /*
+   * Запроса нет вовсе, когда строки принесли снаружи: хук отключается
+   * пустым слагом, а не веткой — условный вызов хука React запрещает.
+   */
+  const fetched = useTreeChildren(
+    loaded ? undefined : tableSlug,
     columns.map((column) => column.slug),
     expanded,
   );
+
+  const childrenOf = loaded
+    ? groupByParent(loaded, `${tableSlug}_id`)
+    : fetched.childrenOf;
+
   const { rows, meta } = flattenTree(childrenOf, expanded);
 
   const toggle = (guid: string) =>
@@ -94,16 +120,16 @@ export function TreeGrid({
     onAddChild?.(parent);
   };
 
-  if (isLoading) return <GridSkeleton columns={columns.length} />;
+  if (fetched.isLoading) return <GridSkeleton columns={columns.length} />;
 
-  if (error) {
+  if (fetched.error) {
     return (
       <div className="grid flex-1 place-items-center p-8 text-center">
         <div className="flex max-w-sm flex-col items-center gap-3">
-          <p className="text-sm text-fg-muted">{error}</p>
+          <p className="text-sm text-fg-muted">{fetched.error}</p>
           <button
             type="button"
-            onClick={refetch}
+            onClick={fetched.refetch}
             className="h-8 rounded-md border border-border-strong px-3 text-sm text-fg transition-colors hover:bg-surface-hover"
           >
             {t("action.retry")}
@@ -128,9 +154,9 @@ export function TreeGrid({
         language={language}
         selected={selected}
         onSelect={onSelect}
-        /* У дерева свой порядок — обход иерархии, сортировать его нечем. */
-        sorts={[]}
-        onSort={() => {}}
+        /* Сортировки нет вовсе — не пустой обработчик: у дерева свой
+           порядок, обход иерархии. Заголовок с ним перестаёт быть
+           кнопкой, а меню колонки не предлагает сортировку. */
         {...(onOpenRow ? { onOpenRow } : {})}
         {...(onDeleteRow ? { onDeleteRow } : {})}
         {...(onEdit ? { onEdit } : {})}

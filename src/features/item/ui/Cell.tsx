@@ -1,10 +1,12 @@
 import { IconCopy, IconExternalLink, IconMapPin, IconPaperclip, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { localized, type Field, type FieldOption, type Relation } from "@/features/table";
+import { fileName } from "@/shared/lib/file-kind";
 import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Chip, hexToChipColor } from "@/shared/ui/chip";
 import { DynamicIcon } from "@/shared/ui/dynamic-icon";
+import { openPreview } from "@/shared/ui/file-preview";
 import { Icon } from "@/shared/ui/icon";
 import { cellKind, editorKind } from "../model/cell-kind";
 import { mapLink, parseCoords } from "../model/coords";
@@ -481,19 +483,57 @@ function ImageCell({ value, wrap }: { value: unknown; wrap?: boolean }) {
 
   return (
     <span className={`flex min-w-0 items-center gap-1 ${wrap ? "flex-wrap" : ""}`}>
-      {shown.map((url, index) => (
-        <img
-          key={index}
-          src={url}
-          alt=""
-          loading="lazy"
-          className="size-6 shrink-0 rounded-sm border border-border object-cover"
-        />
+      {shown.map((_url, index) => (
+        <Thumb key={index} urls={urls} index={index} />
       ))}
       {shown.length < urls.length && (
-        <span className="text-xs text-fg-subtle">+{urls.length - shown.length}</span>
+        /* Остальные не влезли, но открыть их можно: щелчок ведёт
+           в просмотр к первому из спрятанных. */
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openPreview(urls, shown.length, "image");
+          }}
+          className="text-xs text-fg-subtle transition-colors hover:text-fg"
+        >
+          +{urls.length - shown.length}
+        </button>
       )}
     </span>
+  );
+}
+
+/**
+ * Картинка-миниатюра. Щелчок открывает просмотр, а не раскрывает ячейку:
+ * на картинку жмут, чтобы её РАЗГЛЯДЕТЬ, а редактор открывается по
+ * пустому месту ячейки.
+ *
+ * `draggable={false}` обязателен: без него браузер тащит саму картинку
+ * (и её адрес) вместо карточки на доске или строки в списке — курсор
+ * показывает ссылку, а перетаскивание не начинается вовсе.
+ */
+function Thumb({ urls, index }: { urls: string[]; index: number }) {
+  const { t } = useTranslation();
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        openPreview(urls, index, "image");
+      }}
+      aria-label={t("cell.preview")}
+      className="shrink-0"
+    >
+      <img
+        src={urls[index]}
+        alt=""
+        loading="lazy"
+        draggable={false}
+        className="size-6 rounded-sm border border-border object-cover"
+      />
+    </button>
   );
 }
 
@@ -509,8 +549,19 @@ function FileCell({ value, wrap }: { value: unknown; wrap?: boolean }) {
           href={url}
           target="_blank"
           rel="noreferrer"
-          // Клик по ссылке не должен заодно раскрывать ячейку.
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            // Клик по ссылке не должен заодно раскрывать ячейку.
+            event.stopPropagation();
+            /*
+             * Обычный щелчок открывает просмотр, а не соседнюю вкладку:
+             * PDF и картинку смотрят на месте. Ссылка при этом остаётся
+             * ссылкой — с Cmd/Ctrl и средней кнопкой она по-прежнему
+             * открывается вкладкой, как её и ждут.
+             */
+            if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+            event.preventDefault();
+            openPreview(urls, index);
+          }}
           className="flex min-w-0 items-center gap-1 text-accent-text hover:underline"
         >
           <Icon as={IconPaperclip} size={14} />
@@ -521,15 +572,4 @@ function FileCell({ value, wrap }: { value: unknown; wrap?: boolean }) {
   );
 }
 
-/** Имя файла из ссылки. Параметры запроса в имени не нужны. */
-export function fileName(url: string): string {
-  const path = url.split(/[?#]/)[0] ?? url;
-  const last = path.split("/").filter(Boolean).pop() ?? url;
 
-  try {
-    return decodeURIComponent(last);
-  } catch {
-    // Битая последовательность %XX — показываем как есть.
-    return last;
-  }
-}

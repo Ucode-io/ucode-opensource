@@ -34,6 +34,28 @@ const styles: Record<ChipColor, string> = {
 };
 
 /**
+ * Тот же оттенок подложкой — для поверхности, а не для чипа: колонка
+ * доски красится цветом своего варианта, и цвет должен быть заметен,
+ * но не спорить с карточками поверх него.
+ *
+ * Прозрачность, а не отдельные токены: подложка ложится на фон
+ * приложения, и в тёмной теме та же четверть даёт такой же приглушённый
+ * оттенок, что и в светлой. Классы перечислены целиком — Tailwind
+ * не видит собранные строкой имена.
+ */
+export const CHIP_SURFACE: Record<ChipColor, string> = {
+  gray: "bg-chip-gray-bg/40",
+  blue: "bg-chip-blue-bg/40",
+  green: "bg-chip-green-bg/40",
+  yellow: "bg-chip-yellow-bg/40",
+  orange: "bg-chip-orange-bg/40",
+  red: "bg-chip-red-bg/40",
+  purple: "bg-chip-purple-bg/40",
+  pink: "bg-chip-pink-bg/40",
+  brown: "bg-chip-brown-bg/40",
+};
+
+/**
  * Оттенок → HEX для записи в данные.
  *
  * Обратная сторона hexToChipColor: цвет варианта хранится в базе как

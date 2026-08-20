@@ -2,14 +2,18 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useTablePermission } from "@/features/auth";
 import {
+  BOARD_ORDER,
+  Board,
   DataGrid,
   FilterBar,
   GridFooter,
   GridSkeleton,
   ItemDrawer,
   TableToolbar,
+  TreeGrid,
   activeFilterCount,
   fromConditions,
+  groupValue,
   nextSorts,
   orderColumns,
   seedFilters,
@@ -29,6 +33,7 @@ import { toast } from "@/shared/lib/toast";
 import { useUi } from "@/shared/lib/ui-store";
 import { pinnedIds, resolveColumnIds } from "../model/columns";
 import type { RelationTab } from "../model/relation-tabs";
+import { tabGroupField } from "../api/tab-group";
 import { useExportExcel } from "../api/excel";
 import { ExcelImportDialog } from "./ExcelImportDialog";
 import { ViewOptions } from "./ViewOptions";
@@ -40,6 +45,14 @@ import { ViewOptions } from "./ViewOptions";
 export type TabSettings = {
   /** Имя на конкретном языке ДАННЫХ. */
   onRename: (name: string, language: string) => void;
+  /** Тип вкладки: таблица или доска. Набор — TAB_VIEW_TYPES. */
+  onType: (type: string) => void;
+  /**
+   * Поле, по значениям которого собраны колонки доски. У таблицы то же
+   * поле разбивает её вкладками — настройка одна, и хранится она в той
+   * же колонке view.
+   */
+  onTabGroup: (fieldId: string) => void;
   onColumns: (columnIds: string[]) => void;
   onFixedColumns: (columnIds: string[]) => void;
   /** Поля целиком: в attributes лежат они, а не идентификаторы. */
@@ -78,6 +91,7 @@ export function RelationView({
   language,
   languages = EMPTY_LANGUAGES,
   onLanguage,
+  trail,
   settings,
   saving = false,
 }: {
@@ -106,6 +120,12 @@ export function RelationView({
    * таблицы мультиязычные поля свои, и переключать их приходится там же.
    */
   onLanguage?: ((code: string) => void) | undefined;
+  /**
+   * Путь до вкладки: таблица и запись, из карточки которой её открыли.
+   * Нужен не самой вкладке, а карточке связанной строки — та закрывает
+   * собой всё остальное, и без крошек непонятно, где мы оказались.
+   */
+  trail?: { label: string; onClick: () => void }[] | undefined;
   /**
    * Правки настроек вкладки. Не заданы — панели «⋯» нет вовсе: настройки
    * лежат в раскладке карточки, и правит их тот, у кого есть права
@@ -162,6 +182,30 @@ export function RelationView({
     () => (tab.columnIds.length ? resolveColumnIds(tab.columnIds, fields) : fields),
     [tab.columnIds, fields],
   );
+
+  /*
+   * Тип вкладки — это тип её view. Доска здесь та же, что и на экране:
+   * карточки в колонках по значению поля раскладки. Дерева среди типов
+   * нет намеренно — см. tabTypes в features/view/model/types.
+   */
+  const board = tab.view.type === "BOARD";
+  /** Поле, по значениям которого собраны колонки доски. */
+  const boardField = board ? tabGroupField(tab.view, fields) : undefined;
+  /* Колонку порядка заводит бэкенд под BOARD. Нет её — сортировать нечем,
+     и сортировка по несуществующей колонке роняет весь запрос. */
+  const boardReady = schema.fields.some((field) => field.slug === BOARD_ORDER);
+
+  /*
+   * Дерево вкладки собирается из тех же строк, что и таблица: ручка
+   * дерева отбор по связи не понимает и показала бы всю чужую таблицу
+   * (docs/backend-notes.md). Нужна рекурсивная колонка — иначе вешать
+   * детей не на что.
+   */
+  const tree = tab.view.type === "TREE";
+  const treeReady = schema.fields.some((field) => field.slug === `${tab.tableSlug}_id`);
+
+  /** Страницами не листается ни доска, ни дерево: обе показывают набор целиком. */
+  const whole = board || tree;
 
   const [sorts, setSorts] = useState<Sort[]>([]);
   const [limit, setLimit] = useState(LIMIT);
@@ -235,11 +279,23 @@ export function RelationView({
     error: rowsError,
     refetch: refetchRows,
   } = useItems(value && can.read ? tab.tableSlug : undefined, {
-    limit,
-    page,
-    // Режим листания у вкладки тот же, что у её view: вкладка и есть view.
-    infinite: tab.view.infiniteScroll,
-    sorts,
+    /*
+     * Ни доска, ни дерево не листаются страницами: доске нужны колонки
+     * целиком, дереву — предки детей, а разрезанные страницей они стали
+     * бы сиротами и всплыли в корень.
+     */
+    limit: whole ? WHOLE_LIMIT : limit,
+    page: whole ? 1 : page,
+    /*
+     * Режим листания у вкладки тот же, что у её view: вкладка и есть view.
+     * Доска догружается прокруткой колонки; дерево — нет: догружать
+     * в него нечем, оно показывает первую сотню связанных строк.
+     */
+    infinite: board || tab.view.infiniteScroll,
+    /* Доска сортируется своей колонкой порядка и ничем больше: карточки
+       в ней расставляют руками, и чужая сортировка эту расстановку прячет.
+       У дерева порядок свой — обход иерархии. */
+    sorts: board ? (boardReady ? BOARD_SORT : NO_SORTS) : tree ? NO_SORTS : sorts,
     filters,
     search,
   });
@@ -286,11 +342,17 @@ export function RelationView({
           tableSlug={tab.tableSlug}
           columns={columns}
           language={language}
-          sorts={sorts}
-          onSorts={(next) => {
-            setSorts(next);
-            setPage(1);
-          }}
+          /* Ни на доске, ни в дереве сортировки нет: там свой порядок —
+             расставленный руками и обход иерархии. */
+          sorts={whole ? NO_SORTS : sorts}
+          {...(whole
+            ? {}
+            : {
+                onSorts: (next: Sort[]) => {
+                  setSorts(next);
+                  setPage(1);
+                },
+              })}
           filtersOpen={filtersOpen}
           filterCount={activeFilterCount(chips)}
           onToggleFilters={() => setFiltersOpen((value) => !value)}
@@ -317,6 +379,8 @@ export function RelationView({
             labels={{ title: "drawer.tabSettings", delete: "drawer.removeTab" }}
             handlers={{
               onRename: (name, nameLanguage) => settings.onRename(name, nameLanguage),
+              onType: settings.onType,
+              onTabGroup: settings.onTabGroup,
               onColumns: settings.onColumns,
               onQuickFilters: settings.onQuickFilters,
               onFixedColumns: settings.onFixedColumns,
@@ -355,6 +419,111 @@ export function RelationView({
         />
       )}
 
+      {tree ? (
+        /*
+         * Дерево вкладки. Строки те же, что у таблицы, — уже отобранные
+         * по связи; иерархию собирает сам TreeGrid по колонке `<слаг>_id`.
+         * Строка, чьего родителя в наборе нет (он не связан с открытой
+         * записью или отсеян фильтром), встаёт в корень — иначе её
+         * не было бы видно вовсе.
+         */
+        !treeReady ? (
+          <p className="p-6 text-sm text-fg-muted">{t("table.noTreeRelation")}</p>
+        ) : (
+          <TreeGrid
+            tableSlug={tab.tableSlug}
+            columns={columns}
+            rows={rows.rows}
+            pinned={pinned}
+            widths={widths[tab.tableSlug]}
+            onWidth={(fieldId, width) => setColumnWidth(tab.tableSlug, fieldId, width)}
+            relations={schema.relations}
+            locale={locale}
+            language={language}
+            selected={selected}
+            onSelect={setSelected}
+            onOpenRow={setOpenGuid}
+            {...(can.update
+              ? {
+                  onEdit: (guid: string, slug: string, value: unknown) =>
+                    update.mutate({ guid, values: { [slug]: value } }),
+                }
+              : {})}
+            /*
+             * Дочерняя запись наследует две ссылки сразу: на родителя
+             * в дереве и на открытую запись — иначе она выпадет из вкладки,
+             * в которой её только что завели.
+             */
+            {...(tab.canCreate && can.write
+              ? {
+                  onAddChild: (parent: Item) =>
+                    create.mutate(
+                      {
+                        [`${tab.tableSlug}_id`]: parent.guid ?? null,
+                        [tab.fieldSlug]: parentGuid,
+                      },
+                      { onSuccess: () => toast.success(t("table.rowCreated")) },
+                    ),
+                }
+              : {})}
+          />
+        )
+      ) : board ? (
+        /*
+         * Доска вкладки. Поле раскладки задаётся в её настройках — без
+         * него колонок нет, и доска честно говорит об этом вместо пустого
+         * экрана. Текст тот же, что у доски на экране: причина одна.
+         */
+        !boardField ? (
+          <p className="p-6 text-sm text-fg-muted">{t("board.noGroupField")}</p>
+        ) : (
+          <Board
+            tableSlug={tab.tableSlug}
+            columns={columns}
+            rows={rows.rows}
+            field={boardField}
+            relations={schema.relations}
+            locale={locale}
+            language={language}
+            hasMore={hasMore || loadingMore}
+            onOpenRow={setOpenGuid}
+            /* Перенос карточки — обычная правка строки. Право нужно
+               и на таблицу, и на само поле раскладки: роль, которой
+               запрещено менять статус, не таскает карточки. */
+            {...(can.update && boardField.editable
+              ? {
+                  onMove: (guid: string, values: Record<string, unknown>) =>
+                    update.mutate({ guid, values }),
+                }
+              : {})}
+            {...(can.update
+              ? {
+                  onEdit: (guid: string, slug: string, value: unknown) =>
+                    update.mutate({ guid, values: { [slug]: value } }),
+                }
+              : {})}
+            /*
+             * Новая карточка сразу с двумя проставленными полями: колонка
+             * доски и ссылка на открытую запись. Черновика, как на экране,
+             * здесь нет — панель вкладки узкая, и вторая карточка поверх
+             * первой ради одного поля не окупается.
+             */
+            {...(tab.canCreate && can.write
+              ? {
+                  onAddCard: (columnId: string) =>
+                    create.mutate(
+                      {
+                        [boardField.slug]: groupValue(boardField, columnId),
+                        [tab.fieldSlug]: parentGuid,
+                      },
+                      { onSuccess: () => toast.success(t("table.rowCreated")) },
+                    ),
+                }
+              : {})}
+            {...(hasMore ? { onEndReached: loadMore } : {})}
+          />
+        )
+      ) : (
       <DataGrid
         tableSlug={tab.tableSlug}
         columns={columns}
@@ -377,7 +546,7 @@ export function RelationView({
         {...(can.update
           ? {
               onEdit: (guid: string, slug: string, value: unknown) =>
-                update.mutate({ guid, slug, value }),
+                update.mutate({ guid, values: { [slug]: value } }),
             }
           : {})}
         // Связанная строка раскрывается на месте, поверх вкладки:
@@ -406,7 +575,11 @@ export function RelationView({
             }
           : {})}
       />
+      )}
 
+      {/* У доски подвала нет: страницами её не листают, а сколько
+          карточек в колонке — написано в её шапке. */}
+      {!whole && (
       <GridFooter
         {...(tab.view.infiniteScroll ? {} : { page, onPage: setPage })}
         shown={rows.rows.length}
@@ -419,8 +592,8 @@ export function RelationView({
           setLimit(next);
           setPage(1);
         }}
-
       />
+      )}
 
       {importing && (
         <ExcelImportDialog
@@ -447,10 +620,14 @@ export function RelationView({
           language={language}
           languages={languages}
           {...(onLanguage ? { onLanguage } : {})}
+          /* К списку вкладки — крошкой с её именем: закрыть карточку
+             и вернуться к строкам можно и крестиком, но из крошек это
+             видно как путь, а не как «закрыть». */
+          trail={[...(trail ?? []), { label: tab.label, onClick: () => setOpenGuid(null) }]}
           {...(can.update
             ? {
                 onEdit: (guid: string, slug: string, value: unknown) =>
-                  update.mutate({ guid, slug, value }),
+                  update.mutate({ guid, values: { [slug]: value } }),
               }
             : {})}
           onClose={() => setOpenGuid(null)}
@@ -487,6 +664,7 @@ function RelatedRow({
   language,
   languages,
   onLanguage,
+  trail,
   onEdit,
   onClose,
 }: {
@@ -500,6 +678,8 @@ function RelatedRow({
   language: string;
   languages: DataLanguage[];
   onLanguage?: ((code: string) => void) | undefined;
+  /** Путь до этой карточки: таблица, запись, вкладка. */
+  trail: { label: string; onClick: () => void }[];
   /** Правка значения. Не задан — карточка открывается только на чтение. */
   onEdit?: ((guid: string, slug: string, value: unknown) => void) | undefined;
   onClose: () => void;
@@ -523,6 +703,7 @@ function RelatedRow({
       {...(onLanguage ? { onLanguage } : {})}
       sections={layout.sections}
       heading={layout.heading}
+      trail={trail}
       {...(onEdit ? { onEdit } : {})}
       onClose={onClose}
     />
@@ -549,6 +730,13 @@ function Failure({ text, onRetry }: { text: string; onRetry: () => void }) {
 
 /** Строк на странице вкладки. Меньше, чем у таблицы: места под неё меньше. */
 const LIMIT = 10;
+
+/** Доска и дерево грузятся порциями по сто и догружаются прокруткой. */
+const WHOLE_LIMIT = 100;
+
+/** Постоянные ссылки: литерал в аргументе перезапрашивал бы строки. */
+const NO_SORTS: Sort[] = [];
+const BOARD_SORT: Sort[] = [{ field: BOARD_ORDER, direction: "asc" }];
 
 /** Постоянная ссылка: пустой литерал по умолчанию пересобирал бы поля. */
 const EMPTY_LANGUAGES: DataLanguage[] = [];

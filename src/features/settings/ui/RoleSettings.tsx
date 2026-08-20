@@ -15,6 +15,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { Field, Input } from "@/shared/ui/input";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Modal } from "@/shared/ui/modal";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { Select } from "@/shared/ui/input";
 import {
@@ -696,11 +697,7 @@ function RoleCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   const [clientTypeId, setClientTypeId] = useState("");
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
-      style={{ background: "var(--color-overlay)" }}
-      onPointerDown={(event) => event.target === event.currentTarget && onClose()}
-    >
+    <Modal onClose={onClose}>
       <form
         className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-modal"
         onSubmit={(event) => {
@@ -738,7 +735,7 @@ function RoleCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreat
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/shared/api/client";
 import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/input";
+import { Modal } from "@/shared/ui/modal";
 import { useCreateCompany } from "../api/workspace";
 
 /**
@@ -31,11 +32,7 @@ export function AddOrganizationDialog({ onClose }: { onClose: () => void }) {
       : create.error?.message;
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
-      style={{ background: "var(--color-overlay)" }}
-      onPointerDown={(event) => event.target === event.currentTarget && onClose()}
-    >
+    <Modal onClose={onClose}>
       <form
         onSubmit={submit}
         className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-modal"
@@ -61,6 +58,6 @@ export function AddOrganizationDialog({ onClose }: { onClose: () => void }) {
           </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

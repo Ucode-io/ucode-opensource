@@ -20,6 +20,8 @@ type RowsDto = { data?: { response?: Record<string, unknown>[] | null } };
 
 export type RelationRow = { guid: string; label: string };
 
+const NO_ROWS: RelationRow[] = [];
+
 /** Десяти хватает: это подсказка при вводе, а не список записей. */
 const LIMIT = 10;
 
@@ -27,21 +29,30 @@ export function useRelationRows({
   tableSlug,
   viewFieldSlugs,
   search,
+  limit = LIMIT,
 }: {
   /** Таблица, из которой выбирают. Пусто — запроса нет. */
   tableSlug: string;
   /** Поля показа связи: из них собирается подпись строки. */
   viewFieldSlugs: string[];
   search: string;
+  /**
+   * Сколько строк спрашивать. По умолчанию десять — столько влезает
+   * в подсказку при вводе. Вкладкам группировки нужно больше: там
+   * список не подсказывает, а перечисляет.
+   */
+  limit?: number;
 }) {
   const text = search.trim();
 
   const query = useQuery({
-    queryKey: keys.tables.relationRows(tableSlug, text),
+    // Лимит в ключе: под одним ключом не должны лежать десять строк
+    // подсказки и полсотни вкладок — вторые прочитали бы первые.
+    queryKey: keys.tables.relationRows(tableSlug, text, limit),
     queryFn: () =>
       api.post<RowsDto>(`/v2/object/get-list/${tableSlug}`, {
         data: {
-          limit: LIMIT,
+          limit,
           offset: 0,
           view_fields: viewFieldSlugs,
           ...(text ? { search: text } : {}),
@@ -57,5 +68,7 @@ export function useRelationRows({
       })),
   });
 
-  return { rows: query.data ?? [], isFetching: query.isFetching };
+  // Постоянная ссылка на пустоту: `?? []` отдавал бы новый массив
+  // на каждый рендер, и useMemo у вызывающего пересчитывался бы всегда.
+  return { rows: query.data ?? NO_ROWS, isFetching: query.isFetching, isLoading: query.isLoading };
 }

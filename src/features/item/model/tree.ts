@@ -34,7 +34,13 @@ export function flattenTree(
       if (guid) seen.add(guid);
 
       rows.push(row);
-      meta.set(guid, { depth, hasChild: row["has_child"] === true });
+      /*
+       * `has_child` присылает ручка дерева. У дерева, собранного здесь же
+       * из плоского списка (groupByParent), его нет — там дети известны
+       * сразу, и признак виден по самой карте.
+       */
+      const hasChild = row["has_child"] === true || (childrenOf.get(guid)?.length ?? 0) > 0;
+      meta.set(guid, { depth, hasChild });
 
       if (guid && expanded.has(guid)) visit(guid, depth + 1);
     }
@@ -42,4 +48,34 @@ export function flattenTree(
 
   visit("", 0);
   return { rows, meta };
+}
+
+/**
+ * Плоский список строк → дети по guid родителя, как их отдала бы ручка.
+ *
+ * Нужно там, где строки уже загружены обычным get-list и ходить за ними
+ * во второй раз незачем, — во вкладке связи. Ручка дерева туда не годится
+ * принципиально: она читает из тела только родителя, а вкладке нужен
+ * отбор по колонке-ссылке, и дерево показало бы всю чужую таблицу
+ * (docs/backend-notes.md, «Дерево»).
+ *
+ * СИРОТЫ ВСТАЮТ В КОРЕНЬ. Строка, чей родитель в набор не попал —
+ * не связан с открытой записью, отсеян фильтром или остался на другой
+ * странице, — иначе не показалась бы вовсе: её не к чему подвесить.
+ * Спрятать связанную строку хуже, чем показать её без предка.
+ *
+ * @param parentSlug колонка-ссылка на родителя: `<слаг таблицы>_id`
+ */
+export function groupByParent(rows: Item[], parentSlug: string): Map<string, Item[]> {
+  const known = new Set(rows.map((row) => (typeof row.guid === "string" ? row.guid : "")));
+  const childrenOf = new Map<string, Item[]>();
+
+  for (const row of rows) {
+    const parent = row[parentSlug];
+    const at = typeof parent === "string" && known.has(parent) ? parent : "";
+
+    childrenOf.set(at, [...(childrenOf.get(at) ?? []), row]);
+  }
+
+  return childrenOf;
 }

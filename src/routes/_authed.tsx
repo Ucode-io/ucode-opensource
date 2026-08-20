@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { useProject } from "@/features/settings";
 import { Sidebar } from "@/features/sidebar";
 import { useUi } from "@/shared/lib/ui-store";
 import { ensureAccessToken } from "@/shared/api/client";
@@ -28,6 +30,7 @@ export const Route = createFileRoute("/_authed")({
 
 function AppShell() {
   const { sidebarCollapsed } = useUi();
+  useProjectBranding();
 
   return (
     // overflow-hidden здесь нельзя: кнопка сворачивания сайдбара торчит
@@ -60,3 +63,62 @@ function AppShell() {
     </div>
   );
 }
+
+/**
+ * Вкладка браузера — под проект: его имя в заголовке, его логотип
+ * вместо значка. У человека открыто пять вкладок ucode с разными
+ * проектами, и различить их иначе нечем — адрес у всех одинаковый.
+ *
+ * Так же это делает старая админка (MainLayout: `document.title` и
+ * `<Favicon url={projectInfo.logo}/>`). Пакета ради значка здесь нет:
+ * react-favicon — это те же четыре строки с DOM, только чужие.
+ *
+ * Запроса тоже нет: карточку проекта уже грузит features/workspace,
+ * и заголовок с логотипом берутся из того же ответа, что языки данных
+ * и шапка сайдбара.
+ *
+ * Оба значения возвращаются на место при выходе из приложения: экран
+ * входа — общий для всех проектов, и чужой логотип на нём врёт.
+ */
+function useProjectBranding() {
+  const { project } = useProject();
+  const title = project?.title ?? "";
+  const logo = project?.logo ?? "";
+
+  useEffect(() => {
+    if (!title) return;
+
+    document.title = title;
+    return () => {
+      document.title = DEFAULT_TITLE;
+    };
+  }, [title]);
+
+  useEffect(() => {
+    if (!logo) return;
+
+    /*
+     * <link rel="icon"> в index.html нет — значок берётся по умолчанию
+     * из /favicon.ico. Заводим свой, когда есть что в него положить,
+     * и возвращаем прежний адрес при уходе: пустой href — это и есть
+     * «как было», браузер снова спросит /favicon.ico.
+     */
+    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.append(link);
+    }
+
+    const before = link.getAttribute("href") ?? "";
+    link.href = logo;
+
+    return () => {
+      link.setAttribute("href", before);
+    };
+  }, [logo]);
+}
+
+/** Заголовок вкладки вне проекта — тот же, что в index.html. */
+const DEFAULT_TITLE = "ucode";

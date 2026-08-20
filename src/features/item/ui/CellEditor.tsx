@@ -20,7 +20,9 @@ import { IconPicker } from "@/features/icons";
 import { STATUS_GROUPS, type Field, type FieldOption, type Relation } from "@/features/table";
 import { Anchored } from "@/shared/ui/anchored";
 import { Chip } from "@/shared/ui/chip";
+import { openPreview } from "@/shared/ui/file-preview";
 import { Icon } from "@/shared/ui/icon";
+import { fileName } from "@/shared/lib/file-kind";
 import { toast } from "@/shared/lib/toast";
 import { useUploadFiles, uploadFolder } from "../api/files";
 import { useCreateItem, useLinkRelation, useRelationItems } from "../api/relations";
@@ -41,7 +43,7 @@ import {
 import { isLinkable, relationLabel, relationSelection } from "../model/relation";
 import type { Item } from "../model/types";
 import { cellError } from "../model/validate";
-import { Cell, fileName, optionColor, optionLabel } from "./Cell";
+import { Cell, optionColor, optionLabel } from "./Cell";
 import { CodeCell } from "./CodeCell";
 import { MapPicker } from "./MapPicker";
 import { PolygonCell } from "./PolygonCell";
@@ -1112,24 +1114,27 @@ function FileEditor({
           <div className={`mb-1.5 ${images ? "flex flex-wrap gap-1.5" : "flex flex-col gap-0.5"}`}>
             {urls.map((url) => (
               <div key={url} className="group/file relative flex min-w-0 items-center gap-1.5">
+                {/* Щелчок открывает просмотр, а не соседнюю вкладку:
+                    загруженный файл смотрят прямо здесь, не теряя
+                    открытого редактора. */}
                 {images ? (
-                  <a href={url} target="_blank" rel="noreferrer noopener">
+                  <button type="button" onClick={() => openPreview(urls, urls.indexOf(url), "image")}>
                     <img
                       src={url}
                       alt=""
                       loading="lazy"
+                      draggable={false}
                       className="size-14 rounded-md border border-border object-cover"
                     />
-                  </a>
+                  </button>
                 ) : (
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="min-w-0 flex-1 truncate text-sm text-accent-text hover:underline"
+                  <button
+                    type="button"
+                    onClick={() => openPreview(urls, urls.indexOf(url))}
+                    className="min-w-0 flex-1 truncate text-left text-sm text-accent-text hover:underline"
                   >
                     {fileName(url)}
-                  </a>
+                  </button>
                 )}
 
                 <button

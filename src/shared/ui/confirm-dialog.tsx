@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
+import { Modal } from "@/shared/ui/modal";
 
 /** Подтверждение необратимого действия. Кнопка называет действие, а не «ОК». */
 export function ConfirmDialog({
@@ -20,11 +21,7 @@ export function ConfirmDialog({
   const { t } = useTranslation();
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center p-4"
-      style={{ background: "var(--color-overlay)" }}
-      onPointerDown={(event) => event.target === event.currentTarget && onClose()}
-    >
+    <Modal onClose={onClose}>
       <div className="flex w-full max-w-sm flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-modal">
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="text-sm text-fg-muted">{description}</p>
@@ -38,6 +35,6 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

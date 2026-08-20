@@ -6,6 +6,7 @@ import {
   fieldRights,
   headingSlug,
   hiddenFields,
+  itemTitle,
   moveField,
   orderColumns,
   sections,
@@ -162,4 +163,15 @@ test("права роли на поля читаются из раскладки
 
   expect(columns.map((item) => item.slug)).toEqual(["locked", "plain"]);
   expect(columns.map((item) => item.editable)).toEqual([false, true]);
+});
+
+test("заголовок записи — только скалярное значение", () => {
+  expect(itemTitle({ name: "Заказ 12" }, "name")).toBe("Заказ 12");
+  expect(itemTitle({ number: 12 }, "number")).toBe("12");
+  // Поле-заголовок сменило тип: объект в шапке — это `[object Object]`.
+  expect(itemTitle({ name: { ru: "Заказ" } }, "name")).toBe("");
+  expect(itemTitle({ name: null }, "name")).toBe("");
+  expect(itemTitle(undefined, "name")).toBe("");
+  // Заголовок не назначен вовсе.
+  expect(itemTitle({ name: "Заказ 12" }, "")).toBe("");
 });

@@ -27,12 +27,19 @@ import { fieldIcon } from "./field-icon";
  * которых в таблице пока нет; пункт меню, который ничего не делает,
  * хуже отсутствующего. «Переносить текст» не сделан сознательно:
  * высота строки фиксирована, на ней держится виртуализация.
+ *
+ * Сортировка и фильтр необязательны: у дерева своя ручка
+ * (/v2/items/{slug}/tree), и она не читает ни того, ни другого —
+ * пункты, которые ничего не делают, там не показываются. Всё остальное
+ * — переименование, настройки, удаление — правит СХЕМУ, и дереву
+ * нужно ровно так же, как таблице.
  */
 export type ColumnActions = {
   rename: (field: Field, label: string) => void;
   /** Панель настроек всплывает там же, где меню: ей нужен тот же якорь. */
   settings: (field: Field, anchor: DOMRect) => void;
-  filter: (field: Field) => void;
+  /** Добавить фильтр по колонке. Нет — списку фильтр не применить. */
+  filter?: ((field: Field) => void) | undefined;
   remove: (field: Field) => void;
 };
 
@@ -48,7 +55,8 @@ export function ColumnMenu({
   language: string;
   anchor: DOMRect;
   actions: ColumnActions;
-  onSort: (slug: string, direction: SortDirection) => void;
+  /** Отсортировать по колонке. Нет — список сортировать нечем. */
+  onSort?: ((slug: string, direction: SortDirection) => void) | undefined;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -65,7 +73,7 @@ export function ColumnMenu({
    * вызывающий и разбирает, здесь оно не видно.
    */
   const renamable = !field.relationId;
-  const filterable = filterKind(field) !== null;
+  const filterable = Boolean(actions.filter) && filterKind(field) !== null;
 
   const run = (action: () => void) => {
     action();
@@ -122,22 +130,29 @@ export function ColumnMenu({
           label={t("column.settings")}
         />
 
-        <div className="my-1 h-px bg-border" />
+        {/* Разделитель — вместе со своей группой: у дерева ни сортировки,
+            ни фильтра нет, и пустая полоска между двумя пунктами
+            читается как «здесь что-то не нарисовалось». */}
+        {(onSort || filterable) && <div className="my-1 h-px bg-border" />}
 
-        <MenuItem
-          icon={IconSortAscending}
-          onClick={() => run(() => onSort(field.slug, "asc"))}
-          label={t("table.sortAsc")}
-        />
-        <MenuItem
-          icon={IconSortDescending}
-          onClick={() => run(() => onSort(field.slug, "desc"))}
-          label={t("table.sortDesc")}
-        />
+        {onSort && (
+          <>
+            <MenuItem
+              icon={IconSortAscending}
+              onClick={() => run(() => onSort(field.slug, "asc"))}
+              label={t("table.sortAsc")}
+            />
+            <MenuItem
+              icon={IconSortDescending}
+              onClick={() => run(() => onSort(field.slug, "desc"))}
+              label={t("table.sortDesc")}
+            />
+          </>
+        )}
         {filterable && (
           <MenuItem
             icon={IconFilter}
-            onClick={() => run(() => actions.filter(field))}
+            onClick={() => run(() => actions.filter?.(field))}
             label={t("table.addFilter")}
           />
         )}

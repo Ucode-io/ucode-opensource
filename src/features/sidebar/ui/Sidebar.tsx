@@ -103,7 +103,18 @@ function ExpandedSidebar({
     if (!onLeave) return;
 
     const onOver = (event: PointerEvent) => {
-      if (!aside.current?.contains(event.target as Node)) onLeave();
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      /*
+       * Модальное окно, открытое отсюда, лежит порталом в <body>: курсор,
+       * доехавший до него, формально уходит из панели. Без этой проверки
+       * панель закрывалась бы по дороге к кнопке и уносила окно с собой —
+       * оно живёт в её поддереве. Та же причина, что и в Popover.
+       */
+      if (target.closest("[data-modal]")) return;
+
+      if (!aside.current?.contains(target)) onLeave();
     };
 
     document.addEventListener("pointerover", onOver);
@@ -116,7 +127,18 @@ function ExpandedSidebar({
       style={{ width: sidebarWidth }}
       className={
         onLeave
-          ? "group/aside animate-peek fixed inset-y-8 left-0 z-40 flex flex-col gap-2 rounded-r-xl border-y border-r border-border bg-surface p-2 shadow-modal"
+          /*
+           * Выехавший сайдбар — во всю высоту и вплотную к краю, как
+           * и закреплённый: это тот же сайдбар, показанный на время,
+           * а не новый плавающий объект. Отступ сверху и снизу был
+           * третьим ритмом на экране — ни 0 у контента, ни 8px у карточки.
+           * Что он временный, говорят тень и выезд, а не зазор.
+           *
+           * z-55: выше карточки записи (z-50). Широкая карточка накрывает
+           * левый край экрана целиком, и панель, вызванная наведением,
+           * уезжала под неё — то есть не появлялась вовсе.
+           */
+          ? "group/aside animate-peek fixed inset-y-0 left-0 z-55 flex flex-col gap-2 rounded-r-xl border-r border-border bg-surface p-2 shadow-modal"
           : "group/aside relative flex shrink-0 flex-col gap-2 bg-bg p-2"
       }
     >
