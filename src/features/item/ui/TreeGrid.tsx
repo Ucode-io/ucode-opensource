@@ -37,6 +37,7 @@ export function TreeGrid({
   onEdit,
   onAddChild,
   onDeleteSelected,
+  onDeleteRow,
   deleting,
   onAddField,
   columnActions,
@@ -57,6 +58,8 @@ export function TreeGrid({
   onAddChild?: (parent: Item) => void;
   /** Удалить отмеченные. Нет — панели под таблицей нет вовсе. */
   onDeleteSelected?: () => void;
+  /** Удалить одну строку — урна у отмеченной. */
+  onDeleteRow?: (guid: string) => void;
   deleting?: boolean;
   onAddField?: (anchor: DOMRect) => void;
   columnActions?: ColumnActions;
@@ -129,6 +132,7 @@ export function TreeGrid({
         sorts={[]}
         onSort={() => {}}
         {...(onOpenRow ? { onOpenRow } : {})}
+        {...(onDeleteRow ? { onDeleteRow } : {})}
         {...(onEdit ? { onEdit } : {})}
         {...(onAddField ? { onAddField } : {})}
         {...(columnActions ? { columnActions } : {})}

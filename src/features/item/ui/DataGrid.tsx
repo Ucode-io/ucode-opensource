@@ -14,6 +14,8 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconDotsVertical,
+  IconHash,
+  IconTrash,
   IconPlus,
   IconTablePlus,
   IconX,
@@ -180,6 +182,8 @@ export function DataGrid({
   onAddField,
   columnActions,
   onOpenRow,
+  onDeleteRow,
+  startIndex = 0,
   onEdit,
   onCreate,
   onAddRow,
@@ -244,6 +248,16 @@ export function DataGrid({
   columnActions?: ColumnActions;
   /** Раскрыть строку целиком. Нет — кнопка в строке не появляется. */
   onOpenRow?: (guid: string) => void;
+  /**
+   * Удалить одну строку — урна у правого края. Подтверждение спрашивает
+   * вызывающий. Нет — кнопки нет: у роли без права она отвечала бы 403.
+   */
+  onDeleteRow?: ((guid: string) => void) | undefined;
+  /**
+   * Номер первой строки. У таблицы со страницами это смещение страницы:
+   * на второй странице по 20 нумерация идёт с 21, как и в подвале.
+   */
+  startIndex?: number;
   /**
    * Своё действие вместо строки-черновика: админ мог задать view адрес
    * собственной формы создания (attributes.url_object). Не задан —
@@ -584,8 +598,22 @@ export function DataGrid({
         {/* Шапка липкая: колонки нужны и на тысячной строке. */}
         <thead className="sticky top-0 z-20 bg-surface">
           <tr>
-            <th className={`${pinCell} ${pinLeft} z-30`}>
-              <span className="grid h-full place-items-center">
+            {/* «#» превращается в «выделить всё» по наведению — как
+                номер строки превращается в флажок. Пока что-то отмечено,
+                флажок виден всегда: он показывает состояние. */}
+            <th className={`${pinCell} ${pinLeft} group/all z-30`}>
+              <span
+                className={`h-full place-items-center text-fg-subtle ${
+                  checked.length ? "hidden" : "grid group-hover/all:hidden"
+                }`}
+              >
+                <Icon as={IconHash} size={14} />
+              </span>
+              <span
+                className={`h-full place-items-center ${
+                  checked.length ? "grid" : "hidden group-hover/all:grid"
+                }`}
+              >
                 <Checkbox
                   checked={allChecked}
                   indeterminate={checked.length > 0 && !allChecked}
@@ -739,8 +767,22 @@ export function DataGrid({
                       : "hover:bg-surface-hover"
                 }`}
               >
+                {/* Номер строки, по наведению — флажок. У отмеченной
+                    флажок виден всегда: номер прятал бы само выделение. */}
                 <td className={`${pinCell} ${pinLeft} ${pinBg}`}>
-                  <span className="grid h-full place-items-center">
+                  <span
+                    aria-hidden
+                    className={`h-full place-items-center text-xs text-fg-subtle tabular-nums ${
+                      isSelected ? "hidden" : "grid group-hover/row:hidden"
+                    }`}
+                  >
+                    {startIndex + index + 1}
+                  </span>
+                  <span
+                    className={`h-full place-items-center ${
+                      isSelected ? "grid" : "hidden group-hover/row:grid"
+                    }`}
+                  >
                     <Checkbox
                       checked={isSelected}
                       onChange={() => toggleRow(id)}
@@ -792,17 +834,37 @@ export function DataGrid({
                           locale={locale}
                           language={language}
                         />
+
+                        {/* «Открыть» — в первой колонке по наведению, как
+                            в референсе. Собственные кнопки ячейки (ссылка,
+                            копирование) остаются левее: здесь обычный
+                            flex-ряд, а не наложение. */}
+                        {onOpenRow && columnIndex === 0 && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              // Только раскрытие: ячейка под кнопкой не открывается.
+                              event.stopPropagation();
+                              onOpenRow(id);
+                            }}
+                            className="ml-auto hidden h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-surface px-1.5 text-xs text-fg-muted transition-colors group-hover/row:flex hover:bg-surface-hover hover:text-fg"
+                          >
+                            <Icon as={IconArrowsDiagonal} size={12} />
+                            {t("cell.open")}
+                          </button>
+                        )}
                       </span>
                     </td>
                   );
                 })}
 
-                {/* Раскрыть строку и — в дереве — завести дочернюю.
-                    Кнопки появляются по наведению: значок в каждой
-                    строке — рябь на весь экран. */}
+                {/* Правый край строки: урна удаляет эту строку. В дереве
+                    вместо неё «+» дочерней записи, а урна показывается
+                    у отмеченной флажком. Раскрытие строки живёт в первой
+                    колонке — здесь его больше нет. */}
                 <td className={`${pinCell} ${pinRight} ${pinBg}`}>
                   <span className="flex h-full items-center justify-center gap-0.5">
-                    {tree?.onAddChild && (
+                    {tree?.onAddChild && !isSelected && (
                       <button
                         type="button"
                         onClick={() => tree.onAddChild?.(id)}
@@ -814,15 +876,17 @@ export function DataGrid({
                       </button>
                     )}
 
-                    {onOpenRow && (
+                    {onDeleteRow && (!tree || isSelected) && (
                       <button
                         type="button"
-                        onClick={() => onOpenRow(id)}
-                        aria-label={t("drawer.open")}
-                        title={t("drawer.open")}
-                        className="hidden size-6 place-items-center rounded-md text-fg-subtle transition-colors group-hover/row:grid hover:bg-surface-active hover:text-fg"
+                        onClick={() => onDeleteRow(id)}
+                        aria-label={t("table.deleteRow")}
+                        title={t("table.deleteRow")}
+                        className={`${
+                          tree && isSelected ? "grid" : "hidden group-hover/row:grid"
+                        } size-6 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-danger-subtle hover:text-danger`}
                       >
-                        <Icon as={IconArrowsDiagonal} size={14} />
+                        <Icon as={IconTrash} size={14} />
                       </button>
                     )}
                   </span>

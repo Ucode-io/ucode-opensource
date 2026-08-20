@@ -529,6 +529,8 @@ function MenuPage() {
   const [draft, setDraft] = useState<Item | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  /** Строка под урной у правого края — удаление одной, со своим диалогом. */
+  const [deletingRow, setDeletingRow] = useState<string | null>(null);
   const remove = useDeleteItems(view?.tableSlug);
   const update = useUpdateItem(view?.tableSlug);
   const create = useCreateItem(view?.tableSlug);
@@ -879,7 +881,11 @@ function MenuPage() {
               : {})}
             /* Тот же диалог подтверждения, что и у таблицы. */
             {...(can.delete
-              ? { onDeleteSelected: () => setConfirming(true), deleting: remove.isPending }
+              ? {
+                  onDeleteSelected: () => setConfirming(true),
+                  onDeleteRow: setDeletingRow,
+                  deleting: remove.isPending,
+                }
               : {})}
             /* ponytail: без меню колонки — оно обещает сортировку и фильтр,
                которых у ручки дерева нет. Поля правятся через настройки view. */
@@ -930,6 +936,9 @@ function MenuPage() {
                 : {})}
               rows={rows.rows}
               group={groupColumn}
+              /* Номера строк продолжают счёт страниц: на второй по 20 — с 21. */
+              startIndex={infinite ? 0 : (search.page - 1) * limit}
+              {...(can.delete ? { onDeleteRow: setDeletingRow } : {})}
               relations={schema.relations}
               locale={i18n.language}
               language={language}
@@ -1371,6 +1380,31 @@ function MenuPage() {
             />
           );
         })()}
+
+      {/* Удаление одной строки — урной у правого края. Свой диалог:
+          выделение человека здесь ни при чём и не трогается. */}
+      {deletingRow && (
+        <ConfirmDialog
+          title={t("table.deleteTitle")}
+          description={t("table.deleteDescription", { count: 1 })}
+          confirmLabel={t("action.delete")}
+          busy={remove.isPending}
+          onClose={() => setDeletingRow(null)}
+          onConfirm={() =>
+            remove.mutate([deletingRow], {
+              onSuccess: () => {
+                // Удалённая не должна остаться отмеченной невидимо.
+                setSelected((prev) => {
+                  const next = new Set(prev);
+                  next.delete(deletingRow);
+                  return next;
+                });
+                setDeletingRow(null);
+              },
+            })
+          }
+        />
+      )}
 
       {confirming && (
         <ConfirmDialog
