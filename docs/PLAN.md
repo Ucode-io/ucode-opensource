@@ -230,6 +230,9 @@ field?.enable_multilanguage || field?.enable_multi_language
 Не в v1: функции и OpenFaaS, микрофронтенды, website-страницы, остальные
 18 модулей настроек, BOARD/CALENDAR/TIMELINE, копипаст диапазона ячеек.
 
+BOARD, CALENDAR, TIMELINE, многоуровневая группировка и сверка сделанного
+со старым кодом — [PLAN-v2.md](PLAN-v2.md).
+
 ## Старый репозиторий для ИИ-агентов
 
 Доступ асимметричный:

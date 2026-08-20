@@ -266,6 +266,50 @@ view_permission WHERE view_id = $1 AND role_id = $2` и кладёт `true`,
 **`default_limit` не обновляется.** В UPDATE view этой колонки нет,
 поэтому «строк на странице» в настройках view мы не показываем вовсе.
 
+**Настройки календаря не обновляются тоже.** В том же UPDATE
+(`view.go:533`) пишутся только `table_slug`, `type`, `view_fields`,
+`quick_filters`, `name`, `attributes`, `calendar_from_slug`,
+`calendar_to_slug`, `group_fields` и `columns`. `disable_dates` задаётся
+только при создании (`view.go:110`, INSERT), а `time_interval`
+и `status_field_slug` не пишет вообще никто: во всём репозитории они
+встречаются только в SELECT (`view.go:416`, `object_builder.go:616`).
+Поэтому шаг сетки, нерабочие дни и цвет по статусу в CALENDAR мы читаем
+и не даём настраивать.
+
+**PUT view всегда переписывает четыре колонки.** `calendar_from_slug`,
+`calendar_to_slug`, `group_fields` и `columns` подставляются
+безусловно (`view.go:625`), даже когда их не прислали. Тело собирается
+поверх полученного view целиком — иначе переименование вкладки стёрло бы
+поля дат и группировку.
+
+**PUT view пересобирает `columns` по `attributes.group_by_columns`.**
+`view.go:574` вынимает список из attributes, выкидывает эти id из
+присланных колонок и ставит их в начало. Порядок колонок, заданный
+мышью, после сохранения группировки меняется сам.
+
+## Группировка
+
+**Серверная группировка игнорирует фильтры и страницу.**
+`builder_service_view_id` в теле `POST /v2/object/get-list/{slug}`
+уводит запрос в `GetGroupByField` → `GroupByColumns`
+(`ucode_go_object_builder_service/storage/postgres/object_builder.go:1977`).
+Запрос строится как `SELECT поля_группы, jsonb_agg(…) FROM таблица
+GROUP BY поля_группы` (`object_builder.go:2166`) — без `WHERE`, без
+`LIMIT` и с коррелированным подзапросом на каждое LOOKUP-поле. Ни
+фильтров, ни поиска, ни сортировки, ни `default_filters`: строки,
+спрятанные областью видимости view, в сгруппированном ответе видны,
+а таблица приезжает целиком одним ответом. Поэтому группируем на клиенте
+(`features/item/model/group.ts`), а эту ветку не зовём.
+
+**Пустой `attributes.group_by_columns` перекрывает колонку.**
+`getViewGroupFields` (`object_builder.go:2072`) берёт список из
+attributes и только при отсутствии ключа падает на колонку
+`view.group_fields`. Ключ с пустым массивом — это присутствующий ключ,
+поэтому view, созданный старой админкой (она кладёт
+`group_by_columns: []` каждому новому view), получает отказ
+«group_by_columns is required» даже с заполненной колонкой. Мы пишем
+колонку, а ключ из attributes при сохранении удаляем.
+
 ## Меню
 
 **PUT /v3/menus пишет строку целиком.** `storage/postgres/menu.go:943`:

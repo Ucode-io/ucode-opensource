@@ -624,6 +624,13 @@ function Panel({
   }
 
   const defaultCount = activeFilterCount(defaultFilters);
+  /*
+   * Настройки, которых у типа view нет, не показываются. У дерева нет
+   * ни страниц, ни фильтров, ни группировки, ни перехода по клику:
+   * его ручка (/v2/items/{slug}/tree) читает только поля и родителя.
+   * Переключатель, который ничего не меняет, хуже отсутствующего.
+   */
+  const isTree = view.type === "TREE";
   /** Поле группировки — подписью в строке настроек. Ключ как у колонок. */
   const grouped = view.groupById
     ? fields.find(
@@ -672,7 +679,7 @@ function Panel({
               onClick={() => open("type")}
             />
           )}
-          {handlers.onNavigate && (
+          {handlers.onNavigate && !isTree && (
             <Row
               icon={IconExternalLink}
               label={t("view.navigation")}
@@ -693,7 +700,7 @@ function Panel({
           onClick={() => open("columns")}
         />
       )}
-      {can.settings && (
+      {can.settings && !isTree && (
         <>
           <Row
             icon={IconFilterCog}
@@ -717,7 +724,7 @@ function Panel({
           onClick={() => open("fixed")}
         />
       )}
-      {can.settings && handlers.onGroupBy && (
+      {can.settings && handlers.onGroupBy && !isTree && (
         <Row
           icon={IconStack2}
           label={t("view.groupBy")}
@@ -728,7 +735,7 @@ function Panel({
 
       {/* Переключатель, а не страница: у настройки два состояния,
           и ради них открывать экран незачем. */}
-      {can.settings && handlers.onInfiniteScroll && (
+      {can.settings && handlers.onInfiniteScroll && !isTree && (
         <label className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-fg transition-colors hover:bg-surface-hover">
           <Icon as={IconInfinity} size={16} className="shrink-0 text-fg-muted" />
           <span className="flex-1 truncate">{t("view.infiniteScroll")}</span>
