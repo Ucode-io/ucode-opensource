@@ -1,6 +1,23 @@
 export { useDeleteItems, useItem, useItems, useUpdateItem } from "./api/items";
 export { BOARD_ORDER, groupValue } from "./model/board";
 export { Board } from "./ui/Board";
+export { useDisabledDays } from "./api/calendar";
+export { CalendarView } from "./ui/Calendar";
+export { PivotView } from "./ui/PivotView";
+export {
+  AGGREGATIONS,
+  DEFAULT_SORT,
+  formatPivotSort,
+  parsePivotSort,
+  toAggregation,
+} from "./model/pivot";
+export type { Aggregation, PivotSetup, PivotSort } from "./model/pivot";
+export { dayKey, periodRange, toPeriod } from "./model/calendar";
+export type { CalendarPeriod } from "./model/calendar";
+export { useUndatedRows } from "./api/timeline";
+export { Timeline } from "./ui/Timeline";
+export { toScale } from "./model/timeline";
+export type { TimelineScale } from "./model/timeline";
 export { useDrawerLayout } from "./api/layout";
 export { applyRights, itemTitle, orderColumns } from "./model/layout";
 export { useCreateItem } from "./api/relations";

@@ -37,8 +37,27 @@ type LayoutField = {
     field_permission?: { view_permission?: boolean; edit_permission?: boolean };
   };
 };
-/** У секции есть имя: в старой админке она рисуется заголовком над группой полей. */
-type LayoutSection = { label?: string; fields?: LayoutField[] };
+/**
+ * Секция карточки: имя и поля.
+ *
+ * Имя приходится держать в ДВУХ местах. Колонку `section.label` PUT пишет
+ * (layout.go, Update — она есть в списке колонок), но ни один GET её
+ * не возвращает: запрос секций выбирает `id`, `"order"`, `fields`
+ * и `attributes`, и всё (layout.go:1367, GetSections — тот же запрос
+ * обслуживает и GET по пункту меню, и список раскладок). Секция,
+ * переименованная в карточке, после перезапроса снова оказывалась
+ * безымянной.
+ *
+ * Поэтому имя пишется и в колонку — ради старой админки и ради дня,
+ * когда запрос починят, — и в `attributes.label`, который ездит туда
+ * и обратно. Читается сначала из attributes.
+ */
+type SectionAttributes = { label?: string };
+type LayoutSection = {
+  label?: string;
+  attributes?: SectionAttributes;
+  fields?: LayoutField[];
+};
 /**
  * Связь вкладки, как её отдаёт ручка раскладки.
  *
@@ -171,9 +190,19 @@ export function applyRights(
  */
 export function sections(layout: Layout | undefined): { label: string; slugs: string[] }[] {
   return (sectionTab(layout)?.sections ?? []).map((section) => ({
-    label: section.label?.trim() ?? "",
+    label: sectionLabel(section),
     slugs: (section.fields ?? []).map((field) => field.slug ?? "").filter(Boolean),
   }));
+}
+
+/** Имя секции: сначала из attributes, потом из колонки — см. LayoutSection. */
+function sectionLabel(section: LayoutSection): string {
+  return (section.attributes?.label ?? section.label ?? "").trim();
+}
+
+/** Секция с новым именем — в обоих местах сразу. */
+function named(section: LayoutSection, label: string): LayoutSection {
+  return { ...section, label, attributes: { ...section.attributes, label } };
 }
 
 /**
@@ -275,19 +304,75 @@ export function moveField(
    */
   if (!from || at === -1) return layout;
 
-  const cut = after ? at + 1 : at;
-  const next = [...rest.slice(0, cut), from, ...rest.slice(cut)];
+  /*
+   * Поле переезжает В СЕКЦИЮ цели, а не просто на её место в общем
+   * списке. Раньше размеры секций сохранялись, и поле, бывшее последним
+   * в первой секции, при переносе во вторую выталкивало оттуда соседа
+   * назад — секции менялись местами по одному полю за раз.
+   */
+  const target_section = (tab.sections ?? []).findIndex((section) =>
+    (section.fields ?? []).some((field) => field.slug === target),
+  );
 
-  // Размеры секций сохраняются: в drawer их не видно, но в старой админке
-  // они рисуют карточку, и схлопывать всё в одну секцию нельзя.
-  let taken = 0;
-  const sections = (tab.sections ?? []).map((section) => {
-    const size = section.fields?.length ?? 0;
-    const fields = next.slice(taken, taken + size);
-    taken += size;
-    return { ...section, fields };
+  const sections = (tab.sections ?? []).map((section, index) => {
+    const fields = (section.fields ?? []).filter((field) => field.slug !== moved);
+    if (index !== target_section) return { ...section, fields };
+
+    const at_in = fields.findIndex((field) => field.slug === target);
+    const cut = after ? at_in + 1 : at_in;
+    return { ...section, fields: [...fields.slice(0, cut), from, ...fields.slice(cut)] };
   });
 
+  return withSections(layout, tab, sections);
+}
+
+/** Новая секция в конце карточки. Пустая: поля в неё переносят мышью. */
+export function addSection(layout: Layout, label: string): Layout {
+  const tab = sectionTab(layout);
+  if (!tab) return layout;
+
+  return withSections(layout, tab, [...(tab.sections ?? []), named({ fields: [] }, label)]);
+}
+
+/** Переименование секции. Пустое имя — секция без заголовка, это законно. */
+export function renameSection(layout: Layout, index: number, label: string): Layout {
+  const tab = sectionTab(layout);
+  if (!tab || !tab.sections?.[index]) return layout;
+
+  return withSections(
+    layout,
+    tab,
+    tab.sections.map((section, at) => (at === index ? named(section, label) : section)),
+  );
+}
+
+/**
+ * Удаление секции. Поля уходят в соседнюю — ту, что выше, а у первой
+ * секции в ту, что ниже.
+ *
+ * Терять поля нельзя: они исчезли бы из карточки целиком, и вернуть их
+ * можно было бы только правкой раскладки руками. Последнюю секцию
+ * не удаляем по той же причине — полям некуда деться.
+ */
+export function removeSection(layout: Layout, index: number): Layout {
+  const tab = sectionTab(layout);
+  const sections = tab?.sections ?? [];
+  if (!tab || sections.length < 2 || !sections[index]) return layout;
+
+  const orphans = sections[index]?.fields ?? [];
+  const into = index === 0 ? 1 : index - 1;
+
+  const next = sections
+    .map((section, at) =>
+      at === into ? { ...section, fields: [...(section.fields ?? []), ...orphans] } : section,
+    )
+    .filter((_, at) => at !== index);
+
+  return withSections(layout, tab, next);
+}
+
+/** Тот же layout с новым набором секций. Остальное тело не трогаем. */
+function withSections(layout: Layout, tab: LayoutTab, sections: LayoutSection[]): Layout {
   return {
     ...layout,
     tabs: (layout.tabs ?? []).map((item) => (item === tab ? { ...tab, sections } : item)),

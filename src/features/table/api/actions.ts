@@ -53,6 +53,8 @@ export type Action = {
   labels: Labels;
   /** id функции проекта. Пусто — действию нечего звать. */
   functionId: string;
+  /** Путь вызова у функции-процесса (WORKFLOW). У остальных пусто. */
+  path: string;
   icon: string;
   url: string;
   /** Выключенное действие в списке не показывается. */
@@ -110,6 +112,15 @@ export function useActions(tableSlug: string | undefined, enabled = true) {
 export type ActionDraft = {
   labels: Labels;
   functionId: string;
+  /**
+   * Путь вызова — только у функций-процессов (WORKFLOW). У остальных
+   * пустой: их зовут по одному id.
+   *
+   * Колонка `path` в `custom_event` (custom_event.go:70) была всегда,
+   * а задать её у нас было нечем: действие-процесс сохранялось без пути
+   * и не запускалось.
+   */
+  path: string;
   icon: string;
   url: string;
   actionType: string;
@@ -121,6 +132,7 @@ export type ActionDraft = {
 export const EMPTY_ACTION_DRAFT: ActionDraft = {
   labels: {},
   functionId: "",
+  path: "",
   icon: "",
   url: "",
   actionType: "HTTP",
@@ -133,6 +145,7 @@ export function toDraft(action: Action): ActionDraft {
   return {
     labels: action.labels,
     functionId: action.functionId,
+    path: action.path,
     icon: action.icon,
     url: action.url,
     actionType: action.actionType,
@@ -231,20 +244,24 @@ export function useRunAction(tableSlug: string | undefined) {
     onError: (error) => reportError(error, "actions.failed"),
     onSuccess: async (data, { action }) => {
       /*
-       * Отказ приезжает со статусом 200 и полем status: "error" — так
-       * отвечает сама функция, а не шлюз. Без этой проверки провал
-       * функции выглядел бы успехом.
+       * Проверка на случай, когда шлюз научится передавать ответ
+       * функции. Сегодня он этого не делает: `/v1/invoke_function`
+       * отвечает пустым `InvokeFunctionResponse{}` независимо от того,
+       * что вернула функция (function.go:557). Провалилась сама функция
+       * или нет — снаружи не видно; видно только, что вызов приняли.
+       * См. docs/backend-notes.md, «Функции».
        */
       if (data?.status === "error") {
         toast.error(data.message || i18n.t("actions.failed"));
         return;
       }
 
-      toast.success(i18n.t("actions.done"));
+      toast.success(i18n.t("actions.started"));
       await queryClient.invalidateQueries({ queryKey: keys.items.table(slug) });
 
-      // Адрес из ответа важнее записанного в настройках: функция знает,
-      // какую именно страницу она только что подготовила.
+      /* Адрес из ответа важнее записанного в настройках: функция знает,
+         какую именно страницу она подготовила. Сейчас в ответе его нет
+         никогда — остаётся адрес из настроек действия. */
       const url = typeof data?.url === "string" && data.url ? data.url : action.url;
       if (url) window.open(url, "_blank", "noopener,noreferrer");
     },
@@ -266,6 +283,7 @@ function toBody(draft: ActionDraft, tableSlug: string): Record<string, unknown> 
   return {
     table_slug: tableSlug,
     event_path: draft.functionId,
+    path: draft.path.trim(),
     label: firstNamed(draft.labels),
     icon: draft.icon.trim(),
     url: draft.url.trim(),
@@ -319,6 +337,7 @@ export function toAction(dto: ActionDto): Action {
     url: dto.url ?? "",
     disabled: dto.disable === true,
     allowed: isAllowed(dto.action_permission),
+    path: dto.path ?? "",
     actionType: dto.action_type ?? "",
     method: dto.method ?? "",
     refresh: attributes["use_refresh"] === true,

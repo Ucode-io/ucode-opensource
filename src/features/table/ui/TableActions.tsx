@@ -18,7 +18,7 @@ import { Select } from "@/shared/ui/input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { SelectMenu } from "@/shared/ui/select-menu";
 import { ToolButton } from "@/shared/ui/tool-button";
-import { useFunctions } from "../api/functions";
+import { WORKFLOW, useFunctions } from "../api/functions";
 import {
   ACTION_METHODS,
   ACTION_TYPES,
@@ -336,6 +336,23 @@ function ActionForm({
           onLoadMore={() => {}}
           onPick={(functionId) => patch({ functionId })}
         />
+
+        {/* Путь спрашиваем только у функции-процесса: у неё вызов идёт
+            по нему, и без пути действие не запускается. У остальных
+            поля нет вовсе — заполнять его там нечем и незачем. */}
+        {functions.find((item) => item.id === draft.functionId)?.type === WORKFLOW && (
+          <label className="mt-2 flex flex-col gap-0.5">
+            <span className="px-0.5 text-2xs text-fg-muted">{t("actions.path")}</span>
+            <CommitInput
+              value={draft.path}
+              placeholder="/start"
+              label={t("actions.path")}
+              allowEmpty
+              onCommit={(path) => patch({ path })}
+            />
+            <span className="px-0.5 text-2xs text-fg-subtle">{t("actions.pathHint")}</span>
+          </label>
+        )}
 
         <label className="mt-2 flex flex-col gap-0.5">
           <span className="px-0.5 text-2xs text-fg-muted">{t("actions.type")}</span>

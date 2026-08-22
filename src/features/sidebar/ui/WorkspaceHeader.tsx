@@ -15,6 +15,7 @@ import { WorkspaceSwitcher } from "@/features/workspace";
 import { useSession } from "@/shared/api/use-session";
 import { LOCALES, setLocale, type Locale } from "@/shared/lib/i18n";
 import { useUi } from "@/shared/lib/ui-store";
+import { BrandMark } from "@/shared/ui/brand-mark";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverSeparator } from "@/shared/ui/popover";
 import { LogoutButton } from "./LogoutButton";
@@ -55,7 +56,11 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
               open ? "bg-surface-hover" : ""
             }`}
           >
-            <Avatar letter={letter} {...(logo ? { image: logo } : {})} />
+            <Avatar
+              letter={letter}
+              brand={!profile?.company}
+              {...(logo ? { image: logo } : {})}
+            />
 
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               {profile?.name && (
@@ -230,24 +235,39 @@ function LanguageButton() {
  * Картинка — логотип проекта у компании и фотография у человека; обе
  * задаются в настройках. Буква остаётся запасным вариантом: логотип
  * есть далеко не у каждого проекта, и пустой квадрат хуже буквы.
+ *
+ * `brand` — частный случай буквы: рабочее пространство без своей
+ * компании и своего логотипа показывает знак ucode вместо буквы «U»,
+ * а не собственный бренд-цвет для чужого проекта.
  */
 function Avatar({
   letter,
   image,
+  brand = false,
   size = "md",
   tone = "accent",
 }: {
   letter: string;
   image?: string | undefined;
+  brand?: boolean;
   size?: "md" | "lg";
   tone?: "accent" | "muted";
 }) {
+  const px = size === "lg" ? 36 : 28;
   const box = size === "lg" ? "size-9 text-base" : "size-7 text-xs";
 
   if (image) {
     return (
       <span className={`grid shrink-0 place-items-center overflow-hidden rounded-md ${box}`}>
         <img src={image} alt="" className="size-full object-cover" />
+      </span>
+    );
+  }
+
+  if (brand) {
+    return (
+      <span className={`grid shrink-0 place-items-center rounded-md ${box}`}>
+        <BrandMark size={px} />
       </span>
     );
   }

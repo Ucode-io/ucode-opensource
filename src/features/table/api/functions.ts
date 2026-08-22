@@ -6,9 +6,11 @@ import { keys } from "@/shared/lib/query-keys";
 /**
  * Функции проекта — то, что зовёт поле-кнопка (тип BUTTON).
  *
- * Нужен только список «id → имя»: настройка кнопки хранит id
- * (attributes.function), а человеку показывать надо имя. Всё остальное,
- * что отдаёт ручка — путь, тип, папка, — здесь не при чём.
+ * Нужны имя и ТИП: настройка кнопки хранит id (attributes.function),
+ * человеку показывать надо имя, а тип решает, спрашивать ли путь —
+ * у функции-процесса (WORKFLOW) вызов идёт по нему, и без пути
+ * действие не запускается. Остальное, что отдаёт ручка — папка, ветка,
+ * статус сборки, — здесь не при чём.
  *
  * Список общий на окружение, поэтому и ключ такой: у панели настроек
  * поля своего среза нет, а перезапрашивать его на каждое открытие
@@ -16,10 +18,13 @@ import { keys } from "@/shared/lib/query-keys";
  */
 const FUNCTIONS_STALE = 5 * 60_000;
 
-type FunctionDto = { id?: string; name?: string };
+type FunctionDto = { id?: string; name?: string; type?: string };
 type FunctionsResponse = { functions?: FunctionDto[] };
 
-export type ProjectFunction = { id: string; name: string };
+export type ProjectFunction = { id: string; name: string; type: string };
+
+/** Функция-процесс: у неё вызов идёт по пути, а не по одному id. */
+export const WORKFLOW = "WORKFLOW";
 
 export function useFunctions() {
   const session = useSession();
@@ -44,5 +49,9 @@ export function useFunctions() {
 export function toFunctions(data: FunctionsResponse | undefined): ProjectFunction[] {
   return (data?.functions ?? [])
     .filter((item): item is FunctionDto & { id: string } => Boolean(item.id))
-    .map((item) => ({ id: item.id, name: item.name?.trim() || item.id }));
+    .map((item) => ({
+      id: item.id,
+      name: item.name?.trim() || item.id,
+      type: item.type?.trim() ?? "",
+    }));
 }

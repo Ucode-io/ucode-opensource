@@ -230,7 +230,26 @@ export function useUpdateItem(tableSlug: string | undefined) {
  * Чужая форма проходит насквозь: под ключом items лежат и одиночные
  * записи, и ответы других ручек.
  */
-export function patchRow(page: unknown, { guid, values }: RowEdit): unknown {
+export function patchRow(page: unknown, edit: RowEdit): unknown {
+  /*
+   * В кэше лежит НЕ один ответ, а куски бесконечного запроса:
+   * `{pages, pageParams}` — useItems всегда useInfiniteQuery, даже
+   * когда листает страницами. Без этой ветки правка не находила строк
+   * вовсе и оптимистичного обновления не было ни у ячейки, ни у доски,
+   * ни у календаря: значение менялось только после перезапроса
+   * в onSettled, то есть через полсекунды после броска.
+   */
+  const chunks = (page as { pages?: unknown[] } | undefined)?.pages;
+  if (Array.isArray(chunks)) {
+    const pages = chunks.map((chunk) => patchRow(chunk, edit));
+    // Ссылка та же, если ничего не поменялось: иначе перерисовывается
+    // каждый список под ключом items, включая чужие.
+    return pages.some((chunk, index) => chunk !== chunks[index])
+      ? { ...(page as object), pages }
+      : page;
+  }
+
+  const { guid, values } = edit;
   const rows = (page as ItemsResponseDto | undefined)?.data?.response;
   if (!Array.isArray(rows)) return page;
 

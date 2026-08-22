@@ -17,6 +17,11 @@ export type MenuInput = {
   parentId: string;
   /** Только у TABLE: имя таблицы в базе. */
   slug?: string;
+  /**
+   * Только у MICROFRONTEND: какое приложение показывать. Задаётся
+   * ОДИН РАЗ, при создании: PUT колонку не пишет — см. menuUpdateBody.
+   */
+  microfrontendId?: string;
   /** Свободный мешок бэкенда: адрес ссылки и подписи по языкам. */
   attributes?: Record<string, unknown>;
 };
@@ -74,6 +79,7 @@ export function useCreateMenu() {
       type: input.type,
       parent_id: input.parentId,
       project_id: projectId,
+      ...(input.microfrontendId ? { microfrontend_id: input.microfrontendId } : {}),
       attributes: { ...labelAttributes(input.labels), ...input.attributes },
     });
   });
@@ -96,6 +102,11 @@ export type MenuPatch = {
  * которого нет в теле, обнуляется — переименование таблицы стёрло бы ей
  * table_id, — а пустой type бэкенд отвергает («unsupported menu type»).
  * Поэтому тело всегда собирается из пункта целиком.
+ *
+ * `microfrontend_id` — исключение в другую сторону: шлюз его передаёт,
+ * а SQL не пишет (в SET этой колонки нет вовсе). Переименование пункта
+ * его поэтому не стирает — но и сменить приложение правкой нельзя.
+ * См. docs/backend-notes.md, «Меню».
  */
 export function menuUpdateBody(node: MenuNode, patch: MenuPatch, projectId: string) {
   const raw = node.raw;

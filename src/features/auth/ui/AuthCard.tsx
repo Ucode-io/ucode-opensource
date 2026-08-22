@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BrandMark } from "@/shared/ui/brand-mark";
 
 /** Общая обёртка экранов входа и регистрации: знак, заголовок, подзаголовок. */
 export function AuthCard({
@@ -29,17 +30,33 @@ export function AuthCard({
   );
 }
 
+/*
+ * Плашка вокруг знака — тот же серый токен и тот же шум, что у панели
+ * волн рядом (AuthLayout.Waves; id фильтра свой, иначе конфликт на
+ * одном экране входа, где обе плашки видны разом). Шум рисуется под
+ * знаком, а не над ним: знак поверх закрывает его собой и остаётся
+ * чистым.
+ */
 function Logo() {
   return (
-    <div className="grid size-9 place-items-center rounded-lg bg-accent-solid text-accent-fg">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
-        <path
-          d="M4 4v5.5a5 5 0 0 0 10 0V4"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
+    <div className="relative grid h-14 w-16 place-items-center overflow-hidden rounded-2xl bg-surface-active">
+      <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+        <filter id="auth-logo-noise" x="-20%" y="-20%" width="140%" height="140%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.65"
+            numOctaves="2"
+            seed="7"
+            stitchTiles="stitch"
+          />
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.6 0" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#auth-logo-noise)" style={{ mixBlendMode: "overlay" }} />
       </svg>
+
+      <div className="relative">
+        <BrandMark haloColor="var(--color-surface-active)" />
+      </div>
     </div>
   );
 }

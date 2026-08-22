@@ -65,6 +65,54 @@ export function fillUrl(template: UrlTemplate, row: Record<string, unknown>): st
 export const isExternal = (url: string): boolean => /^(https?:)?\/\//i.test(url.trim());
 
 /**
+ * Переход по адресу из настроек.
+ *
+ * Чужой сайт открывается новой вкладкой, свой — заменяет страницу.
+ * `noopener` обязателен: без него открытая страница получает доступ
+ * к нашему window через opener.
+ */
+export function openUrl(url: string): void {
+  if (!url) return;
+
+  if (isExternal(url)) window.open(url, "_blank", "noopener,noreferrer");
+  else window.location.assign(url);
+}
+
+/**
+ * Открыть строку так, как задал админ (`attributes.navigate`).
+ * Вернул true — переход состоялся, и карточку открывать не нужно.
+ */
+export function openRowUrl(
+  view: { navigate: UrlTemplate } | undefined,
+  row: Record<string, unknown> | undefined,
+): boolean {
+  if (!view || !row || !hasUrl(view.navigate)) return false;
+
+  openUrl(fillUrl(view.navigate, row));
+  return true;
+}
+
+/**
+ * Завести запись так, как задал админ (`attributes.url_object`).
+ * Вернул true — ушли на страницу проекта, черновик заводить не нужно.
+ *
+ * Подставлять в адрес нечего: строки ещё нет. Значения, которыми экран
+ * заполнил бы черновик — колонка доски, даты из клетки календаря, —
+ * до чужой страницы не доедут; так же было и в старой админке
+ * (useViewsProps.jsx:300, navigateCreatePage: адрес получает только свои
+ * параметры, а значения уходили в собственный drawer).
+ *
+ * Одна функция на все экраны, а не ветка внутри каждого: настройка,
+ * про которую помнит только таблица, — это настройка, которой нет.
+ */
+export function openCreateUrl(view: { objectUrl: UrlTemplate } | undefined): boolean {
+  if (!view || !hasUrl(view.objectUrl)) return false;
+
+  openUrl(fillUrl(view.objectUrl, {}));
+  return true;
+}
+
+/**
  * Сырые attributes → адрес.
  *
  * Читается и объект `{url, params}`, и голая строка: настройки старой

@@ -4,6 +4,7 @@ import { useTablePermission } from "@/features/auth";
 import {
   BOARD_ORDER,
   Board,
+  CalendarView,
   DataGrid,
   FilterBar,
   GridFooter,
@@ -20,9 +21,17 @@ import {
   toConditions,
   useCreateItem,
   applyRights,
+  dayKey,
+  periodRange,
+  toPeriod,
+  useDisabledDays,
   useDrawerLayout,
   useItems,
   useUpdateItem,
+  Timeline,
+  useUndatedRows,
+  type CalendarPeriod,
+  type TimelineScale,
   type Filters,
   type Item,
   type Sort,
@@ -32,9 +41,11 @@ import type { DataLanguage } from "@/features/workspace";
 import { toast } from "@/shared/lib/toast";
 import { useUi } from "@/shared/lib/ui-store";
 import { pinnedIds, resolveColumnIds } from "../model/columns";
+import { hasUrl, openCreateUrl, openRowUrl } from "../model/url-template";
 import type { RelationTab } from "../model/relation-tabs";
 import { tabGroupField } from "../api/tab-group";
 import { useExportExcel } from "../api/excel";
+import { CalendarSetup } from "./CalendarFields";
 import { ExcelImportDialog } from "./ExcelImportDialog";
 import { ViewOptions } from "./ViewOptions";
 
@@ -45,8 +56,11 @@ import { ViewOptions } from "./ViewOptions";
 export type TabSettings = {
   /** Имя на конкретном языке ДАННЫХ. */
   onRename: (name: string, language: string) => void;
-  /** Тип вкладки: таблица или доска. Набор — TAB_VIEW_TYPES. */
+  /** Тип вкладки: таблица, доска, календарь. Набор — TAB_VIEW_TYPES. */
   onType: (type: string) => void;
+  /** Поля дат календаря. Слаги: так их хранит база. */
+  onDateFrom: (slug: string) => void;
+  onDateTo: (slug: string) => void;
   /**
    * Поле, по значениям которого собраны колонки доски. У таблицы то же
    * поле разбивает её вкладками — настройка одна, и хранится она в той
@@ -204,8 +218,40 @@ export function RelationView({
   const tree = tab.view.type === "TREE";
   const treeReady = schema.fields.some((field) => field.slug === `${tab.tableSlug}_id`);
 
-  /** Страницами не листается ни доска, ни дерево: обе показывают набор целиком. */
-  const whole = board || tree;
+  /*
+   * Календарь вкладки. Тот же, что на экране, но период и видимый день
+   * — своё состояние, а не адрес: адрес занят основной таблицей, из
+   * карточки которой открыта вкладка. Цена та же, что у сортировки
+   * и страницы вкладки: ссылка открывает её с текущего месяца.
+   */
+  const calendar = tab.view.type === "CALENDAR";
+  /*
+   * Таймлайн вкладки. Настройка у него та же, что у календаря — поля
+   * дат, — и живёт он по тем же правилам: масштаб и видимый день своё
+   * состояние, а не адрес.
+   */
+  const timeline = tab.view.type === "TIMELINE";
+  /** Вкладки, отбирающие строки по видимому диапазону дат. */
+  const dated = calendar || timeline;
+  /* Поля дат — из ВСЕХ полей чужой таблицы: срок бывает и не показан
+     колонкой вкладки, а событию он всё равно нужен. Ключ здесь слаг. */
+  const dateFrom = fields.find((field) => field.slug === tab.view.dateFromSlug);
+  const dateTo = fields.find((field) => field.slug === tab.view.dateToSlug);
+  const dateStatus = fields.find((field) => field.slug === tab.view.statusFieldSlug);
+
+  const [period, setPeriod] = useState<CalendarPeriod>(() => toPeriod(tab.view.period));
+  const [scale, setScale] = useState<TimelineScale>("DAY");
+  const [cursor, setCursor] = useState(() => new Date());
+  /** Сколько месяцев ленты загружено вокруг курсора: MONTH — лента недель. */
+  const [span, setSpan] = useState({ past: 1, future: 1 });
+  /** Видимый диапазон: он же отбор строк календаря. */
+  const range = useMemo(
+    () => periodRange(timeline ? "MONTH" : period, cursor, span.past, span.future),
+    [timeline, period, cursor, span],
+  );
+
+  /** Страницами не листается ни доска, ни дерево, ни календарь. */
+  const whole = board || tree || dated;
 
   const [sorts, setSorts] = useState<Sort[]>([]);
   const [limit, setLimit] = useState(LIMIT);
@@ -256,9 +302,33 @@ export function RelationView({
   );
   const chips = own ?? seeded;
 
-  const filters = useMemo(
+  /**
+   * Отбор БЕЗ диапазона дат. Им же спрашивается список записей без дат
+   * у таймлайна: диапазон отсёк бы как раз то, чего у них нет.
+   */
+  const scopeFilters = useMemo(
     () => ({ ...chips, ...scope, [link]: { op: "contains" as const, values: [value] } }),
     [chips, scope, link, value],
+  );
+
+  const filters = useMemo(
+    () => ({
+      ...chips,
+      ...scope,
+      /* Видимый диапазон календаря и таймлайна — такой же отбор, как
+         остальные: `{поле: {$gte, $lte}}`. Стоит перед связью, потому
+         что связь с открытой записью перекрыть нельзя ничем. */
+      ...(dated && dateFrom
+        ? {
+            [dateFrom.slug]: {
+              op: "between" as const,
+              values: [dayKey(range.from), dayKey(range.to)],
+            },
+          }
+        : {}),
+      [link]: { op: "contains" as const, values: [value] },
+    }),
+    [chips, scope, dated, dateFrom, range, link, value],
   );
 
   /** Закреплённые колонки вкладки — в тех же ключах, что и у таблицы. */
@@ -270,6 +340,24 @@ export function RelationView({
   /** Права роли на ЧУЖУЮ таблицу: у неё они свои. */
   const can = useTablePermission(tab.tableSlug);
 
+
+  /** Постоянная ссылка: литерал в аргументе перезапрашивал бы строки. */
+  const calendarSort = useMemo(
+    () => (dateFrom ? [{ field: dateFrom.slug, direction: "asc" as const }] : NO_SORTS),
+    [dateFrom],
+  );
+
+  /*
+   * Нерабочие дни календаря — второй get-list в ещё одну чужую таблицу
+   * (`view.disable_dates`). Не настроено — запроса нет вовсе.
+   */
+  const disabledDays = useDisabledDays({
+    tableSlug: calendar ? tab.view.disableDates?.tableSlug ?? "" : "",
+    daySlug: tab.view.disableDates?.daySlug ?? "",
+    from: dayKey(range.from),
+    to: dayKey(range.to),
+  });
+
   const {
     page: rows,
     isLoading,
@@ -278,30 +366,83 @@ export function RelationView({
     loadMore,
     error: rowsError,
     refetch: refetchRows,
-  } = useItems(value && can.read ? tab.tableSlug : undefined, {
-    /*
-     * Ни доска, ни дерево не листаются страницами: доске нужны колонки
-     * целиком, дереву — предки детей, а разрезанные страницей они стали
-     * бы сиротами и всплыли в корень.
-     */
-    limit: whole ? WHOLE_LIMIT : limit,
-    page: whole ? 1 : page,
-    /*
-     * Режим листания у вкладки тот же, что у её view: вкладка и есть view.
-     * Доска догружается прокруткой колонки; дерево — нет: догружать
-     * в него нечем, оно показывает первую сотню связанных строк.
-     */
-    infinite: board || tab.view.infiniteScroll,
-    /* Доска сортируется своей колонкой порядка и ничем больше: карточки
+  } = useItems(
+    value && can.read && (!dated || Boolean(dateFrom)) ? tab.tableSlug : undefined,
+    {
+      /*
+       * Ни доска, ни дерево, ни календарь не листаются страницами: доске
+       * нужны колонки целиком, дереву — предки детей (разрезанные
+       * страницей, они стали бы сиротами и всплыли в корень), календарю
+       * — весь видимый диапазон.
+       */
+      limit: whole ? WHOLE_LIMIT : limit,
+      page: whole ? 1 : page,
+      /*
+       * Режим листания у вкладки тот же, что у её view: вкладка и есть view.
+       * Доска догружается прокруткой колонки; дерево — нет: догружать
+       * в него нечем, оно показывает первую сотню связанных строк.
+       */
+      infinite: board || dated || tab.view.infiniteScroll,
+      /* Доска сортируется своей колонкой порядка и ничем больше: карточки
        в ней расставляют руками, и чужая сортировка эту расстановку прячет.
-       У дерева порядок свой — обход иерархии. */
-    sorts: board ? (boardReady ? BOARD_SORT : NO_SORTS) : tree ? NO_SORTS : sorts,
-    filters,
+       У дерева порядок свой — обход иерархии. Календарь сортируется полем
+       начала: на сетке порядок не виден, но он решает, какие строки
+       приедут, когда их в диапазоне больше порции. */
+      sorts: board
+        ? boardReady
+          ? BOARD_SORT
+          : NO_SORTS
+        : tree
+          ? NO_SORTS
+          : dated
+            ? calendarSort
+            : sorts,
+      filters,
+      search,
+    },
+  );
+
+  /*
+   * Записи без дат — свой запрос, тот же, что и на экране: условия
+   * «поле пусто» у get-list нет (features/item/api/timeline).
+   */
+  const undated = useUndatedRows({
+    tableSlug: timeline && can.read && dateFrom && value ? tab.tableSlug : "",
+    fromSlug: dateFrom?.slug ?? "",
+    filters: scopeFilters,
     search,
   });
 
   const update = useUpdateItem(tab.tableSlug);
   const create = useCreateItem(tab.tableSlug);
+
+  /**
+   * Открыть связанную строку. Адрес из настроек вкладки важнее: у её view
+   * есть свой `attributes.navigate`, и раз админ его задал — открывается
+   * его страница, а не наша карточка. До этого настройка на вкладке
+   * не действовала вовсе.
+   */
+  const openRelated = (guid: string) => {
+    const row =
+      rows.rows.find((item) => item.guid === guid) ??
+      undated.find((item) => item.guid === guid);
+    if (openRowUrl(tab.view, row)) return;
+
+    setOpenGuid(guid);
+  };
+
+  /**
+   * Завести связанную строку. Тоже сначала настройка: `url_object`
+   * уводит на страницу проекта, и тогда ни строки, ни ссылки на родителя
+   * мы не создаём — это делает та страница.
+   */
+  const createRelated = (values: Record<string, unknown>) =>
+    openCreateUrl(tab.view)
+      ? undefined
+      : create.mutate(
+          { ...values, [tab.fieldSlug]: parentGuid },
+          { onSuccess: () => toast.success(t("table.rowCreated")) },
+        );
   const exportExcel = useExportExcel(tab.tableSlug);
   // Ширины колонок вкладка помнит там же, где таблица: это настройка
   // экрана человека, и у одной таблицы она одна на все места показа.
@@ -331,7 +472,12 @@ export function RelationView({
   if (failure) return <Failure text={failure} onRetry={schemaError ? refetchSchema : refetchRows} />;
   if (!columns.length) return <p className="p-6 text-sm text-fg-muted">{t("table.noColumns")}</p>;
 
-  const openRow = rows.rows.find((item) => item.guid === openGuid);
+  /* И среди записей без дат: у таймлайна они лежат отдельным списком
+     и в общую страницу не входят — иначе щелчок по такой строке
+     не открывал бы ничего. */
+  const openRow =
+    rows.rows.find((item) => item.guid === openGuid) ??
+    undated.find((item) => item.guid === openGuid);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -381,6 +527,8 @@ export function RelationView({
               onRename: (name, nameLanguage) => settings.onRename(name, nameLanguage),
               onType: settings.onType,
               onTabGroup: settings.onTabGroup,
+              onDateFrom: settings.onDateFrom,
+              onDateTo: settings.onDateTo,
               onColumns: settings.onColumns,
               onQuickFilters: settings.onQuickFilters,
               onFixedColumns: settings.onFixedColumns,
@@ -442,7 +590,7 @@ export function RelationView({
             language={language}
             selected={selected}
             onSelect={setSelected}
-            onOpenRow={setOpenGuid}
+            onOpenRow={openRelated}
             {...(can.update
               ? {
                   onEdit: (guid: string, slug: string, value: unknown) =>
@@ -486,7 +634,7 @@ export function RelationView({
             locale={locale}
             language={language}
             hasMore={hasMore || loadingMore}
-            onOpenRow={setOpenGuid}
+            onOpenRow={openRelated}
             /* Перенос карточки — обычная правка строки. Право нужно
                и на таблицу, и на само поле раскладки: роль, которой
                запрещено менять статус, не таскает карточки. */
@@ -511,16 +659,126 @@ export function RelationView({
             {...(tab.canCreate && can.write
               ? {
                   onAddCard: (columnId: string) =>
-                    create.mutate(
-                      {
-                        [boardField.slug]: groupValue(boardField, columnId),
-                        [tab.fieldSlug]: parentGuid,
-                      },
-                      { onSuccess: () => toast.success(t("table.rowCreated")) },
-                    ),
+                    createRelated({ [boardField.slug]: groupValue(boardField, columnId) }),
                 }
               : {})}
             {...(hasMore ? { onEndReached: loadMore } : {})}
+          />
+        )
+      ) : dated ? (
+        /*
+         * Календарь и таймлайн вкладки. Поле начала события задаётся
+         * в её настройках — без него ни сетки дней, ни оси не будет
+         * никогда. Экран настройки тот же, что и на большом экране:
+         * причина одна.
+         */
+        !dateFrom ? (
+          <CalendarSetup
+            view={tab.view}
+            // ВСЕ поля чужой таблицы: дата бывает и не показана колонкой.
+            fields={schema.fields}
+            language={language}
+            {...(settings
+              ? { onDateFrom: settings.onDateFrom, onDateTo: settings.onDateTo }
+              : {})}
+          />
+        ) : timeline ? (
+          <Timeline
+            tableSlug={tab.tableSlug}
+            columns={columns}
+            rows={rows.rows}
+            undated={undated}
+            fromField={dateFrom}
+            toField={dateTo}
+            statusField={dateStatus}
+            /* Группировки у вкладки нет ни на одном типе: её настройка
+               живёт на экране, и таблица вкладки тоже идёт без неё. */
+            groups={NO_GROUPS}
+            relations={schema.relations}
+            scale={scale}
+            cursor={cursor}
+            rangeFrom={range.from}
+            rangeTo={range.to}
+            locale={locale}
+            language={language}
+            hasMore={hasMore || loadingMore}
+            onScale={setScale}
+            onCursor={(next) => {
+              setCursor(next);
+              setSpan({ past: 1, future: 1 });
+            }}
+            /* Не функцией обновления: событий прокрутки за один жест
+               десятки, и каждое добавляло бы по месяцу. */
+            onLoadPast={() => setSpan({ ...span, past: span.past + 1 })}
+            onLoadFuture={() => setSpan({ ...span, future: span.future + 1 })}
+            onOpenRow={openRelated}
+            {...(hasMore ? { onLoadMore: loadMore } : {})}
+            {...(can.update && dateFrom.editable
+              ? {
+                  onMove: (guid: string, values: Record<string, unknown>) =>
+                    update.mutate({ guid, values }),
+                }
+              : {})}
+            /* Новая запись сразу с двумя проставленными полями: даты
+               из протяжки и ссылка на открытую запись. */
+            {...(tab.canCreate && can.write
+              ? {
+                  onCreate: (values: Record<string, unknown>) => createRelated(values),
+                }
+              : {})}
+          />
+        ) : (
+          <CalendarView
+            tableSlug={tab.tableSlug}
+            columns={columns}
+            rows={rows.rows}
+            fromField={dateFrom}
+            toField={dateTo}
+            statusField={dateStatus}
+            relations={schema.relations}
+            period={period}
+            cursor={cursor}
+            rangeFrom={range.from}
+            rangeTo={range.to}
+            disabledDays={disabledDays}
+            locale={locale}
+            language={language}
+            hasMore={hasMore || loadingMore}
+            onPeriod={(next) => {
+              setPeriod(next);
+              setSpan({ past: 1, future: 1 });
+            }}
+            onCursor={(next) => {
+              setCursor(next);
+              setSpan({ past: 1, future: 1 });
+            }}
+            /* Не функцией обновления: событий прокрутки за один жест
+               десятки, и каждое добавляло бы по месяцу. Значение из
+               текущего рендера делает их повторы безвредными. */
+            onLoadPast={() => setSpan({ ...span, past: span.past + 1 })}
+            onLoadFuture={() => setSpan({ ...span, future: span.future + 1 })}
+            onOpenRow={openRelated}
+            {...(hasMore ? { onLoadMore: loadMore } : {})}
+            /* Перенос и растягивание — обычная правка строки. Право
+               нужно и на само поле начала: роль, которой запрещено
+               менять дату, не двигает события. */
+            {...(can.update && dateFrom.editable
+              ? {
+                  onMove: (guid: string, values: Record<string, unknown>) =>
+                    update.mutate({ guid, values }),
+                }
+              : {})}
+            /*
+             * Новое событие сразу с двумя проставленными полями: даты
+             * из клетки и ссылка на открытую запись. Черновика, как
+             * на экране, здесь нет — панель вкладки узкая, и вторая
+             * карточка поверх первой ради одного поля не окупается.
+             */
+            {...(tab.canCreate && can.write
+              ? {
+                  onCreate: (values: Record<string, unknown>) => createRelated(values),
+                }
+              : {})}
           />
         )
       ) : (
@@ -552,13 +810,18 @@ export function RelationView({
         // Связанная строка раскрывается на месте, поверх вкладки:
         // у чужой таблицы своего экрана в этом меню нет, а посмотреть
         // на неё целиком нужно чаще, чем перейти в её таблицу.
-        onOpenRow={setOpenGuid}
+        onOpenRow={openRelated}
         {...(tab.view.infiniteScroll && hasMore ? { onEndReached: loadMore } : {})}
         /*
          * Ссылка на открытую запись проставляется сама: связанную строку
          * заводят ИЗ карточки, и заполнять её вручную значит предложить
          * человеку выбрать ту самую запись, из которой он смотрит.
          */
+        /* Свой адрес создания заменяет строку-черновик — так же, как
+           в таблице на экране. */
+        {...(tab.canCreate && can.write && hasUrl(tab.view.objectUrl)
+          ? { onAddRow: () => openCreateUrl(tab.view) }
+          : {})}
         {...(tab.canCreate && can.write
           ? {
               creating: create.isPending,
@@ -577,8 +840,9 @@ export function RelationView({
       />
       )}
 
-      {/* У доски подвала нет: страницами её не листают, а сколько
-          карточек в колонке — написано в её шапке. */}
+      {/* Ни у доски, ни у календаря подвала нет: страницами их не
+          листают. Сколько карточек в колонке — написано в её шапке,
+          а календарь показывает свой диапазон целиком. */}
       {!whole && (
       <GridFooter
         {...(tab.view.infiniteScroll ? {} : { page, onPage: setPage })}
@@ -736,6 +1000,9 @@ const WHOLE_LIMIT = 100;
 
 /** Постоянные ссылки: литерал в аргументе перезапрашивал бы строки. */
 const NO_SORTS: Sort[] = [];
+
+/** То же и для группировки: постоянная ссылка вместо литерала. */
+const NO_GROUPS: Field[] = [];
 const BOARD_SORT: Sort[] = [{ field: BOARD_ORDER, direction: "asc" }];
 
 /** Постоянная ссылка: пустой литерал по умолчанию пересобирал бы поля. */

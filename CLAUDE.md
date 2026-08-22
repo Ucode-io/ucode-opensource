@@ -6,7 +6,10 @@
 ## Читать перед задачей
 
 1. [CONTEXT.md](CONTEXT.md) — словарь домена. Обязательно.
-2. [docs/PLAN.md](docs/PLAN.md) — принятые решения и порядок работ.
+2. [docs/PLAN.md](docs/PLAN.md) — принятые решения и порядок работ;
+   продолжения — [docs/PLAN-v2.md](docs/PLAN-v2.md) (закрыт),
+   [docs/PLAN-v3.md](docs/PLAN-v3.md) (текущий),
+   [docs/PARITY.md](docs/PARITY.md) — чек паритета со старой админкой.
 3. [docs/adr/](docs/adr/) — решения, у которых есть цена.
 
 ## Старый репозиторий

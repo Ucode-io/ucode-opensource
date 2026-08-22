@@ -5,11 +5,14 @@ import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError } from "@/shared/lib/toast";
 import {
+  addSection,
   fieldOrder,
   fieldRights,
   headingSlug,
   hiddenFields,
   moveField,
+  removeSection,
+  renameSection,
   sections,
   setHeading,
   type Layout,
@@ -98,6 +101,17 @@ export function useDrawerLayout({
      */
     setHeading: (slug: string, variants: Record<string, string> | null) => {
       if (query.data) update.mutate(setHeading(query.data, slug, variants));
+    },
+    /** Новая секция в конце карточки. Пустая: поля переносят мышью. */
+    addSection: (label: string) => {
+      if (query.data) update.mutate(addSection(query.data, label));
+    },
+    renameSection: (index: number, label: string) => {
+      if (query.data) update.mutate(renameSection(query.data, index, label));
+    },
+    /** Удаление секции. Поля уходят в соседнюю — терять их нельзя. */
+    removeSection: (index: number) => {
+      if (query.data) update.mutate(removeSection(query.data, index));
     },
   };
 }

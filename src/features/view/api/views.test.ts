@@ -130,3 +130,43 @@ test("снятие раскладки шлёт пустой список, а н�
   expect(toUpdateBody({ view: stored, tabGroup: "" })["group_fields"]).toEqual([]);
   expect(toUpdateBody({ view: stored, columns: ["b"] })["group_fields"]).toEqual(["g"]);
 });
+
+/*
+ * Даты календаря: истина — колонка, но у view, созданных старой
+ * админкой, слаги лежат ТОЛЬКО в attributes: её форма создания писала
+ * туда, а сохранение — в колонку. Без ступени такой календарь открылся
+ * бы пустым экраном «выберите поле даты».
+ */
+test("поля дат читаются из колонок, а у старых view — из attributes", () => {
+  expect(toView({ id: "v", calendar_from_slug: "starts_at", calendar_to_slug: "ends_at" }))
+    .toMatchObject({ dateFromSlug: "starts_at", dateToSlug: "ends_at" });
+
+  expect(
+    toView({ id: "v", attributes: { calendar_from_slug: "starts_at", calendar_to_slug: "ends_at" } }),
+  ).toMatchObject({ dateFromSlug: "starts_at", dateToSlug: "ends_at" });
+
+  // Колонка сильнее: она и есть то, что мы пишем.
+  expect(
+    toView({
+      id: "v",
+      calendar_from_slug: "starts_at",
+      attributes: { calendar_from_slug: "старое" },
+    }).dateFromSlug,
+  ).toBe("starts_at");
+
+  expect(toView({ id: "v" }).dateFromSlug).toBe("");
+});
+
+test("правка полей дат не трогает остальные настройки", () => {
+  const body = toUpdateBody({ view: stored, dateFrom: "starts_at" });
+
+  expect(body["calendar_from_slug"]).toBe("starts_at");
+  // Конец не правили — уезжает то, что лежало во view.
+  expect(body["calendar_to_slug"]).toBeUndefined();
+  expect(body["columns"]).toEqual(["a", "b"]);
+  expect(body["attributes"]).toEqual({ name_ru: "Приемка", quick_filters: [], summaries: ["x"] });
+
+  // Снятие поля конца шлёт пустую строку, а не молчит: молчание вернуло
+  // бы прежнее значение из raw.
+  expect(toUpdateBody({ view: stored, dateTo: "" })["calendar_to_slug"]).toBe("");
+});

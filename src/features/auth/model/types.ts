@@ -59,12 +59,20 @@ export type Credentials = {
  * объект уходит в тело запроса как есть — и при выборе connection'ов
  * тоже, вторым запросом в /v2/login.
  */
-export type PhoneCredentials = {
-  type: "phone";
-  phone: string;
-  otp: string;
-  sms_id: string;
-};
+/**
+ * Вход по коду — с телефона или с почты.
+ *
+ * Одна форма на оба: ручка входа различает их полем `type` и тем, в каком
+ * ключе лежит получатель (session_v2.go, V3MultiCompanyLogin — случаи
+ * WithPhone и WithEmail), а всё остальное у них общее: код, sms_id
+ * и второй шаг с connection'ами.
+ */
+export type OtpCredentials =
+  | { type: "phone"; phone: string; otp: string; sms_id: string }
+  | { type: "email"; email: string; otp: string; sms_id: string };
+
+/** Куда уходит код: в SMS или письмом. Так его называет send-code-app. */
+export type OtpChannel = "PHONE" | "EMAIL";
 
 /** Вариант выбора внутри одной Connection. */
 export type ConnectionOption = {

@@ -75,12 +75,48 @@ export function safeHref(value: unknown): string | undefined {
   }
 }
 
+/**
+ * Адрес, по которому пункт уводит НАРУЖУ, — `attributes.link`.
+ *
+ * `website_link` сюда не входит: это встроенная страница, а не ссылка.
+ * Старая админка их и различала — LINK с `website_link` она открывала
+ * рамкой внутри админки (`MenuSwitchCase.jsx:38`,
+ * `views/Constructor/WebsitePage`), а не новой вкладкой. Обе настройки
+ * пишутся в один тип пункта, поэтому и разбираются здесь, в одном месте.
+ */
 function pickHref(dto: MenuDto): string | undefined {
-  for (const key of ["website_link", "link"]) {
-    const href = safeHref(dto.attributes?.[key]);
-    if (href) return href;
+  return safeHref(dto.attributes?.["link"]);
+}
+
+/** Адрес встроенной страницы: `attributes.website_link`. */
+function pickEmbed(dto: MenuDto): string {
+  return safeHref(dto.attributes?.["website_link"]) ?? "";
+}
+
+/**
+ * Настройки запуска микрофронтенда: `attributes.params` — список пар
+ * `{key, value}` (`MicrofrontendLinkModal.jsx:190`).
+ *
+ * Раскладываем в карту здесь, а не в экране: форма пишет массив, а
+ * пользуются им как набором именованных значений, и разбирать его
+ * в двух местах — верный способ разойтись.
+ */
+export function pickParams(attributes: Record<string, unknown> | undefined): Record<string, string> {
+  const raw = attributes?.["params"];
+  if (!Array.isArray(raw)) return {};
+
+  const params: Record<string, string> = {};
+
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+
+    const { key, value } = item as { key?: unknown; value?: unknown };
+    if (typeof key !== "string" || !key.trim()) continue;
+
+    params[key.trim()] = typeof value === "string" ? value : String(value ?? "");
   }
-  return undefined;
+
+  return params;
 }
 
 function pickPermissions(dto: MenuDto) {
@@ -120,6 +156,11 @@ export function toMenuNode(
     icon: dto.icon ?? "",
     type,
     kind: kindOf(type),
+    tableId: dto.table_id ?? "",
+    folder: typeof dto.attributes?.["path"] === "string" ? dto.attributes["path"].trim() : "",
+    embedUrl: pickEmbed(dto),
+    microfrontendId: dto.microfrontend_id ?? "",
+    params: pickParams(dto.attributes),
     order: index,
     isStatic: dto.is_static ?? false,
     parentId: dto.parent_id || null,

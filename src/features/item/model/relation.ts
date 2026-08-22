@@ -1,4 +1,4 @@
-import type { Field } from "@/features/table";
+import type { Field, Relation } from "@/features/table";
 import { relationLabel } from "@/shared/lib/relation-label";
 import { relationDataKey, type Item } from "./types";
 
@@ -55,6 +55,45 @@ export function relationSelection(
     .filter(isRecord)
     .map((item) => ({ guid: String(item["guid"] ?? ""), label: relationLabel(item, slugs) }))
     .filter((item) => item.guid || item.label);
+}
+
+/**
+ * Автофильтр связи: какие строки чужой таблицы вообще можно выбрать.
+ *
+ * Настройка лежит в самой связи — `auto_filters` списком пар
+ * `{field_from, field_to}`, где `field_from` это слаг поля В ЭТОЙ строке,
+ * а `field_to` — слаг поля в ЧУЖОЙ таблице. Так делается зависимый
+ * выбор: город отбирается по региону, выбранному строкой выше.
+ *
+ * Уходит плоскими ключами в тело `get-list`, рядом с обычным отбором —
+ * туда же их кладёт и старая админка (`RelationField.jsx`,
+ * `autoFiltersValue`). Ключ `auto_filter`, который бэкенд тоже понимает
+ * (`storage/postgres/build_query.go:266`), не нужен: он склеивает
+ * условия через OR, а пары независимы и должны действовать вместе.
+ *
+ * Поле-источник ещё не заполнено — условия нет вовсе: пока регион
+ * не выбран, показываются все города, а не ни одного.
+ */
+export function autoFilterValues(relation: Relation, row: Item): Record<string, unknown> {
+  const pairs = relation.raw["auto_filters"];
+  if (!Array.isArray(pairs)) return {};
+
+  const values: Record<string, unknown> = {};
+
+  for (const pair of pairs) {
+    if (!isRecord(pair)) continue;
+
+    const from = String(pair["field_from"] ?? "");
+    const to = String(pair["field_to"] ?? "");
+    if (!from || !to) continue;
+
+    const value = row[from];
+    if (value === undefined || value === null || value === "") continue;
+
+    values[to] = value;
+  }
+
+  return values;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

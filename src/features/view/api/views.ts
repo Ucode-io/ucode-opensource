@@ -28,6 +28,13 @@ type ViewDto = {
   columns?: string[];
   /** Поле раскладки вкладками. Колонка таблицы, а не ключ attributes. */
   group_fields?: string[];
+  /** Поля дат календаря и таймлайна. Колонки таблицы, и здесь это слаги. */
+  calendar_from_slug?: string;
+  calendar_to_slug?: string;
+  /** Поле цвета события. Колонка есть, ручки правки для неё нет. */
+  status_field_slug?: string;
+  /** Нерабочие дни: чужая таблица и колонки дня и времени в ней. */
+  disable_dates?: { table_slug?: string; day_slug?: string } | null;
   attributes?: Record<string, unknown>;
 };
 
@@ -79,8 +86,10 @@ export function useMenuViews(menuId: string) {
  * нужно разворачивать через resolveColumns, а не по одному ключу.
  *
  * Тип — из тех, что мы рисуем (форма создания предлагает только их).
- * Настроек в теле нет и у доски: поле, по которому она раскладывается
- * на колонки, выбирают в настройках уже созданного view, а колонку
+ * Вместе с ним приезжает ровно одна настройка — поля дат календаря:
+ * без поля начала он не рисует ничего, поэтому их спрашивают вторым
+ * шагом создания, как и в старой админке. У доски такого шага нет:
+ * поле раскладки выбирают в настройках уже созданной, а колонку
  * порядка (`board_order`) бэкенд заводит сам, увидев тип BOARD
  * (storage/postgres/view.go:66).
  */
@@ -99,7 +108,7 @@ export function useCreateView({
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: ({ name, language, type, relation }: NewView) =>
+    mutationFn: ({ name, language, type, relation, dateFrom, dateTo }: NewView) =>
       api.post<ViewDto>(`/v2/views/${slug}`, {
         table_slug: slug,
         menu_id: menuId,
@@ -121,6 +130,16 @@ export function useCreateView({
         ...(relation
           ? { relation_table_slug: relation.tableSlug, relation_id: relation.id }
           : {}),
+        /*
+         * Даты календаря — колонками, а не ключами attributes: INSERT
+         * читает `req.CalendarFromSlug` (view.go:138). Старая админка
+         * при создании клала их только в attributes
+         * (useViewCreatePopupProps.jsx), а при сохранении — только
+         * в колонку; отсюда её же `view.calendar_from_slug ??
+         * view.attributes.calendar_from_slug` в девяти местах.
+         */
+        ...(dateFrom === undefined ? {} : { calendar_from_slug: dateFrom }),
+        ...(dateTo === undefined ? {} : { calendar_to_slug: dateTo }),
       }),
 
     onError: (error) => reportError(error, "common.createFailed"),
@@ -227,6 +246,9 @@ export type NewView = {
   /** Тип view. Не задан — TABLE: самый частый выбор и у экрана, и у вкладки. */
   type?: string;
   relation?: { id: string; tableSlug: string };
+  /** Поля дат календаря: их выбирают вторым шагом создания. */
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 export type ViewEdit = {
@@ -263,10 +285,14 @@ export type ViewEdit = {
   pdfUrl?: string;
   /** Догружать строки прокруткой вместо номеров страниц. */
   infiniteScroll?: boolean;
-  /** Поле группировки. Пустая строка — снять группировку. */
-  groupBy?: string;
+  /** Поля группировки в порядке уровней. Пустой список — снять группировку. */
+  groupBy?: string[];
   /** Поле раскладки вкладками. Пустая строка — убрать вкладки. */
   tabGroup?: string;
+  /** Слаг поля начала события. Пустая строка — календарю нечего рисовать. */
+  dateFrom?: string;
+  /** Слаг поля конца события. Пустая строка — событие точкой в дне. */
+  dateTo?: string;
 };
 
 /**
@@ -297,6 +323,8 @@ export function toUpdateBody({
   infiniteScroll,
   groupBy,
   tabGroup,
+  dateFrom,
+  dateTo,
 }: ViewEdit): Record<string, unknown> {
   const raw = view.raw;
   const trimmed = name?.trim();
@@ -330,10 +358,11 @@ export function toUpdateBody({
     ...(pdfUrl === undefined ? {} : { pdf_url: pdfUrl.trim() }),
     ...(infiniteScroll === undefined ? {} : { infinite_scroll: infiniteScroll }),
     /*
-     * Списком из одного — так настройку хранит и читает старая админка
-     * (attributes.group_by_columns). Уровень у нас один, см. View.groupById.
+     * Список ключей полей — так настройку хранит и читает старая админка
+     * (attributes.group_by_columns; её панель «Group» — список галочек,
+     * а не выбор одного поля). Порядок = порядок уровней.
      */
-    ...(groupBy === undefined ? {} : { group_by_columns: groupBy ? [groupBy] : [] }),
+    ...(groupBy === undefined ? {} : { group_by_columns: groupBy }),
   };
 
   return {
@@ -348,6 +377,15 @@ export function toUpdateBody({
      * подменяется только когда правили именно её.
      */
     ...(tabGroup === undefined ? {} : { group_fields: tabGroup ? [tabGroup] : [] }),
+    /*
+     * Даты календаря — тоже колонки таблицы, и бэкенд пишет их БЕЗ
+     * условия: `calendar_from_slug = $N` уходит в UPDATE при каждом PUT,
+     * что бы ни правили (view.go, Update). Поэтому тело, собранное
+     * заново, стёрло бы настройку календаря правкой имени; нетронутыми
+     * они уезжают через `raw`.
+     */
+    ...(dateFrom === undefined ? {} : { calendar_from_slug: dateFrom }),
+    ...(dateTo === undefined ? {} : { calendar_to_slug: dateTo }),
   };
 }
 
@@ -428,16 +466,86 @@ export function toView(dto: ViewDto): View {
     relationId: dto.relation_id ?? "",
     tableLabel: dto.table_label?.trim() ?? "",
     columnIds: dto.columns ?? [],
+    barFieldSlugs: toBarFieldSlugs(dto.attributes),
     fixedColumnIds: toFixedColumnIds(dto.attributes),
     defaultFilters: toDefaultFilters(dto.attributes),
     navigate: toUrlTemplate(dto.attributes?.["navigate"]),
     objectUrl: toUrlTemplate(dto.attributes?.["url_object"]),
     pdfUrl: typeof dto.attributes?.["pdf_url"] === "string" ? dto.attributes["pdf_url"] : "",
     infiniteScroll: dto.attributes?.["infinite_scroll"] === true,
-    groupById: toGroupById(dto.attributes),
+    groupByIds: toGroupByIds(dto.attributes),
     tabGroupId: typeof dto.group_fields?.[0] === "string" ? dto.group_fields[0] : "",
+    dateFromSlug: toDateSlug(dto.calendar_from_slug, dto.attributes, "calendar_from_slug"),
+    dateToSlug: toDateSlug(dto.calendar_to_slug, dto.attributes, "calendar_to_slug"),
+    statusFieldSlug: dto.status_field_slug?.trim() ?? "",
+    disableDates: toDisableDates(dto.disable_dates),
+    period: typeof dto.attributes?.["period"] === "string" ? dto.attributes["period"] : "",
     raw: { ...dto },
   };
+}
+
+/**
+ * Поля, показанные на полосе таймлайна, — у view, заведённых старой
+ * админкой.
+ *
+ * Её панель «колонки» на таймлайне пишет НЕ `columns`, а
+ * `attributes.visible_field` — слаги через косую черту
+ * (ColumnsVisibility/useColumnsVisibilityProps.jsx: `visible_field + "/" +
+ * column.slug`). То есть у такого view набор колонок лежит в другом
+ * месте, чем у всех остальных, и по `columns` он пуст.
+ *
+ * Читается только как запасной вариант (см. resolveColumns) и только
+ * ради этих view: пишем мы всегда `columns`, и первое же сохранение
+ * колонок в нашей панели делает эту ступень ненужной.
+ */
+function toBarFieldSlugs(attributes: Record<string, unknown> | undefined): string[] {
+  const value = attributes?.["visible_field"];
+  if (typeof value !== "string") return [];
+
+  return value
+    .split("/")
+    .map((slug) => slug.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Поле даты: колонка таблицы, а при её пустоте — тот же ключ
+ * из attributes.
+ *
+ * Это не `a || b` из запрещённых: истина одна — колонка, и пишем мы
+ * только её. Ключ в attributes читается ради view, СОЗДАННЫХ старой
+ * админкой: её форма создания клала слаги только туда
+ * (useViewCreatePopupProps.jsx), хотя её же сохранение писало колонку.
+ * Без этой ступени настроенный годами календарь открылся бы у нас
+ * пустым экраном «выберите поле даты». Первое же сохранение переносит
+ * значение в колонку, и ступень перестаёт срабатывать.
+ *
+ * Место у неё ровно одно — здесь: наружу уходит один слаг, и ни один
+ * компонент про attributes не знает.
+ */
+function toDateSlug(
+  column: string | undefined,
+  attributes: Record<string, unknown> | undefined,
+  key: string,
+): string {
+  const legacy = attributes?.[key];
+  return column?.trim() || (typeof legacy === "string" ? legacy.trim() : "");
+}
+
+/**
+ * Нерабочие дни. Обе половины обязательны: без слага таблицы спрашивать
+ * не у кого, без колонки дня — нечего сопоставлять с клетками календаря.
+ *
+ * Колонки времени (`time_from_slug`, `time_to_slug`) не читаются: они
+ * описывают ЧАСТЬ дня, а закрашенный наполовину день — это отдельная
+ * раскладка, которой в v2 нет. Целый день закрыт или нет — вот и всё,
+ * что календарь показывает.
+ */
+function toDisableDates(raw: ViewDto["disable_dates"]): View["disableDates"] {
+  const tableSlug = raw?.table_slug?.trim() ?? "";
+  const daySlug = raw?.day_slug?.trim() ?? "";
+
+  return tableSlug && daySlug ? { tableSlug, daySlug } : null;
 }
 
 /**
@@ -456,10 +564,11 @@ function toFixedColumnIds(attributes: Record<string, unknown> | undefined): stri
 }
 
 /** Первый элемент group_by_columns: группируем по одному полю. */
-function toGroupById(attributes: Record<string, unknown> | undefined): string {
+function toGroupByIds(attributes: Record<string, unknown> | undefined): string[] {
   const list = attributes?.["group_by_columns"];
-  const first = Array.isArray(list) ? list[0] : undefined;
-  return typeof first === "string" ? first : "";
+  if (!Array.isArray(list)) return [];
+
+  return list.filter((id): id is string => typeof id === "string" && Boolean(id));
 }
 
 function toDefaultFilters(attributes: Record<string, unknown> | undefined): Record<string, unknown> {

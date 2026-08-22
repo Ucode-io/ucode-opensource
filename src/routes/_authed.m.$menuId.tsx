@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   BOARD_ORDER,
   Board,
+  CalendarView,
   DataGrid,
   FilterBar,
   blankItem,
@@ -28,10 +29,24 @@ import {
   orderColumns,
   useCreateItem,
   useDeleteItems,
+  useDisabledDays,
   useDrawerLayout,
   useItem,
   useItems,
   useUpdateItem,
+  dayKey,
+  periodRange,
+  formatPivotSort,
+  parsePivotSort,
+  PivotView,
+  toAggregation,
+  toPeriod,
+  toScale,
+  Timeline,
+  useUndatedRows,
+  type CalendarPeriod,
+  type PivotSetup,
+  type TimelineScale,
   activeFilterCount,
   filtersSchema,
   fromConditions,
@@ -45,7 +60,9 @@ import {
   type Sort,
 } from "@/features/item";
 import { useTablePermissions } from "@/features/auth";
-import { IMPLEMENTED_TYPES, SidebarToggleButton, useMenu } from "@/features/sidebar";
+import { FileBrowser } from "@/features/files";
+import { MicrofrontendPage } from "@/features/microfrontend";
+import { EmbeddedPage, SidebarToggleButton, showsTable, useMenu } from "@/features/sidebar";
 import {
   FieldEditor,
   TableActions,
@@ -67,11 +84,13 @@ import {
   type Field,
   type FieldDraft,
 } from "@/features/table";
+import { PrintButton } from "@/features/docs";
 import {
   ExcelImportDialog,
   IMPLEMENTED_VIEW_TYPES,
   TAB_VIEW_TYPES,
   RelationView,
+  CalendarSetup,
   ViewCreateButton,
   ViewOptions,
   ViewTabs,
@@ -91,9 +110,10 @@ import {
   useTabGroup,
   useUpdateView,
   fillTemplate,
-  fillUrl,
   hasUrl,
-  isExternal,
+  openCreateUrl,
+  openRowUrl,
+  openUrl,
   type View,
 } from "@/features/view";
 import { useDataLanguages } from "@/features/workspace";
@@ -159,9 +179,48 @@ const searchSchema = z.object({
    * строк, каким бы ни было условие: одна форма и в адресе, и в схеме,
    * и в проверке. Что значит каждая позиция — знает features/item.
    */
+  /**
+   * Видимый день календаря («ГГГГ-ММ-ДД») и его режим.
+   *
+   * В адресе, а не в состоянии, и не зря: видимый период — это ОТБОР
+   * строк, такой же, как фильтр. Ссылка на «эту неделю» обязана
+   * открывать ту же неделю, а не текущую.
+   *
+   * Пусто — сегодня и режим из настроек view.
+   */
+  day: z.string().optional().catch(undefined),
+  period: z.string().optional().catch(undefined),
+  /* Настройки сводной — в адресе: это не настройка view для всех,
+     а то, как человек сейчас смотрит. */
+  /* Полей строк несколько — через запятую: слаг поля это [a-z0-9_],
+     запятой в нём быть не может. */
+  pivotRow: z.string().optional().catch(undefined),
+  pivotCol: z.string().optional().catch(undefined),
+  pivotValue: z.string().optional().catch(undefined),
+  pivotAgg: z.string().optional().catch(undefined),
+  pivotSort: z.string().optional().catch(undefined),
+  pivotSkipEmpty: z.boolean().optional().catch(undefined),
   filters: filtersSchema.optional().catch(undefined),
   search: z.string().optional().catch(undefined),
 });
+
+/**
+ * Порция строк календаря. Как и у доски, своя и постоянная: страницами
+ * календарь не листают, диапазон сужается переключением на неделю
+ * и день. Не влезло — в шапке календаря появляется «Показать ещё».
+ */
+const CALENDAR_LIMIT = 200;
+
+/** «ГГГГ-ММ-ДД» из адреса → день. Мусор — сегодня, а не пустой экран. */
+function parseDay(value: string | undefined): Date {
+  const parts = (value ?? "").split("-").map(Number);
+  const [year, month, day] = parts;
+
+  if (parts.length !== 3 || !year || !month || !day) return new Date();
+
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
 
 export const Route = createFileRoute("/_authed/m/$menuId")({
   validateSearch: searchSchema,
@@ -272,22 +331,24 @@ function MenuPage() {
   );
 
   /*
-   * Колонка группировки (attributes.group_by_columns). Настройка хранит
-   * ключ колонки — id поля или id связи, — а таблице нужна сама колонка
-   * с активным языком: у мультиязычного поля группа считается по тому
-   * варианту, который показан.
+   * Колонки группировки (attributes.group_by_columns) в порядке уровней.
+   * Настройка хранит ключи колонок — id поля или id связи, — а таблице
+   * нужны сами колонки с активным языком: у мультиязычного поля группа
+   * считается по тому варианту, который показан.
    */
-  const groupColumn = useMemo(() => {
-    if (!view?.groupById) return undefined;
+  const groupColumns = useMemo(() => {
+    const ids = view?.groupByIds ?? [];
 
-    const field = viewFields.find(
-      (item) => item.id === view.groupById || item.relationId === view.groupById,
-    );
-    if (!field) return undefined;
+    return ids
+      .map((id) => {
+        const field = viewFields.find((item) => item.id === id || item.relationId === id);
+        if (!field) return undefined;
 
-    const slug = localizeSlug(field.slug, viewFields, codes, language);
-    return columns.find((item) => item.slug === slug);
-  }, [view?.groupById, viewFields, codes, language, columns]);
+        const slug = localizeSlug(field.slug, viewFields, codes, language);
+        return columns.find((item) => item.slug === slug);
+      })
+      .filter((field): field is Field => Boolean(field));
+  }, [view?.groupByIds, viewFields, codes, language, columns]);
 
   /*
    * Вкладки связей в карточке — это view пункта меню с `is_relation_view`
@@ -364,6 +425,94 @@ function MenuPage() {
   /* Колонку порядка заводит бэкенд под BOARD. Нет её — сортировать нечем. */
   const boardReady = schema.fields.some((field) => field.slug === BOARD_ORDER);
   /*
+   * CALENDAR — те же строки, но отобранные по видимому диапазону дат
+   * и разложенные по дням. Запрос обычный get-list: своей ручки
+   * у календаря нет и не нужно.
+   */
+  const calendarView = supportedView && view?.type === "CALENDAR";
+  /*
+   * PIVOT — те же строки, сведённые в клетки. Серверной сводки нет
+   * (docs/backend-notes.md, «Группировка»), поэтому считается загруженная
+   * выборка, и экран об этом говорит счётчиком.
+   */
+  const pivotView = supportedView && view?.type === "PIVOT";
+  const pivotSetup: PivotSetup = {
+    rowSlugs: (search.pivotRow ?? "").split(",").filter(Boolean),
+    colSlug: search.pivotCol ?? "",
+    valueSlug: search.pivotValue ?? "",
+    aggregation: toAggregation(search.pivotAgg),
+    sort: parsePivotSort(search.pivotSort),
+    skipEmpty: search.pivotSkipEmpty === true,
+  };
+  /*
+   * TIMELINE — те же строки того же get-list, но каждая своей полосой
+   * на общей оси дней. Настройка у него та же, что у календаря: поля
+   * дат; ручка та же; отличается только раскладка.
+   */
+  const timelineView = supportedView && view?.type === "TIMELINE";
+  /** Экраны, отбирающие строки по видимому диапазону дат. */
+  const dateView = calendarView || timelineView;
+  /** Режим: из адреса, иначе из настроек view, иначе месяц. */
+  const period: CalendarPeriod = toPeriod(search.period || view?.period);
+  /*
+   * Масштаб оси таймлайна живёт в том же параметре адреса, что и режим
+   * календаря: у view один экран, и держать два параметра под «как
+   * показано» незачем. Настройка `view.period` сюда не идёт — она про
+   * календарь, и «WEEK» на оси значения не имеет.
+   */
+  const scale: TimelineScale = toScale(search.period);
+  /*
+   * Сколько месяцев ленты загружено вокруг курсора. MONTH — это не один
+   * месяц со стрелками, а лента недель: она прокручивается без конца
+   * и подгружает соседние месяцы, как и в старой админке.
+   *
+   * Состояние привязано к курсору ключом, а не сбрасывается эффектом:
+   * эффект сбрасывал бы его ПОСЛЕ рендера, то есть один запрос уходил
+   * бы со старой лентой вокруг нового месяца.
+   */
+  /*
+   * У таймлайна масштаб в этот ключ не входит: диапазон от него
+   * не зависит, а сброс ленты на смене «дни ↔ месяцы» выбрасывал бы
+   * всё, что человек догрузил прокруткой.
+   */
+  const spanKey = `${timelineView ? "TIMELINE" : period}|${search.day ?? ""}|${view?.id ?? ""}`;
+  const [loaded, setLoaded] = useState({ key: spanKey, past: 1, future: 1 });
+  const span = loaded.key === spanKey ? loaded : { key: spanKey, past: 1, future: 1 };
+  /*
+   * Видимый период целиком. Одной памяткой: `new Date()` внутри неё
+   * даёт новый объект на каждый рендер, а от этих границ зависит отбор
+   * строк — без памятки таблица перезапрашивалась бы бесконечно.
+   */
+  const calendar = useMemo(() => {
+    const cursor = parseDay(search.day);
+    /* У таймлайна масштаб не сужает диапазон: ось — лента месяцев
+       в обоих масштабах, «дни» и «месяцы» меняют только ширину
+       колонки. */
+    return {
+      cursor,
+      ...periodRange(timelineView ? "MONTH" : period, cursor, span.past, span.future),
+    };
+  }, [search.day, period, timelineView, span.past, span.future]);
+  /* Поля дат — из ВСЕХ полей таблицы: срок задачи бывает и не показан
+     колонкой, а событию он всё равно нужен. Ключ здесь слаг, а не id. */
+  const calendarFrom = tableFields.find((field) => field.slug === view?.dateFromSlug);
+  const calendarTo = tableFields.find((field) => field.slug === view?.dateToSlug);
+  /** Поле, вариантами которого красятся события. Только читается. */
+  const calendarStatus = tableFields.find((field) => field.slug === view?.statusFieldSlug);
+  /** Не с чего начать событие: поле не выбрано в настройках view. */
+  const calendarNotReady = dateView && !calendarFrom;
+
+  /*
+   * Нерабочие дни — второй запрос в ЧУЖУЮ таблицу по тому же диапазону
+   * (`view.disable_dates`). Не настроено — запроса нет вовсе.
+   */
+  const disabledDays = useDisabledDays({
+    tableSlug: calendarView ? (view?.disableDates?.tableSlug ?? "") : "",
+    daySlug: view?.disableDates?.daySlug ?? "",
+    from: dayKey(calendar.from),
+    to: dayKey(calendar.to),
+  });
+  /*
    * Размер страницы: из адреса, иначе последний выбранный для этой
    * таблицы, иначе настройка view. Значение из localStorage проверяется
    * — испорченное руками «0» оставило бы таблицу пустой навсегда.
@@ -373,6 +522,8 @@ function MenuPage() {
   const rememberedLimit = view ? tableLimits[view.tableSlug] : undefined;
   const limit = boardView
     ? BOARD_LIMIT
+    : dateView || pivotView
+    ? CALENDAR_LIMIT
     : search.limit ??
       (rememberedLimit && rememberedLimit >= MIN_LIMIT && rememberedLimit <= MAX_LIMIT
         ? rememberedLimit
@@ -399,6 +550,12 @@ function MenuPage() {
    * значения не идут подряд и групп не собрать. Своя сортировка человека
    * по этому же полю задаёт направление, остальные работают внутри групп.
    */
+  /** Сортировки полей группировки — по уровням, по возрастанию. */
+  const groupSorts = useMemo(
+    () => groupColumns.map((field) => ({ field: field.slug, direction: "asc" as const })),
+    [groupColumns],
+  );
+
   const querySorts = useMemo(() => {
     /*
      * Доска сортируется своей колонкой порядка и ничем больше: карточки
@@ -408,14 +565,32 @@ function MenuPage() {
      * колонке роняет запрос целиком.
      */
     if (boardView) return boardReady ? [{ field: BOARD_ORDER, direction: "asc" as const }] : [];
-    if (!groupColumn) return sorts;
+    /*
+     * Календарь сортируется своим полем начала и ничем больше: на сетке
+     * порядок строк не виден вовсе, но он решает, КАКИЕ строки приедут,
+     * когда их в диапазоне больше порции. По дате — значит с начала
+     * периода, а не наугад.
+     */
+    if (dateView) {
+      const byDate = calendarFrom
+        ? [{ field: calendarFrom.slug, direction: "asc" as const }]
+        : [];
 
-    const own = sorts.find((sort) => sort.field === groupColumn.slug);
+      /* С группировкой поля групп идут первыми — иначе одинаковые
+         значения не идут подряд и групп не собрать. Календарю она
+         не рисуется, и менять ему порядок строк незачем. */
+      return timelineView ? [...groupSorts, ...byDate] : byDate;
+    }
+    if (!groupSorts.length) return sorts;
+
+    /* Своя сортировка человека по полю группы задаёт ей направление,
+       остальные работают внутри групп. */
+    const slugs = new Set(groupSorts.map((sort) => sort.field));
     return [
-      own ?? { field: groupColumn.slug, direction: "asc" as const },
-      ...sorts.filter((sort) => sort.field !== groupColumn.slug),
+      ...groupSorts.map((sort) => sorts.find((own) => own.field === sort.field) ?? sort),
+      ...sorts.filter((sort) => !slugs.has(sort.field)),
     ];
-  }, [boardView, boardReady, groupColumn, sorts]);
+  }, [boardView, boardReady, dateView, timelineView, calendarFrom, groupSorts, sorts]);
 
   /*
    * Фильтры в адресе отсутствуют — берём набор, предложенный админом
@@ -495,10 +670,47 @@ function MenuPage() {
   /** Доску не по чему раскладывать: поле не выбрано в настройках view. */
   const boardNotReady = boardView && !boardField;
 
-  /** То, что действительно уходит в запрос. Область видимости — сверху. */
-  const effectiveFilters: Filters = useMemo(
+  /*
+   * Видимый диапазон календаря — тоже отбор, и уходит он тем же
+   * условием, что и всё остальное: `{поле: {$gte, $lte}}`.
+   *
+   * `view_type: "CALENDAR"` в тело не кладём, хотя старая админка его
+   * шлёт: get-list берёт из тела только ключи, совпавшие со СЛАГАМИ
+   * полей таблицы (object_builder.go:1249 — `if _, ok := fieldsM[key]`),
+   * а остальное молча выбрасывает. То есть ключ ничего не делает.
+   *
+   * Известное ограничение: отбор идёт по НАЧАЛУ события. Многодневное,
+   * начавшееся до видимого периода и в него заходящее, не приедет.
+   * Так же считает и старая админка; вторым условием по полю конца
+   * это не чинится — они соединяются через AND, а нужен OR.
+   */
+  const calendarFilters: Filters = useMemo(
+    () =>
+      dateView && calendarFrom
+        ? {
+            [calendarFrom.slug]: {
+              op: "between" as const,
+              values: [dayKey(calendar.from), dayKey(calendar.to)],
+            },
+          }
+        : EMPTY_FILTERS,
+    [dateView, calendarFrom, calendar],
+  );
+
+  /**
+   * Отбор БЕЗ диапазона дат: область видимости view, вкладка и фильтры
+   * человека. Список записей без дат спрашивается им же — диапазон
+   * отсёк бы как раз то, чего у них нет.
+   */
+  const scopeFilters: Filters = useMemo(
     () => ({ ...filters, ...defaultFilters, ...tabFilters }),
     [filters, defaultFilters, tabFilters],
+  );
+
+  /** То, что действительно уходит в запрос. Область видимости — сверху. */
+  const effectiveFilters: Filters = useMemo(
+    () => ({ ...scopeFilters, ...calendarFilters }),
+    [scopeFilters, calendarFilters],
   );
 
   /*
@@ -507,8 +719,13 @@ function MenuPage() {
    * условие, которого в запросе нет.
    */
   const lockedSlugs = useMemo(
-    () => new Set([...Object.keys(defaultFilters), ...Object.keys(tabFilters)]),
-    [defaultFilters, tabFilters],
+    () =>
+      new Set([
+        ...Object.keys(defaultFilters),
+        ...Object.keys(tabFilters),
+        ...Object.keys(calendarFilters),
+      ]),
+    [defaultFilters, tabFilters, calendarFilters],
   );
 
   /** Закреплённые колонки — по id поля: DataGrid знает только их. */
@@ -550,6 +767,10 @@ function MenuPage() {
       item: undefined,
       tab: undefined,
       group: undefined,
+      // Видимый период календаря — настройка ЭТОГО view: у соседнего
+      // и поля дат другие, и типа CALENDAR может не быть вовсе.
+      day: undefined,
+      period: undefined,
       sort: undefined,
       filters: undefined,
       search: undefined,
@@ -572,7 +793,12 @@ function MenuPage() {
    * человек что-то ввёл, и молча выбрасывать это нельзя.
    */
   const openRow = (guid: string) => {
-    const row = rows.rows.find((item) => item.guid === guid);
+    /* И среди записей без дат: у таймлайна они лежат отдельным списком,
+       а свой адрес перехода (`attributes.navigate`) им положен такой же,
+       как всем остальным. */
+    const row =
+      rows.rows.find((item) => item.guid === guid) ??
+      undated.find((item) => item.guid === guid);
     if (view && row && openRowUrl(view, row)) return;
 
     if (draftTouched()) {
@@ -597,7 +823,13 @@ function MenuPage() {
    * сразу, и «страница 2» показала бы десять колонок, в каждой из
    * которых чужая середина списка.
    */
-  const infinite = view?.infiniteScroll === true || boardView;
+  /* Сводная считает загруженное, поэтому и грузит прокруткой: страницы
+     здесь означали бы «итог по третьей странице». */
+  const infinite = view?.infiniteScroll === true || boardView || dateView || pivotView;
+
+  /** Экраны, на которых порядок строк не виден и сортировать нечего. */
+  /** Экраны, на которых порядок строк не виден и сортировать нечего. */
+  const sortless = boardView || dateView || pivotView;
 
   const {
     page: rows,
@@ -613,7 +845,12 @@ function MenuPage() {
        вкладки приехал бы весь список, и тут же — второй запрос с ним.
        У доски без поля раскладки колонок нет вовсе — и строк спрашивать
        не для чего. */
-    supportedView && !treeView && can.read && !tabGroup.pending && (!boardView || Boolean(boardField))
+    supportedView &&
+    !treeView &&
+    can.read &&
+    !tabGroup.pending &&
+    (!boardView || Boolean(boardField)) &&
+    (!dateView || Boolean(calendarFrom))
       ? view?.tableSlug
       : undefined,
     {
@@ -625,6 +862,19 @@ function MenuPage() {
       search: search.search,
     },
   );
+
+  /*
+   * Записи БЕЗ дат: на оси их нет, но и потерять их нельзя — задачу
+   * без срока ставят на таймлайн перетаскиванием. Отбором по диапазону
+   * они отсекаются, а условия «поле пусто» у get-list нет вовсе
+   * (см. features/item/api/timeline).
+   */
+  const undated = useUndatedRows({
+    tableSlug: timelineView && can.read && calendarFrom ? (view?.tableSlug ?? "") : "",
+    fromSlug: calendarFrom?.slug ?? "",
+    filters: scopeFilters,
+    search: search.search ?? "",
+  });
 
   /*
    * Строка для карточки. Сначала из уже загруженной страницы — drawer
@@ -795,7 +1045,13 @@ function MenuPage() {
     [draft, drawerColumns],
   );
 
-  const supported = menu ? IMPLEMENTED_TYPES.has(menu.type) : true;
+  const supported = menu ? showsTable(menu) : true;
+  /*
+   * Файловое хранилище — не таблица: ни view, ни строк у него нет,
+   * и весь экран под ним другой. Папка задана настройкой пункта
+   * (`attributes.path`), и пункт меню и ЕСТЬ папка.
+   */
+  const filesFolder = menu?.type === "MINIO_FOLDER" ? menu.folder : "";
 
   return (
     <div className="flex h-full flex-col">
@@ -831,12 +1087,17 @@ function MenuPage() {
           {can.viewCreate && tableSlug && (
             <ViewCreateButton
               busy={createView.isPending}
+              /* Поля таблицы: из них выбираются даты календаря вторым
+                 шагом создания. Все, а не колонки, — срок задачи бывает
+                 и не показан. */
+              fields={tableFields}
+              language={language}
               // Новая вкладка сразу открывается: её создали, чтобы в неё
               // смотреть. Список к этому моменту уже перезапрошен — см.
               // useCreateView, иначе вкладки дёрнулись бы на первую и обратно.
-              onCreate={(name, type) =>
+              onCreate={(name, type, dates) =>
                 createView.mutate(
-                  { name, language, type },
+                  { name, language, type, ...(dates ?? {}) },
                   { onSuccess: (created) => created?.id && openView(created.id) },
                 )
               }
@@ -856,10 +1117,11 @@ function MenuPage() {
                   tableSlug={view.tableSlug}
                   columns={columns}
                   language={language}
-                  sorts={boardView ? [] : sorts}
-                  /* На доске сортировки нет: порядок карточек в колонке
-                     расставлен руками, и своя сортировка его спрячет. */
-                  {...(boardView
+                  sorts={sortless ? [] : sorts}
+                  /* Ни на доске, ни в календаре сортировки нет: там
+                     порядок строк не виден вовсе — карточки расставлены
+                     руками, события стоят по своим датам. */
+                  {...(sortless
                     ? {}
                     : {
                         onSorts: (next: Sort[]) =>
@@ -897,6 +1159,11 @@ function MenuPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    /* Адрес из настроек view важнее карточки: «Новая
+                       запись» ведёт на страницу проекта, если админ её
+                       задал (`attributes.url_object`). */
+                    if (view && openCreateUrl(view)) return;
+
                     startDraft(blankItem(drawerColumns));
                   }}
                   className="mr-1 h-7 shrink-0 rounded-md bg-accent-solid px-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
@@ -940,6 +1207,14 @@ function MenuPage() {
                   onInfiniteScroll: (infiniteScroll) =>
                     updateView.mutate({ view, infiniteScroll }),
                   onGroupBy: (groupBy) => updateView.mutate({ view, groupBy }),
+                  // Поля дат календаря. Смена поля начала сбрасывает
+                  // видимый день: диапазон считался по прежнему полю,
+                  // и оставлять его — показывать чужой отбор.
+                  onDateFrom: (dateFrom) => {
+                    updateView.mutate({ view, dateFrom });
+                    setSearch({ day: undefined });
+                  },
+                  onDateTo: (dateTo) => updateView.mutate({ view, dateTo }),
                   // Смена поля раскладки сбрасывает открытую вкладку:
                   // её значение принадлежало прежнему полю.
                   onTabGroup: (tabGroup) => {
@@ -975,7 +1250,23 @@ function MenuPage() {
         </div>
       )}
 
-      {!supported ? (
+      {menu?.embedUrl ? (
+        /* Пункт со встроенной страницей: показываем её рамкой. Ни view,
+           ни строк у такого пункта нет — как и у хранилища. */
+        <EmbeddedPage url={menu.embedUrl} title={menu.label} />
+      ) : menu?.type === "MINIO_FOLDER" ? (
+        /* Право на запись берём с самого пункта меню: таблицы за ним
+           нет, а значит нет и прав на таблицу. */
+        <FileBrowser folder={filesFolder} canWrite={menu.can.write} />
+      ) : menu?.type === "MICROFRONTEND" || menu?.microfrontendId ? (
+        /* Чужое приложение внутри админки. Не рамкой, а модулем федерации
+           — ему нужны наш токен, язык и окружение; цена этого решения
+           записана в docs/adr/0005.
+           Тип проверяется наравне с идентификатором: у пункта без
+           выбранного приложения экран ЕСТЬ, и сказать он должен
+           «приложение не выбрано», а не «экрана нет». */
+        <MicrofrontendPage id={menu.microfrontendId} params={menu.params} />
+      ) : !supported ? (
         <Notice text={t("menu.notImplemented")} />
       ) : viewsLoading ? (
         // Пока список view едет, «у таблицы нет view» — не правда, а
@@ -1087,6 +1378,10 @@ function MenuPage() {
                    * сама строка — рядом (`<слаг>_data`), из неё ячейка
                    * берёт подпись. Наружу `_data` не уезжает — его
                    * отбрасывает useCreateItem.
+                   *
+                   * Адрес из настроек здесь НЕ действует: на чужую
+                   * страницу родителя не передать, а дочерняя запись без
+                   * родителя — это не то, что просили.
                    */
                   onAddChild: (parent: Item) => {
                     startDraft({
@@ -1138,8 +1433,8 @@ function MenuPage() {
               relations={schema.relations}
               language={language}
               filters={filters}
-              // Своей сортировки у доски нет: порядок карточек задан руками.
-              sorts={boardView ? [] : sorts}
+              // Ни у доски, ни у календаря своей сортировки нет.
+              sorts={sortless ? [] : sorts}
               // Поля, закрытые отбором по умолчанию: свой фильтр по ним
               // всё равно перекрывается настройкой view, и чип соврал бы.
               locked={lockedSlugs}
@@ -1156,6 +1451,25 @@ function MenuPage() {
             /* Доска без поля раскладки — не пустая сетка: рисовать
                нечего, пока не выбрано, что считать колонками. */
             <Notice text={t("board.noGroupField")} />
+          ) : calendarNotReady ? (
+            /* Календарь без поля начала — не пустая сетка: событию
+               не с чего начаться. Выбор полей стоит прямо здесь, а не
+               только за «⋯»: настройка, без которой экран пуст, не должна
+               требовать догадки, где она лежит. */
+            <CalendarSetup
+              view={view}
+              fields={tableFields}
+              language={language}
+              {...(can.settings && rightsOf(view.id).edit
+                ? {
+                    onDateFrom: (dateFrom: string) => {
+                      updateView.mutate({ view, dateFrom });
+                      setSearch({ day: undefined });
+                    },
+                    onDateTo: (dateTo: string) => updateView.mutate({ view, dateTo }),
+                  }
+                : {})}
+            />
           ) : rowsLoading || tabGroup.pending ? (
             <GridSkeleton columns={columns.length} />
           ) : rowsError ? (
@@ -1205,6 +1519,10 @@ function MenuPage() {
               {...(can.write
                 ? {
                     onAddCard: (columnId: string) => {
+                      /* Адрес из настроек важнее черновика: админ задал
+                         свою страницу создания — значит, заводят там. */
+                      if (openCreateUrl(view)) return;
+
                       startDraft({
                         ...blankItem(drawerColumns),
                         [boardField.slug]: groupValue(boardField, columnId),
@@ -1213,6 +1531,134 @@ function MenuPage() {
                   }
                 : {})}
               {...(hasMore ? { onEndReached: loadMore } : {})}
+            />
+          ) : calendarView && calendarFrom ? (
+            <CalendarView
+              tableSlug={view.tableSlug}
+              columns={columns}
+              rows={rows.rows}
+              fromField={calendarFrom}
+              toField={calendarTo}
+              statusField={calendarStatus}
+              relations={schema.relations}
+              period={period}
+              cursor={calendar.cursor}
+              rangeFrom={calendar.from}
+              rangeTo={calendar.to}
+              disabledDays={disabledDays}
+              locale={i18n.language}
+              language={language}
+              hasMore={hasMore || loadingMore}
+              /* Период и день — в адрес: это отбор строк, а ссылка
+                 на неделю обязана открывать ту же неделю. */
+              onPeriod={(next) => setSearch({ period: next })}
+              onCursor={(next) => setSearch({ day: dayKey(next) })}
+              /* Лента растёт от прокрутки: новые недели приезжают тем же
+                 запросом строк — у них шире диапазон, и только. */
+              onLoadPast={() => setLoaded({ ...span, past: span.past + 1 })}
+              onLoadFuture={() => setLoaded({ ...span, future: span.future + 1 })}
+              onOpenRow={openRow}
+              {...(hasMore ? { onLoadMore: loadMore } : {})}
+              /* Перенос и растягивание — обычная правка строки: те же
+                 поля дат, тот же PUT, что у ячейки таблицы.
+
+                 Право нужно и на само поле начала: роль, которой
+                 запрещено менять дату, не должна двигать события. */
+              {...(can.update && calendarFrom.editable
+                ? {
+                    onMove: (guid: string, values: Record<string, unknown>) =>
+                      update.mutate({ guid, values }),
+                  }
+                : {})}
+              /* Щелчок по пустой клетке — новая запись с проставленными
+                 датами; остальное заполняется в карточке. */
+              {...(can.write
+                ? {
+                    onCreate: (values: Record<string, unknown>) => {
+                      if (openCreateUrl(view)) return;
+
+                      startDraft({ ...blankItem(drawerColumns), ...values });
+                    },
+                  }
+                : {})}
+            />
+          ) : pivotView ? (
+            <PivotView
+              columns={columns}
+              rows={rows.rows}
+              setup={pivotSetup}
+              language={language}
+              /* Приехало всё, что есть: тогда и счётчик говорит «по всем». */
+              loaded={!hasMore && !loadingMore}
+              onSetup={(next) =>
+                setSearch({
+                  ...(next.rowSlugs === undefined
+                    ? {}
+                    : { pivotRow: next.rowSlugs.join(",") || undefined }),
+                  ...(next.colSlug === undefined ? {} : { pivotCol: next.colSlug || undefined }),
+                  ...(next.valueSlug === undefined
+                    ? {}
+                    : { pivotValue: next.valueSlug || undefined }),
+                  ...(next.aggregation === undefined ? {} : { pivotAgg: next.aggregation }),
+                  ...(next.sort === undefined ? {} : { pivotSort: formatPivotSort(next.sort) }),
+                  ...(next.skipEmpty === undefined
+                    ? {}
+                    : { pivotSkipEmpty: next.skipEmpty || undefined }),
+                })
+              }
+            />
+          ) : timelineView && calendarFrom ? (
+            <Timeline
+              tableSlug={view.tableSlug}
+              columns={columns}
+              rows={rows.rows}
+              undated={undated}
+              fromField={calendarFrom}
+              toField={calendarTo}
+              statusField={calendarStatus}
+              /* Та же настройка, что группирует таблицу: у таймлайна
+                 из неё получаются свёртываемые разделы списка слева. */
+              groups={groupColumns}
+              relations={schema.relations}
+              scale={scale}
+              cursor={calendar.cursor}
+              rangeFrom={calendar.from}
+              rangeTo={calendar.to}
+              locale={i18n.language}
+              language={language}
+              hasMore={hasMore || loadingMore}
+              /* Масштаб и день — в адрес: день задаёт отбор строк,
+                 а ссылка на март обязана открывать март. */
+              onScale={(next) => setSearch({ period: next })}
+              onCursor={(next) => setSearch({ day: dayKey(next) })}
+              /* Ось растёт от прокрутки: новые дни приезжают тем же
+                 запросом строк — у него шире диапазон, и только. */
+              onLoadPast={() => setLoaded({ ...span, past: span.past + 1 })}
+              onLoadFuture={() => setLoaded({ ...span, future: span.future + 1 })}
+              onOpenRow={openRow}
+              {...(hasMore ? { onLoadMore: loadMore } : {})}
+              /* Перенос, растягивание и постановка записи на ось —
+                 обычная правка строки: те же поля дат, тот же PUT.
+
+                 Право нужно и на само поле начала: роль, которой
+                 запрещено менять дату, не должна двигать полосы. */
+              {...(can.update && calendarFrom.editable
+                ? {
+                    onMove: (guid: string, values: Record<string, unknown>) =>
+                      update.mutate({ guid, values }),
+                  }
+                : {})}
+              /* Протяжка по пустой строке — новая запись с проставленными
+                 датами; остальное заполняется в карточке. */
+              {...(can.write
+                ? {
+                    onCreate: (values: Record<string, unknown>) => {
+                      if (openCreateUrl(view)) return;
+
+                      startDraft({ ...blankItem(drawerColumns), ...values });
+                    },
+                  }
+                : {})}
             />
           ) : (
             <DataGrid
@@ -1229,7 +1675,7 @@ function MenuPage() {
                 ? { onWidth: (fieldId: string, width: number) => setColumnWidth(view.tableSlug, fieldId, width) }
                 : {})}
               rows={rows.rows}
-              group={groupColumn}
+              groups={groupColumns}
               /* Номера строк продолжают счёт страниц: на второй по 20 — с 21. */
               startIndex={infinite ? 0 : (search.page - 1) * limit}
               {...(can.delete ? { onDeleteRow: setDeletingRow } : {})}
@@ -1288,7 +1734,7 @@ function MenuPage() {
                * заводится на месте, в таблице.
                */
               {...(hasUrl(view.objectUrl)
-                ? { onAddRow: () => openUrl(fillUrl(view.objectUrl, {})) }
+                ? { onAddRow: () => openCreateUrl(view) }
                 : {})}
               onOpenRow={openRow}
               onAddField={(anchor) => setFieldPanel({ field: null, anchor })}
@@ -1308,7 +1754,7 @@ function MenuPage() {
               У доски подвала нет вовсе: страницами её не листают, а
               размер порции у неё свой и не настраивается. Сколько
               карточек в колонке — написано в её шапке. */}
-          {!rowsError && !boardView && (
+          {!rowsError && !boardView && !dateView && !pivotView && (
           <GridFooter
             /* Со страницами подвал листает, с прокруткой — считает. */
             {...(infinite ? {} : { page: search.page, onPage: (next: number) => setSearch({ page: next }) })}
@@ -1354,13 +1800,19 @@ function MenuPage() {
            * в таблице, только строка одна — та, которую видно.
            */
           actions={
-            <TableActions
-              tableSlug={view.tableSlug}
-              language={language}
-              languages={languages}
-              selected={[search.item]}
-              canEdit={can.settings}
-            />
+            <>
+              {/* Печатная форма записи: шаблон .docx таблицы, заполненный
+                  значениями открытой строки. Шаблонов нет — кнопки нет. */}
+              {drawerRow && <PrintButton tableSlug={view.tableSlug} row={drawerRow} />}
+
+              <TableActions
+                tableSlug={view.tableSlug}
+                language={language}
+                languages={languages}
+                selected={[search.item]}
+                canEdit={can.settings}
+              />
+            </>
           }
           /* Печатная форма записи, если админ задал её адрес. */
           {...(view.pdfUrl && drawerRow
@@ -1440,6 +1892,12 @@ function MenuPage() {
                            разбивает её вкладками — колонка view одна. */
                         onTabGroup: (tabGroup: string) =>
                           updateView.mutate({ view: relationTab.view, tabGroup }),
+                        /* Поля дат календаря вкладки — той же ручкой:
+                           вкладка и есть view, со своей строкой в базе. */
+                        onDateFrom: (dateFrom: string) =>
+                          updateView.mutate({ view: relationTab.view, dateFrom }),
+                        onDateTo: (dateTo: string) =>
+                          updateView.mutate({ view: relationTab.view, dateTo }),
                         onColumns: (columns: string[]) =>
                           updateView.mutate({ view: relationTab.view, columns }),
                         onFixedColumns: (fixedColumns: string[]) =>
@@ -1466,6 +1924,11 @@ function MenuPage() {
             : {})}
           onSettings={(field, anchor) => setFieldPanel({ field, anchor })}
           onReorder={drawerLayout.reorder}
+          /* Секции правит тот же, кто двигает поля: это одна и та же
+             раскладка и одно и то же право. */
+          onAddSection={drawerLayout.addSection}
+          onRenameSection={drawerLayout.renameSection}
+          onRemoveSection={drawerLayout.removeSection}
           // Заголовок карточки — настройка раскладки: её правит тот же,
           // кто правит настройки view.
           {...(can.settings ? { onHeading: drawerLayout.setHeading } : {})}
@@ -1743,31 +2206,6 @@ function MenuPage() {
       )}
     </div>
   );
-}
-
-/**
- * Адрес, заданный админу вместо карточки. Вернул true — переход состоялся,
- * и карточку открывать не нужно.
- */
-function openRowUrl(view: View, row: Record<string, unknown>): boolean {
-  if (!hasUrl(view.navigate)) return false;
-
-  openUrl(fillUrl(view.navigate, row));
-  return true;
-}
-
-/**
- * Переход по адресу из настроек.
- *
- * Чужой сайт открывается новой вкладкой, свой — заменяет страницу.
- * `noopener` обязателен: без него открытая страница получает доступ
- * к нашему window через opener.
- */
-function openUrl(url: string) {
-  if (!url) return;
-
-  if (isExternal(url)) window.open(url, "_blank", "noopener,noreferrer");
-  else window.location.assign(url);
 }
 
 

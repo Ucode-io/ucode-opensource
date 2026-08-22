@@ -70,3 +70,31 @@ test("страницы склеиваются в один список, счёт
     count: 98,
   });
 });
+
+/*
+ * В кэше лежат куски бесконечного запроса, а не один ответ: useItems —
+ * всегда useInfiniteQuery. Правка, не умеющая их разбирать, просто
+ * не находит строку, и оптимистичного обновления нет вовсе.
+ */
+test("правка доходит до строки внутри кусков бесконечного запроса", () => {
+  const cached = {
+    pageParams: [0, 1],
+    pages: [
+      { data: { count: 3, response: [{ guid: "a", title: "раз" }] } },
+      { data: { count: 3, response: [{ guid: "b", title: "два" }] } },
+    ],
+  };
+
+  const next = patchRow(cached, { guid: "b", values: { title: "три" } }) as typeof cached;
+
+  expect(next.pages[1]?.data.response[0]).toEqual({ guid: "b", title: "три" });
+  // Кусок без правки — та же ссылка: перерисовывать его незачем.
+  expect(next.pages[0]).toBe(cached.pages[0]);
+  expect(next.pageParams).toEqual([0, 1]);
+});
+
+test("строки нет ни в одном куске — кэш не трогается вовсе", () => {
+  const cached = { pageParams: [0], pages: [{ data: { count: 1, response: [{ guid: "a" }] } }] };
+
+  expect(patchRow(cached, { guid: "нет такой", values: { title: "x" } })).toBe(cached);
+});

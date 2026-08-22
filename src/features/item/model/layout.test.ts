@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { Field } from "@/features/table";
 import {
+  addSection,
   applyRights,
   fieldOrder,
   fieldRights,
@@ -9,6 +10,8 @@ import {
   itemTitle,
   moveField,
   orderColumns,
+  removeSection,
+  renameSection,
   sections,
   setHeading,
   type Layout,
@@ -46,11 +49,14 @@ test("движение вниз считается по списку БЕЗ пе
   expect(order(moveField(layout(), "a", "c", true))).toBe("bcad");
 });
 
-test("секции сохраняют свои размеры — поле переезжает в соседнюю", () => {
+test("поле переезжает в секцию цели, а соседи остаются на местах", () => {
+  // Раньше размеры секций сохранялись: «d», брошенное в первую секцию,
+  // выталкивало оттуда «b» во вторую — то есть один перенос двигал два
+  // поля. Теперь переезжает ровно то, что тащили.
   const tab = moveField(layout(), "d", "a", false).tabs?.[1];
   expect(tab?.sections?.map((section) => section.fields?.map((field) => field.slug))).toEqual([
-    ["d", "a"],
-    ["b", "c"],
+    ["d", "a", "b"],
+    ["c"],
   ]);
 });
 
@@ -174,4 +180,88 @@ test("заголовок записи — только скалярное зна
   expect(itemTitle(undefined, "name")).toBe("");
   // Заголовок не назначен вовсе.
   expect(itemTitle({ name: "Заказ 12" }, "")).toBe("");
+});
+
+/*
+ * Секции карточки правятся: их заводят, переименовывают и удаляют,
+ * а поля переносят между ними мышью. Раньше секции только читались.
+ */
+const twoSections = (): Layout => ({
+  tabs: [
+    {
+      type: "section",
+      sections: [
+        { label: "Основное", fields: [{ slug: "name" }, { slug: "email" }] },
+        { label: "Служебное", fields: [{ slug: "created_at" }] },
+      ],
+    },
+  ],
+});
+
+test("поле переезжает В СЕКЦИЮ цели, а не просто на её место", () => {
+  // Раньше размеры секций сохранялись, и поле, брошенное во вторую
+  // секцию, выталкивало оттуда соседа обратно в первую.
+  const next = moveField(twoSections(), "name", "created_at", true);
+
+  expect(sections(next)).toEqual([
+    { label: "Основное", slugs: ["email"] },
+    { label: "Служебное", slugs: ["created_at", "name"] },
+  ]);
+});
+
+test("секция заводится пустой: поля в неё переносят мышью", () => {
+  expect(sections(addSection(twoSections(), "Контакты"))).toEqual([
+    { label: "Основное", slugs: ["name", "email"] },
+    { label: "Служебное", slugs: ["created_at"] },
+    { label: "Контакты", slugs: [] },
+  ]);
+});
+
+test("переименование не трогает поля", () => {
+  const next = renameSection(twoSections(), 1, "Система");
+
+  expect(sections(next)[1]).toEqual({ label: "Система", slugs: ["created_at"] });
+});
+
+test("имя секции переживает перезапрос: оно уходит и в attributes", () => {
+  /*
+   * Колонку section.label PUT пишет, а ни один GET не возвращает
+   * (layout.go:1367, GetSections) — переименованная секция приезжала
+   * назад безымянной. Имя дублируется в attributes, который ездит
+   * в обе стороны, и читается сначала оттуда.
+   */
+  const tab = (renameSection(twoSections(), 1, "Система").tabs ?? [])[0];
+  const section = (tab?.sections ?? [])[1] as { label?: string; attributes?: unknown };
+
+  expect(section.attributes).toEqual({ label: "Система" });
+  // Колонка тоже заполняется: её читает старая админка.
+  expect(section.label).toBe("Система");
+
+  // Как это вернётся с сервера: колонка пустая, attributes на месте.
+  const asServerReturns: Layout = {
+    tabs: [{ type: "section", sections: [{ attributes: { label: "Система" }, fields: [] }] }],
+  };
+
+  expect(sections(asServerReturns)).toEqual([{ label: "Система", slugs: [] }]);
+});
+
+test("удаление секции не теряет её поля", () => {
+  // Иначе поля исчезли бы из карточки целиком, и вернуть их можно было бы
+  // только правкой раскладки руками.
+  expect(sections(removeSection(twoSections(), 1))).toEqual([
+    { label: "Основное", slugs: ["name", "email", "created_at"] },
+  ]);
+
+  // Первая секция отдаёт поля вниз: выше неё ничего нет.
+  expect(sections(removeSection(twoSections(), 0))).toEqual([
+    { label: "Служебное", slugs: ["created_at", "name", "email"] },
+  ]);
+});
+
+test("последнюю секцию удалить нельзя: полям некуда деться", () => {
+  const single: Layout = {
+    tabs: [{ type: "section", sections: [{ label: "", fields: [{ slug: "name" }] }] }],
+  };
+
+  expect(removeSection(single, 0)).toBe(single);
 });

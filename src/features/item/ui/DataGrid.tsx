@@ -26,6 +26,7 @@ import { localized, type Field, type Relation } from "@/features/table";
 import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
+import { Tooltip } from "@/shared/ui/tooltip";
 import { editorKind } from "../model/cell-kind";
 import { blankItem } from "../model/cell-value";
 import { columnWindow, type ColumnWindow } from "../model/column-window";
@@ -113,6 +114,9 @@ const pinRight = "sticky right-0 z-10 bg-surface shadow-[-1px_0_0_0_var(--color-
 /** Общий пустой набор: без него у DataGrid на каждый рендер новый Set. */
 const EMPTY_PINS: ReadonlySet<string> = new Set<string>();
 
+/** Постоянная ссылка: литерал в значении по умолчанию — новый массив на рендер. */
+const EMPTY_GROUPS: Field[] = [];
+
 /** Какая ячейка раскрыта. Одна на таблицу: двух курсоров не бывает. */
 type Active = { index: number; slug: string; anchor: DOMRect };
 
@@ -173,7 +177,7 @@ export function DataGrid({
   widths,
   onWidth,
   rows,
-  group,
+  groups = EMPTY_GROUPS,
   tree,
   relations,
   locale,
@@ -215,11 +219,12 @@ export function DataGrid({
   onWidth?: ((fieldId: string, width: number) => void) | undefined;
   rows: Item[];
   /**
-   * Колонка группировки. Строки уже приходят отсортированными по ней
-   * (это забота запроса), таблица лишь вставляет заголовок на каждой
-   * смене значения и умеет сворачивать группу. Не задана — плоский список.
+   * Колонки группировки в порядке уровней. Строки уже приходят
+   * отсортированными по ним (это забота запроса), таблица лишь вставляет
+   * заголовок на каждой смене значения и умеет сворачивать группу.
+   * Пусто — плоский список.
    */
-  group?: Field | undefined;
+  groups?: Field[] | undefined;
   /**
    * Дерево: строки уже разложены в порядке обхода (см. model/tree),
    * таблица рисует отступ по глубине и шеврон у узлов с детьми.
@@ -418,10 +423,13 @@ export function DataGrid({
   /** Записи на экране: строки вперемешку с заголовками групп.
       useMemo не для красоты: виртуализатор рендерит на каждый кадр
       прокрутки, а это O(строк). */
-  const groupSlug = group?.slug;
+  const groupSlugs = groups.map((field) => field.slug).join("|");
   const entries = useMemo(
-    () => (groupSlug ? visibleEntries(groupEntries(rows, groupSlug), folded) : null),
-    [rows, groupSlug, folded],
+    () =>
+      groupSlugs
+        ? visibleEntries(groupEntries(rows, groupSlugs.split("|")), folded)
+        : null,
+    [rows, groupSlugs, folded],
   );
 
   /*
@@ -690,7 +698,8 @@ export function DataGrid({
              * плашка, у связи — подпись по полям показа, и рисовать их
              * вторым способом значило бы однажды разойтись с колонкой.
              */
-            if (entry && entry.kind === "header" && group) {
+            if (entry && entry.kind === "header" && groups[entry.level]) {
+              const group = groups[entry.level]!;
               const headerRow = rows[entry.row]!;
               const value = headerRow[group.slug];
               const empty =
@@ -708,8 +717,11 @@ export function DataGrid({
                       onClick={() => toggleGroup(entry.key)}
                       aria-expanded={!isFolded}
                       /* Липнет к левому краю: у таблицы шире экрана
-                         заголовок иначе уезжает вместе с прокруткой вбок. */
-                      className="sticky left-0 flex h-row max-w-full items-center gap-1.5 px-2 text-sm"
+                         заголовок иначе уезжает вместе с прокруткой вбок.
+                         Отступ — по уровню: вложенная группа читается
+                         только по нему. */
+                      style={{ paddingLeft: 8 + entry.level * 16 }}
+                      className="sticky left-0 flex h-row max-w-full items-center gap-1.5 pr-2 text-sm"
                     >
                       <Icon
                         as={isFolded ? IconChevronRight : IconChevronDown}
@@ -1258,7 +1270,11 @@ function HeaderCell({
   const title = (
     <>
       <Icon as={fieldIcon(column.type)} size={14} />
-      <span className="truncate">{localized(column.labels, language, column.label)}</span>
+      {/* Подсказка — слаг: подпись и так написана в заголовке, а слаг
+          это то имя, которым поле зовут в API, фильтрах и формулах. */}
+      <Tooltip label={column.slug}>
+        <span className="truncate">{localized(column.labels, language, column.label)}</span>
+      </Tooltip>
 
       {/* Стрелка только у сортированной колонки: значок «можно
           сортировать» на каждом заголовке — это шум в плотной шапке. */}

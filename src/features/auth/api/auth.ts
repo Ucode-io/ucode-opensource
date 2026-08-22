@@ -8,7 +8,8 @@ import type {
   Invite,
   LoginContext,
   LoginResult,
-  PhoneCredentials,
+  OtpChannel,
+  OtpCredentials,
   RecoveryStart,
   Registration,
 } from "../model/types";
@@ -110,16 +111,19 @@ function interpretLogin(data: DefaultLoginDto): LoginResult {
 }
 
 /**
- * Вход по телефону, шаг 1: SMS с кодом. Возвращается sms_id — он уходит
- * вторым шагом вместе с кодом. Заодно ручка проверяет, что пользователь
- * с таким телефоном существует (register_v2.go, V2SendCodeApp).
+ * Вход по коду, шаг 1: код уходит в SMS или письмом. Возвращается
+ * sms_id — он же уезжает вторым шагом вместе с кодом. Заодно ручка
+ * проверяет, что пользователь с таким телефоном или почтой существует
+ * (register_v2.go, V2SendCodeApp).
  *
- * Формат номера жёсткий: `+` и двенадцать цифр (util.IsValidPhone).
+ * Ручка одна на оба канала, различает их `type`; формат получателя она
+ * же и проверяет: `+` и двенадцать цифр у телефона (util.IsValidPhone),
+ * обычная почта у письма.
  */
-async function sendPhoneCode(phone: string): Promise<string> {
+async function sendCode(input: { recipient: string; channel: OtpChannel }): Promise<string> {
   const data = await authApi.post<SendCodeDto>(SEND_CODE_APP, {
-    recipient: phone,
-    type: "PHONE",
+    recipient: input.recipient,
+    type: input.channel,
   });
 
   if (!data.sms_id) throw new Error("Бэкенд не вернул sms_id");
@@ -127,11 +131,11 @@ async function sendPhoneCode(phone: string): Promise<string> {
 }
 
 /**
- * Вход по телефону, шаг 2: тот же default-login, что и у пароля, — код
- * проверяется в нём (authenticateUser, случай WithPhone), и дальше всё
- * общее: connection'ы или готовая сессия.
+ * Вход по коду, шаг 2: тот же default-login, что и у пароля, — код
+ * проверяется в нём (authenticateUser, случаи WithPhone и WithEmail),
+ * и дальше всё общее: connection'ы или готовая сессия.
  */
-async function loginWithPhone(credentials: PhoneCredentials): Promise<LoginResult> {
+async function loginWithOtp(credentials: OtpCredentials): Promise<LoginResult> {
   const data = await authApi.post<DefaultLoginDto>(DEFAULT_LOGIN, credentials);
   return interpretLogin(data);
 }
@@ -144,7 +148,7 @@ async function loginWithPhone(credentials: PhoneCredentials): Promise<LoginResul
  * с кодом. /v2/login проверяет их заново, поэтому payload тот же.
  */
 async function loginWithConnections(input: {
-  credentials: Credentials | PhoneCredentials;
+  credentials: Credentials | OtpCredentials;
   context: LoginContext;
   connections: Connection[];
   selection: ConnectionSelection;
@@ -336,12 +340,12 @@ export function useLoginWithGoogle() {
   return useMutation({ mutationFn: loginWithGoogle });
 }
 
-export function useSendPhoneCode() {
-  return useMutation({ mutationFn: sendPhoneCode });
+export function useSendCode() {
+  return useMutation({ mutationFn: sendCode });
 }
 
-export function useLoginWithPhone() {
-  return useMutation({ mutationFn: loginWithPhone });
+export function useLoginWithOtp() {
+  return useMutation({ mutationFn: loginWithOtp });
 }
 
 export function useRegister() {

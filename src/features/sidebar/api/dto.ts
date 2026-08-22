@@ -8,6 +8,8 @@ export type MenuDto = {
   order?: number;
   table_id?: string;
   layout_id?: string;
+  /** Какое чужое приложение показывает пункт типа MICROFRONTEND. */
+  microfrontend_id?: string;
   is_static?: boolean;
   /** label_<locale>, website_link, link — свободный мешок бэкенда. */
   attributes?: Record<string, unknown>;

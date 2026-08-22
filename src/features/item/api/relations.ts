@@ -19,9 +19,19 @@ import { toPage, type ItemsResponseDto } from "./items";
  */
 const LIMIT = 20;
 
-export function useRelationItems(tableSlug: string | undefined, search: string) {
+export function useRelationItems(
+  tableSlug: string | undefined,
+  search: string,
+  /**
+   * Автофильтр связи: плоские условия, которыми отобраны строки чужой
+   * таблицы (см. model/relation, autoFilterValues). Кладутся ПЕРЕД
+   * служебными ключами — как обычный отбор, у которого поле со слагом
+   * `limit` не должно перебить лимит.
+   */
+  filters: Record<string, unknown> = {},
+) {
   const slug = tableSlug ?? "";
-  const body = toRequestBody({ limit: LIMIT, page: 1, search });
+  const body = { ...filters, ...toRequestBody({ limit: LIMIT, page: 1, search }) };
 
   const query = useQuery({
     queryKey: keys.items.list(slug, body),

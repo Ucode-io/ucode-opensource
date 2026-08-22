@@ -5,6 +5,7 @@ import { localized, type Field, type Relation } from "@/features/table";
 import { CHIP_SURFACE, Chip, hexToChipColor, type ChipColor } from "@/shared/ui/chip";
 import { openPreview } from "@/shared/ui/file-preview";
 import { Icon } from "@/shared/ui/icon";
+import { Tooltip } from "@/shared/ui/tooltip";
 import { boardColumns, boardOrderAt, groupValue, BOARD_ORDER } from "../model/board";
 import { cellKind } from "../model/cell-kind";
 import { isBlank } from "../model/cell-value";
@@ -551,26 +552,24 @@ function Card({
       <div className="flex flex-col gap-1">
         {values.map((item) =>
           onEdit ? (
-            <button
-              key={item.id}
-              type="button"
-              onClick={(event) => open(item, event.currentTarget)}
-              title={localized(item.labels, language, item.label)}
-              className="flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-1 text-left text-xs text-fg-muted transition-colors hover:bg-surface-hover"
-            >
-              <Icon as={fieldIcon(item.type)} size={14} className="shrink-0 text-fg-subtle" />
-              {valueOf(item)}
-            </button>
+            <Tooltip key={item.id} label={item.slug}>
+              <button
+                type="button"
+                onClick={(event) => open(item, event.currentTarget)}
+                className="flex min-h-7 w-full min-w-0 items-center gap-2 rounded-md px-1 text-left text-xs text-fg-muted transition-colors hover:bg-surface-hover"
+              >
+                <Icon as={fieldIcon(item.type)} size={14} className="shrink-0 text-fg-subtle" />
+                {valueOf(item)}
+              </button>
+            </Tooltip>
           ) : (
-            <div
-              key={item.id}
-              // Подпись колонки — подсказкой: на карточке видно значение,
-              // а чьё оно — по наведению.
-              title={localized(item.labels, language, item.label)}
-              className="flex min-w-0 items-center px-1 text-xs text-fg-muted"
-            >
-              {cell(item)}
-            </div>
+            /* Чьё это значение — по наведению: на карточке видно
+               значение, а слаг ещё и то имя, которым поле зовут в API. */
+            <Tooltip key={item.id} label={item.slug}>
+              <div className="flex min-w-0 items-center px-1 text-xs text-fg-muted">
+                {cell(item)}
+              </div>
+            </Tooltip>
           ),
         )}
       </div>

@@ -40,7 +40,7 @@ import {
   toTimeInput,
   type DateKind,
 } from "../model/cell-value";
-import { isLinkable, relationLabel, relationSelection } from "../model/relation";
+import { autoFilterValues, isLinkable, relationLabel, relationSelection } from "../model/relation";
 import type { Item } from "../model/types";
 import { cellError } from "../model/validate";
 import { Cell, optionColor, optionLabel } from "./Cell";
@@ -637,7 +637,17 @@ function RelationEditor({
    * а пустая коробка читается как сломанный экран: ровно на ней
    * и застревали после создания связи, где поля показа не выбрали.
    */
-  const { items, isLoading } = useRelationItems(relation.toSlug, search);
+  /*
+   * Выбор отобран настройкой самой связи: пока в строке не выбран
+   * регион, город показывается любой, а как только выбран — только
+   * его города. Раньше настройка не читалась вовсе, и список чужой
+   * таблицы приезжал целиком.
+   */
+  const { items, isLoading } = useRelationItems(
+    relation.toSlug,
+    search,
+    autoFilterValues(relation, row),
+  );
 
   /*
    * Поиск отсеивает ещё и на клиенте. Серверный `search` ищет только

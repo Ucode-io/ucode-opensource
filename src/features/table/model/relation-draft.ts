@@ -6,9 +6,30 @@
  * у связи — целевая таблица и поля показа. Общий черновик означал бы
  * половину полей, не значащих ничего, и `if (isRelation)` в каждой форме.
  */
+/**
+ * Условие автофильтра: «показывать только те строки чужой таблицы,
+ * у которых поле `fieldTo` совпадает со значением поля `fieldFrom`
+ * в ЭТОЙ строке».
+ *
+ * Слаги, а не идентификаторы: в колонке `auto_filters` лежат именно
+ * слаги, и по ним же собирается тело `get-list` (см. features/item,
+ * `autoFilterValues`).
+ */
+export type AutoFilterPair = { fieldFrom: string; fieldTo: string };
+
 export type RelationDraft = {
   /** Куда ведёт связь: слаг целевой таблицы. */
   toSlug: string;
+  /**
+   * Чем ограничен выбор строк. Пусто — выбирают из всей чужой таблицы.
+   *
+   * Это единственная настройка связи сверх целевой таблицы и полей
+   * показа, которую мы даём задать, и она здесь потому, что без неё
+   * зависимые списки не работают вовсе: город приходится искать среди
+   * всех городов страны. Остальные колонки связи — `cascadings`,
+   * `dynamic_tables`, `object_id_from_jwt` — уезжают обратно как пришли.
+   */
+  autoFilters: AutoFilterPair[];
   /** Подпись колонки на языке ДАННЫХ. */
   label: string;
   /**
@@ -52,9 +73,40 @@ export const RELATION_DIRECTION = "Many2One";
 
 export const EMPTY_RELATION_DRAFT: RelationDraft = {
   toSlug: "",
+  autoFilters: [],
   label: "",
   viewFieldIds: [],
 };
+
+/**
+ * Пары автофильтра, как они лежат в связи, — в черновик.
+ *
+ * В базе это JSONB со змеиными именами (`{field_to, field_from}` —
+ * pg_relation.proto:67), и разбирается он один раз здесь: половина
+ * пары без второй половины условием не станет, поэтому недозаполненные
+ * не переносятся вовсе.
+ */
+export function toAutoFilters(raw: Record<string, unknown>): AutoFilterPair[] {
+  const pairs = raw["auto_filters"];
+  if (!Array.isArray(pairs)) return [];
+
+  return pairs
+    .map((pair) => {
+      const item = pair as Record<string, unknown> | null;
+      return {
+        fieldFrom: String(item?.["field_from"] ?? ""),
+        fieldTo: String(item?.["field_to"] ?? ""),
+      };
+    })
+    .filter((pair) => pair.fieldFrom && pair.fieldTo);
+}
+
+/** Обратно в тело запроса. Пустые строки формы в базу не уезжают. */
+export function toAutoFiltersBody(pairs: AutoFilterPair[]): { field_from: string; field_to: string }[] {
+  return pairs
+    .filter((pair) => pair.fieldFrom && pair.fieldTo)
+    .map((pair) => ({ field_from: pair.fieldFrom, field_to: pair.fieldTo }));
+}
 
 /**
  * Готова ли связь к отправке.

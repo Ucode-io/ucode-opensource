@@ -14,6 +14,8 @@ export type MenuActionId =
   | "create-table"
   | "create-folder"
   | "create-link"
+  | "create-files"
+  | "create-microfrontend"
   | "edit"
   | "settings"
   | "make-template"
@@ -34,9 +36,16 @@ const ALL: readonly MenuAction[] = [
   { id: "create-table", labelKey: "menuAction.createTable", requires: "write" },
   { id: "create-folder", labelKey: "menuAction.createFolder", requires: "write" },
   { id: "create-link", labelKey: "menuAction.createLink", requires: "write" },
+  { id: "create-files", labelKey: "menuAction.createFiles", requires: "write" },
+  { id: "create-microfrontend", labelKey: "menuAction.createMicrofrontend", requires: "write" },
   { id: "edit", labelKey: "menuAction.edit", requires: "update" },
-  { id: "settings", labelKey: "menuAction.settings", requires: "settings" },
   { id: "make-template", labelKey: "menuAction.makeTemplate", requires: "update" },
+  /*
+   * «Настройки пункта» здесь была и ничего не делала: обработчика у неё
+   * нет, экрана за ней не написано. Рабочая на вид кнопка без действия
+   * хуже отсутствующей — вернём вместе с экраном. Идентификатор
+   * и подпись оставлены: возвращать их придётся в этот же список.
+   */
   { id: "delete", labelKey: "menuAction.delete", requires: "delete", separated: true, danger: true },
 ];
 
@@ -45,11 +54,20 @@ const ONLY_GROUPS = new Set<MenuActionId>([
   "create-table",
   "create-folder",
   "create-link",
+  "create-files",
+  "create-microfrontend",
   "make-template",
 ]);
 
+/**
+ * Действия, у которых пока нет своего экрана. Они остаются в типах
+ * и в переводах, но в меню не показываются.
+ */
+const UNIMPLEMENTED = new Set<MenuActionId>(["settings"]);
+
 export function actionsFor(node: MenuNode, isAdmin: boolean): MenuAction[] {
   return ALL.filter((action) => {
+    if (UNIMPLEMENTED.has(action.id)) return false;
     if (!node.can[action.requires]) return false;
     if (ONLY_GROUPS.has(action.id) && node.kind !== "group") return false;
     // Шаблон из папки делает только администратор — так было и раньше.

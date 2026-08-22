@@ -4,7 +4,11 @@ import { useSession } from "@/shared/api/use-session";
 import i18n from "@/shared/lib/i18n";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError, toast } from "@/shared/lib/toast";
-import { RELATION_DIRECTION, type RelationDraft } from "../model/relation-draft";
+import {
+  RELATION_DIRECTION,
+  toAutoFiltersBody,
+  type RelationDraft,
+} from "../model/relation-draft";
 import type { Labels, Relation } from "../model/types";
 import { invalidateSchema } from "./fields";
 import { pickLabels } from "./normalize";
@@ -22,6 +26,8 @@ type TableDto = {
 type TablesResponseDto = { tables?: TableDto[]; count?: number };
 
 export type TableOption = {
+  /** Идентификатор таблицы: связям хватает слага, а шаблону нужен id. */
+  id: string;
   slug: string;
   /** Базовая подпись — колонка `label`. Показывать её напрямую нельзя. */
   label: string;
@@ -66,6 +72,7 @@ export function useTables(search: string) {
     .flatMap((page) => page.tables ?? [])
     .filter((dto) => dto.slug)
     .map((dto) => ({
+      id: dto.id ?? "",
       slug: dto.slug!,
       label: dto.label?.trim() || dto.slug!,
       /*
@@ -193,6 +200,7 @@ export function useCreateRelation(tableSlug: string | undefined) {
         type: RELATION_DIRECTION,
         relation_table_slug: draft.toSlug,
         view_fields: draft.viewFieldIds,
+        auto_filters: toAutoFiltersBody(draft.autoFilters),
         label,
         attributes: { [`label_${language}`]: label },
       });
@@ -256,6 +264,13 @@ export function useUpdateRelation(tableSlug: string | undefined) {
         // id полей, а не объекты: обратно бэкенд отдаёт их развёрнутыми,
         // но принимает только списком идентификаторов.
         view_fields: draft.viewFieldIds,
+        /*
+         * Единственная настройка связи, которую мы правим сверх подписи
+         * и полей показа. Уезжает всегда, а не только при изменении:
+         * UPDATE переписывает колонку безусловно (relation.go:2038),
+         * и `...raw` вернул бы прежние пары поверх удалённых.
+         */
+        auto_filters: toAutoFiltersBody(draft.autoFilters),
         label,
         attributes: { ...attributes, label, [`label_${language}`]: label },
       });

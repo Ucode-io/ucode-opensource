@@ -88,6 +88,36 @@ export const keys = {
     all: ["actions"] as const,
     byTable: (tableSlug: string) => [...keys.actions.all, tableSlug] as const,
   },
+  /**
+   * Файловое хранилище проекта. Папка — часть ключа: пункт меню и есть
+   * папка, и списки соседних папок друг друга не трогают.
+   */
+  files: {
+    all: ["files"] as const,
+    folder: (folder: string) => [...keys.files.all, folder] as const,
+    list: (folder: string, search: string) => [...keys.files.folder(folder), search] as const,
+  },
+  /** Шаблоны проекта: готовые наборы таблиц. Список один на проект. */
+  templates: {
+    all: ["templates"] as const,
+    list: () => [...keys.templates.all] as const,
+  },
+  /**
+   * Шаблоны ДОКУМЕНТОВ: печатные формы записи, свои у каждой таблицы.
+   * Не путать с `templates` выше — там наборы таблиц целого проекта.
+   */
+  docs: {
+    all: ["docs"] as const,
+    templates: (tableSlug: string) => [...keys.docs.all, tableSlug] as const,
+  },
+  /**
+   * Микрофронтенды: по одному запросу на пункт меню. В ключе окружение —
+   * адрес сборки у prod и dev разный.
+   */
+  microfrontends: {
+    all: ["microfrontends"] as const,
+    byId: (envId: string, id: string) => [...keys.microfrontends.all, envId, id] as const,
+  },
   /** Функции проекта: их зовут поля-кнопки. Список один на окружение. */
   functions: {
     all: ["functions"] as const,

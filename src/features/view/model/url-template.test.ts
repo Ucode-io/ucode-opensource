@@ -1,5 +1,13 @@
-import { expect, test } from "vitest";
-import { fillTemplate, fillUrl, isExternal, toUrlTemplate } from "./url-template";
+import { expect, test, vi } from "vitest";
+import {
+  EMPTY_URL_TEMPLATE,
+  fillTemplate,
+  fillUrl,
+  isExternal,
+  openCreateUrl,
+  openRowUrl,
+  toUrlTemplate,
+} from "./url-template";
 
 const ROW = { guid: "7f3", status: "в работе", empty: null };
 
@@ -52,4 +60,47 @@ test("адрес читается и объектом, и голой строк�
     params: [{ key: "a", value: "b" }],
   });
   expect(toUrlTemplate(undefined)).toEqual({ url: "", params: [] });
+});
+
+/*
+ * Переход по настройке — общий для всех экранов: таблицы, доски,
+ * календаря, таймлайна и вкладки связи. Проверяем именно развилку
+ * «настройка есть / настройки нет»: она решает, открывать карточку
+ * или уходить на страницу проекта.
+ */
+test("без адреса переход не состоится и карточку никто не отменит", () => {
+  const opened: string[] = [];
+  vi.stubGlobal("window", { open: (url: string) => opened.push(url) });
+
+  expect(openRowUrl({ navigate: EMPTY_URL_TEMPLATE }, { guid: "1" })).toBe(false);
+  expect(openCreateUrl({ objectUrl: EMPTY_URL_TEMPLATE })).toBe(false);
+  expect(opened).toEqual([]);
+
+  vi.unstubAllGlobals();
+});
+
+test("адрес строки подставляет её значения", () => {
+  const opened: string[] = [];
+  vi.stubGlobal("window", { open: (url: string) => opened.push(url) });
+
+  const view = { navigate: toUrlTemplate({ url: "https://crm.example/{{$guid}}", params: [] }) };
+
+  expect(openRowUrl(view, { guid: "7f3" })).toBe(true);
+  expect(opened).toEqual(["https://crm.example/7f3"]);
+
+  vi.unstubAllGlobals();
+});
+
+test("у создания подставлять нечего: строки ещё нет", () => {
+  const opened: string[] = [];
+  vi.stubGlobal("window", { open: (url: string) => opened.push(url) });
+
+  const view = {
+    objectUrl: toUrlTemplate({ url: "https://crm.example/new", params: [{ key: "from", value: "admin" }] }),
+  };
+
+  expect(openCreateUrl(view)).toBe(true);
+  expect(opened).toEqual(["https://crm.example/new?from=admin"]);
+
+  vi.unstubAllGlobals();
 });

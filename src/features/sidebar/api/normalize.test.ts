@@ -17,7 +17,9 @@ test("поведение выводится из типа, а не задаёт�
 
   expect(kind("FOLDER")).toBe("group");
   expect(kind("WIKI_FOLDER")).toBe("group");
-  expect(kind("MINIO_FOLDER")).toBe("group");
+  // Внутри minio-папки лежат файлы, а не пункты меню: раскрывать нечего,
+  // щелчок открывает хранилище.
+  expect(kind("MINIO_FOLDER")).toBe("leaf");
   expect(kind("TABLE")).toBe("leaf");
   expect(kind("PIVOT")).toBe("leaf");
   expect(kind("REST")).toBe("leaf");
@@ -26,10 +28,28 @@ test("поведение выводится из типа, а не задаёт�
   expect(kind("SOMETHING_NEW")).toBe("leaf");
 });
 
-test("ссылка берёт адрес из website_link или link", () => {
-  expect(toMenuNode({ id: "1", type: "LINK", attributes: { website_link: "https://a" } }, "en").href).toBe("https://a");
-  expect(toMenuNode({ id: "2", type: "LINK", attributes: { link: "https://b" } }, "en").href).toBe("https://b");
+test("наружу уводит link, а website_link встраивается рамкой", () => {
+  // Две РАЗНЫЕ настройки на одном типе пункта: так их различала
+  // и старая админка — сайт она открывала внутри админки, а ссылку
+  // новой вкладкой.
+  const site = toMenuNode({ id: "1", type: "LINK", attributes: { website_link: "https://a" } }, "en");
+  expect(site.embedUrl).toBe("https://a");
+  expect(site.href).toBeUndefined();
+
+  const link = toMenuNode({ id: "2", type: "LINK", attributes: { link: "https://b" } }, "en");
+  expect(link.href).toBe("https://b");
+  expect(link.embedUrl).toBe("");
+
   expect(toMenuNode({ id: "3", type: "LINK" }, "en").href).toBeUndefined();
+});
+
+test("javascript: не встраивается и не открывается", () => {
+  // Адрес приходит из поля, которое заполняет человек: это открытый ввод.
+  const evil = { website_link: "javascript:alert(1)", link: "javascript:alert(1)" };
+  const node = toMenuNode({ id: "1", type: "LINK", attributes: evil }, "en");
+
+  expect(node.embedUrl).toBe("");
+  expect(node.href).toBeUndefined();
 });
 
 test("позиция берётся из ответа, а не выдумывается клиентом", () => {
@@ -57,4 +77,49 @@ test("подпись пункта: сначала локаль интерфей�
 
   // Не заполнено ни на одном — базовая колонка.
   expect(toMenuNode(dto, ["uz", "kk"]).label).toBe("Orders");
+});
+
+test("микрофронтенд: пункт хранит идентификатор, а не адрес", () => {
+  // Адрес сборки лежит у самого микрофронтенда (Function.url) и
+  // дочитывается отдельно — см. features/microfrontend.
+  const node = toMenuNode(
+    { id: "1", label: "App", type: "MICROFRONTEND", microfrontend_id: "mf-1" },
+    "ru",
+  );
+
+  expect(node.microfrontendId).toBe("mf-1");
+  expect(toMenuNode({ id: "2", label: "T", type: "TABLE" }, "ru").microfrontendId).toBe("");
+});
+
+test("attributes.params раскладываются в карту", () => {
+  // Форма пишет их массивом пар (MicrofrontendLinkModal.jsx:190),
+  // а пользуются ими как набором именованных значений.
+  const node = toMenuNode(
+    {
+      id: "1",
+      label: "App",
+      type: "MICROFRONTEND",
+      attributes: {
+        params: [
+          { key: "mode", value: "compact" },
+          { key: " tab ", value: "orders" },
+          // Мусор из формы не должен ломать разбор целиком.
+          { key: "", value: "x" },
+          { value: "без ключа" },
+          "строка вместо пары",
+        ],
+      },
+    },
+    "ru",
+  );
+
+  expect(node.params).toEqual({ mode: "compact", tab: "orders" });
+});
+
+test("params без списка — пустая карта, а не падение", () => {
+  expect(toMenuNode({ id: "1", label: "A", type: "MICROFRONTEND" }, "ru").params).toEqual({});
+  expect(
+    toMenuNode({ id: "1", label: "A", type: "MICROFRONTEND", attributes: { params: "x" } }, "ru")
+      .params,
+  ).toEqual({});
 });

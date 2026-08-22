@@ -41,6 +41,8 @@ import {
 import {
   EMPTY_RELATION_DRAFT,
   isRelationReady,
+  toAutoFilters,
+  type AutoFilterPair,
   type RelationDraft,
 } from "../model/relation-draft";
 import { localized, type Field, type Relation } from "../model/types";
@@ -197,6 +199,7 @@ export function FieldEditor({
     editingRelation
       ? {
           toSlug: editingRelation.toSlug,
+          autoFilters: toAutoFilters(editingRelation.raw),
           label: localized(field?.labels ?? {}, language, field?.label ?? ""),
           viewFieldIds: editingRelation.viewFieldIds,
         }
@@ -306,6 +309,7 @@ export function FieldEditor({
           <RelationForm
             draft={relation}
             target={editingRelation?.toSlug ?? ""}
+            ourFields={fields}
             language={language}
             onChange={setRelation}
             onBack={editingRelation ? onClose : () => {
@@ -807,6 +811,7 @@ function BackButton({ onClick }: { onClick: () => void }) {
 function RelationForm({
   draft,
   target,
+  ourFields,
   language,
   onChange,
   onBack,
@@ -815,6 +820,8 @@ function RelationForm({
   draft: RelationDraft;
   /** Слаг целевой таблицы при правке. Пусто — связь заводится заново. */
   target: string;
+  /** Поля ЭТОЙ таблицы: из них выбирается источник автофильтра. */
+  ourFields: Field[];
   /** Язык ДАННЫХ: на нём подписаны таблицы проекта. */
   language: string;
   onChange: (draft: RelationDraft) => void;
@@ -926,6 +933,46 @@ function RelationForm({
             <p className="px-1 pt-1 text-2xs text-fg-subtle">
               {t("relationForm.viewFieldsHint")}
             </p>
+
+            {/* Чем ограничен выбор: пары «поле этой строки → поле чужой
+                таблицы». Настройка снизу, а не сверху, потому что её
+                задают редко, а поля показа — всегда. */}
+            <div className="mt-3 border-t border-border pt-2">
+              <p className="px-1 text-2xs text-fg-muted">{t("relationForm.autoFilters")}</p>
+              <p className="px-1 pb-1 text-2xs text-fg-subtle">
+                {t("relationForm.autoFiltersHint")}
+              </p>
+
+              {draft.autoFilters.map((pair, index) => (
+                <AutoFilterRow
+                  key={index}
+                  pair={pair}
+                  ourFields={ourFields}
+                  toSlug={draft.toSlug}
+                  onChange={(next) =>
+                    patch({
+                      autoFilters: draft.autoFilters.map((item, at) =>
+                        at === index ? next : item,
+                      ),
+                    })
+                  }
+                  onRemove={() =>
+                    patch({ autoFilters: draft.autoFilters.filter((_, at) => at !== index) })
+                  }
+                />
+              ))}
+
+              <button
+                type="button"
+                onClick={() =>
+                  patch({ autoFilters: [...draft.autoFilters, { fieldFrom: "", fieldTo: "" }] })
+                }
+                className="flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-2xs text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+              >
+                <Icon as={IconPlus} size={12} />
+                {t("relationForm.addAutoFilter")}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -945,6 +992,87 @@ function RelationForm({
         {t(retargeting ? "relationForm.retarget" : editing ? "action.save" : "action.create")}
       </button>
     </>
+  );
+}
+
+/**
+ * Одно условие автофильтра: поле ЭТОЙ строки слева, поле чужой таблицы
+ * справа.
+ *
+ * Списки разные по природе, отсюда и два разных поиска: свои поля уже
+ * загружены и отсеиваются на месте, чужие приходится спрашивать —
+ * их в таблице бывают сотни. Свой `useTableFields` у каждой строки,
+ * а не один на форму, ровно поэтому: набранное в одной строке не должно
+ * фильтровать соседнюю.
+ */
+function AutoFilterRow({
+  pair,
+  ourFields,
+  toSlug,
+  onChange,
+  onRemove,
+}: {
+  pair: AutoFilterPair;
+  ourFields: Field[];
+  toSlug: string;
+  onChange: (pair: AutoFilterPair) => void;
+  onRemove: () => void;
+}) {
+  const { t } = useTranslation();
+  const [ourSearch, setOurSearch] = useState("");
+  const [theirSearch, setTheirSearch] = useState("");
+  const theirs = useTableFields(toSlug, theirSearch);
+
+  const needle = ourSearch.trim().toLowerCase();
+  const ours = ourFields
+    .filter((field) => !needle || `${field.label} ${field.slug}`.toLowerCase().includes(needle))
+    .map((field) => ({ value: field.slug, label: field.label || field.slug }));
+
+  return (
+    <div className="flex items-end gap-1 px-1 pb-1">
+      <div className="min-w-0 flex-1">
+        <SelectMenu
+          label={t("relationForm.autoFilterFrom")}
+          placeholder={t("relationForm.pickField")}
+          searchPlaceholder={t("table.searchField")}
+          emptyText={t("table.noFields")}
+          items={ours}
+          selected={new Set(pair.fieldFrom ? [pair.fieldFrom] : [])}
+          search={ourSearch}
+          onSearch={setOurSearch}
+          onLoadMore={() => {}}
+          onPick={(slug) => onChange({ ...pair, fieldFrom: slug })}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <SelectMenu
+          label={t("relationForm.autoFilterTo")}
+          placeholder={t("relationForm.pickField")}
+          searchPlaceholder={t("table.searchField")}
+          emptyText={t("table.noFields")}
+          /* Слаг, а не id: в `auto_filters` лежат слаги, и по ним же
+             собирается запрос строк. */
+          items={theirs.items.map((field) => ({ value: field.slug, label: field.label }))}
+          selected={new Set(pair.fieldTo ? [pair.fieldTo] : [])}
+          search={theirSearch}
+          loading={theirs.isLoading}
+          hasMore={theirs.hasMore}
+          onSearch={setTheirSearch}
+          onLoadMore={theirs.loadMore}
+          onPick={(slug) => onChange({ ...pair, fieldTo: slug })}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={t("action.delete")}
+        className="grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-danger-subtle hover:text-danger"
+      >
+        <Icon as={IconTrash} size={14} />
+      </button>
+    </div>
   );
 }
 

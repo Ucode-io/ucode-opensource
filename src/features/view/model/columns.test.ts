@@ -36,8 +36,14 @@ const view = (columnIds: string[]): View => ({
   tableLabel: "",
   quickFilterIds: [],
   columnIds,
+  barFieldSlugs: [],
   fixedColumnIds: [],
-  groupById: "",
+  groupByIds: [],
+  dateFromSlug: "",
+  dateToSlug: "",
+  statusFieldSlug: "",
+  disableDates: null,
+  period: "",
   tabGroupId: "",
   defaultFilters: {},
   navigate: EMPTY_URL_TEMPLATE,
@@ -72,6 +78,23 @@ test("поле, перечисленное дважды, даёт одну ко�
 
 test("удалённое поле пропускается, а не рисуется пустой колонкой", () => {
   expect(resolveColumns(view(["a", "ghost"]), [field("a")]).map((f) => f.slug)).toEqual(["a"]);
+});
+
+test("таймлайн старой админки показывает поля из visible_field", () => {
+  // Её панель колонок писала на таймлайне не columns, а
+  // attributes.visible_field: без этой ступени такой view открылся бы
+  // полосами без подписей.
+  const legacy = { ...view([]), type: "TIMELINE", barFieldSlugs: ["b", "a"] };
+
+  expect(resolveColumns(legacy, [field("a"), field("b")]).map((f) => f.slug)).toEqual(["b", "a"]);
+});
+
+test("заполненные columns важнее visible_field", () => {
+  // Первое же сохранение колонок у нас пишет columns — и запасная
+  // ступень обязана замолчать, иначе настройка не действует.
+  const both = { ...view(["a"]), type: "TIMELINE", barFieldSlugs: ["b"] };
+
+  expect(resolveColumns(both, [field("a"), field("b")]).map((f) => f.slug)).toEqual(["a"]);
 });
 
 test("без view колонок нет", () => {

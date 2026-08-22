@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+  IconCalendarTime,
   IconChevronLeft,
   IconChevronRight,
   IconDotsVertical,
@@ -21,6 +22,7 @@ import {
   IconPinnedOff,
   IconSearch,
   IconStack2,
+  IconPrinter,
   IconTable,
   IconTrash,
   IconX,
@@ -28,6 +30,7 @@ import {
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import type { Permission } from "@/features/auth";
+import { DocTemplates, useDocTemplates } from "@/features/docs";
 import {
   FilterBar,
   activeFilterCount,
@@ -57,6 +60,7 @@ import { TAB_GROUP_TYPES, tabGroupField } from "../api/tab-group";
 import { columnKey, moveBefore } from "../model/columns";
 import { hasUrl, type UrlTemplate } from "../model/url-template";
 import { IMPLEMENTED_VIEW_TYPES, TAB_VIEW_TYPES, VIEW_TYPES, type View } from "../model/types";
+import { CalendarFields, dateFields } from "./CalendarFields";
 import { viewIcon } from "./view-icon";
 
 /**
@@ -74,7 +78,9 @@ import { viewIcon } from "./view-icon";
  *   view сразу. Строка «Тип» здесь называется типом, а не «Общими»,
  *   чтобы имя не было занято.
  *
- *   Настройки Timeline и Calendar — этих типов у нас нет вовсе.
+ *   Настройки Timeline — этого типа у нас пока нет вовсе. У календаря
+ *   настраиваются только поля дат: остальное (шаг сетки, цвет события,
+ *   нерабочие дни) бэкенд отдаёт, но не обновляет ни одной ручкой.
  *
  *   «Строк на странице» — бэкенд не обновляет default_limit этой ручкой
  *   вовсе (view.go, Update: колонки в UPDATE просто нет), а размер
@@ -120,9 +126,16 @@ export type ViewOptionsHandlers = {
    */
   onInfiniteScroll?: (enabled: boolean) => void;
   /** Поле группировки строк. Пустая строка — без группировки. */
-  onGroupBy?: (fieldId: string) => void;
+  /** Поля группировки в порядке уровней. Пустой список — снять её. */
+  onGroupBy?: (fieldIds: string[]) => void;
   /** Поле раскладки вкладками. Пустая строка — без вкладок. */
   onTabGroup?: (fieldId: string) => void;
+  /**
+   * Поля дат календаря. Слаги, а не id: так эту настройку хранит база
+   * (колонки `calendar_from_slug` и `calendar_to_slug`).
+   */
+  onDateFrom?: (slug: string) => void;
+  onDateTo?: (slug: string) => void;
   /** Настроить поле: открывает ту же панель, что и меню колонки. */
   onEditField?: (field: Field, anchor: DOMRect) => void;
   /** Удалить поле из ТАБЛИЦЫ, а не из view. Спрашивает подтверждение вызывающий. */
@@ -218,8 +231,10 @@ type PanelPage =
   | "fixed"
   | "group"
   | "tabGroup"
+  | "calendar"
   | "fields"
   | "table"
+  | "docs"
   | "navigation"
   | null;
 
@@ -257,6 +272,10 @@ function Panel({
    */
   const [query, setQuery] = useState("");
 
+  /* Сколько печатных форм у таблицы — числом в строке, как у полей.
+     Тот же запрос, что и у кнопки печати в карточке: ключ общий. */
+  const { templates: docTemplates } = useDocTemplates(view.tableSlug);
+
   const shown = shownFields(view, fields);
   const quick = quickFilterFields(view, fields);
   const fixed = fixedFields(view, shown);
@@ -273,6 +292,12 @@ function Panel({
    * вкладки, у доски — колонки. Настройка одна, экран разный.
    */
   const isBoard = view.type === "BOARD";
+  /**
+   * У календаря вместо колонок — дни, у таймлайна — ось дней, и настройка
+   * у обоих одна и та же: поля дат. Закреплённых колонок и группировки
+   * строк нет ни у того, ни у другого.
+   */
+  const isCalendar = view.type === "CALENDAR" || view.type === "TIMELINE";
 
   if (page === "type") {
     return (
@@ -506,23 +531,48 @@ function Panel({
 
         <List>
           <PopoverItem
-            active={!view.groupById}
+            active={!view.groupByIds.length}
             icon={<Icon as={IconX} size={16} className="shrink-0 text-fg-subtle" />}
-            onClick={() => handlers.onGroupBy?.("")}
+            onClick={() => handlers.onGroupBy?.([])}
           >
             {t("view.groupNone")}
           </PopoverItem>
 
-          {groupable.map((field) => (
-            <PopoverItem
-              key={field.id}
-              active={view.groupById === field.id || view.groupById === field.relationId}
-              icon={<Icon as={fieldIcon(field.type)} size={16} className="shrink-0" />}
-              onClick={() => handlers.onGroupBy?.(columnKey(field))}
-            >
-              {localized(field.labels, language, field.label)}
-            </PopoverItem>
-          ))}
+          {/*
+            Выбранные — сверху и по порядку уровней: список галочек
+            без видимого порядка не сообщает, что вложено во что.
+            Щелчок по выбранному снимает его, по новому — добавляет
+            уровнем ниже.
+          */}
+          {order(groupable, view.groupByIds).map((field) => {
+            const key = columnKey(field);
+            const level = view.groupByIds.indexOf(key);
+
+            return (
+              <PopoverItem
+                key={field.id}
+                active={level >= 0}
+                icon={<Icon as={fieldIcon(field.type)} size={16} className="shrink-0" />}
+                onClick={() =>
+                  handlers.onGroupBy?.(
+                    level >= 0
+                      ? view.groupByIds.filter((id) => id !== key)
+                      : [...view.groupByIds, key],
+                  )
+                }
+              >
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="truncate">{localized(field.labels, language, field.label)}</span>
+                  {/* Номер уровня: по нему видно, что группируется первым. */}
+                  {level >= 0 && (
+                    <span className="text-2xs ml-auto shrink-0 text-fg-subtle tabular-nums">
+                      {level + 1}
+                    </span>
+                  )}
+                </span>
+              </PopoverItem>
+            );
+          })}
         </List>
       </Subpage>
     );
@@ -591,6 +641,49 @@ function Panel({
     );
   }
 
+  if (page === "calendar") {
+    /*
+     * Поля дат — из ВСЕХ полей таблицы, а не из колонок view: срок
+     * задачи бывает и не показан в списке колонок, а событию он всё
+     * равно нужен.
+     *
+     * Настраиваются только эти две; шаг сетки, цвет события и нерабочие
+     * дни календарь читает, но задать их нечем — ни одна ручка эти
+     * колонки не обновляет (view.go, Update: их нет в теле запроса).
+     * Поле ввода, которое молча ничего не сохраняет, — ровно то, за что
+     * переписан старый конструктор. См. docs/backend-notes.md.
+     */
+    const dates = matching(dateFields(fields), query, language);
+
+    return (
+      <Subpage
+        title={t("view.calendarFields")}
+        busy={busy}
+        onBack={back}
+        hint={t("view.calendarFieldsHint")}
+      >
+        <FieldSearch value={query} onChange={setQuery} />
+
+        <List>
+          <CalendarFields
+            from={view.dateFromSlug}
+            to={view.dateToSlug}
+            dates={dates}
+            language={language}
+            onDateFrom={(slug) => handlers.onDateFrom?.(slug)}
+            onDateTo={(slug) => handlers.onDateTo?.(slug)}
+          />
+
+          {/* Список пуст не «потому что не нашлось»: без полей с датой
+              календарю нечего показывать вовсе. */}
+          {!dates.length && !query && (
+            <p className="px-2 py-1.5 text-2xs text-fg-subtle">{t("view.calendarEmpty")}</p>
+          )}
+        </List>
+      </Subpage>
+    );
+  }
+
   if (page === "table") {
     /*
      * Настройки хранилища, а не показа: имя таблицы, кэш, мягкое
@@ -600,6 +693,19 @@ function Panel({
     return (
       <Subpage title={t("tableSettings.title")} busy={busy} onBack={back} hint={t("tableSettings.hint")}>
         <TableSettings tableSlug={view.tableSlug} languages={languages} />
+      </Subpage>
+    );
+  }
+
+  if (page === "docs") {
+    /*
+     * Печатные формы таблицы. Здесь же, где остальные настройки таблицы,
+     * а не отдельным экраном: в старой админке «Docs» уводит со своих
+     * данных, и запись для печати приходится выбирать заново.
+     */
+    return (
+      <Subpage title={t("docs.title")} busy={busy} onBack={back} hint={t("docs.hint")}>
+        <DocTemplates tableSlug={view.tableSlug} fields={fields} />
       </Subpage>
     );
   }
@@ -706,13 +812,22 @@ function Panel({
    * (колонок нет вовсе), номеров страниц (доска листается прокруткой)
    * и группировки строк — на доске за неё отвечают сами колонки.
    */
-  const isGrid = !isTree && !isBoard;
-  /** Поле группировки — подписью в строке настроек. Ключ как у колонок. */
-  const grouped = view.groupById
-    ? fields.find(
-        (field) => field.id === view.groupById || field.relationId === view.groupById,
-      )
-    : undefined;
+  const isGrid = !isTree && !isBoard && !isCalendar;
+  /*
+   * Где строки собираются в группы: таблица и таймлайн. У доски за это
+   * отвечают её колонки, у календаря — клетки дней, а дерево строит
+   * порядок само.
+   */
+  const canGroup = isGrid || view.type === "TIMELINE";
+  /** Поле начала события — подписью в строке настроек. Здесь это слаг. */
+  const dateFrom = fields.find((field) => field.slug === view.dateFromSlug);
+  /**
+   * Поля группировки — подписью в строке настроек: первое словом,
+   * остальные счётом. Ключи те же, что у колонок.
+   */
+  const grouped = view.groupByIds
+    .map((id) => fields.find((field) => field.id === id || field.relationId === id))
+    .filter((field): field is Field => Boolean(field));
   /** Поле раскладки вкладками — подписью в строке настроек. */
   const tabGrouped = tabGroupField(view, fields);
   /* Сколько адресов задано: строка настроек молчит, пока их нет. */
@@ -794,7 +909,17 @@ function Panel({
           />
         </>
       )}
-      {can.fixColumn && !isBoard && (
+      {/* Даты события — первая настройка календаря: без поля начала
+          он вообще ничего не рисует. */}
+      {can.settings && isCalendar && handlers.onDateFrom && (
+        <Row
+          icon={IconCalendarTime}
+          label={t("view.calendarFields")}
+          value={dateFrom ? localized(dateFrom.labels, language, dateFrom.label) : ""}
+          onClick={() => open("calendar")}
+        />
+      )}
+      {can.fixColumn && !isBoard && !isCalendar && (
         <Row
           icon={IconPin}
           label={t("view.fixColumns")}
@@ -802,11 +927,16 @@ function Panel({
           onClick={() => open("fixed")}
         />
       )}
-      {can.settings && handlers.onGroupBy && isGrid && (
+      {can.settings && handlers.onGroupBy && canGroup && (
         <Row
           icon={IconStack2}
           label={t("view.groupBy")}
-          value={grouped ? localized(grouped.labels, language, grouped.label) : ""}
+          value={
+            grouped[0]
+              ? localized(grouped[0].labels, language, grouped[0].label) +
+                (grouped.length > 1 ? ` +${grouped.length - 1}` : "")
+              : ""
+          }
           onClick={() => open("group")}
         />
       )}
@@ -895,6 +1025,18 @@ function Panel({
           <span className="flex-1 truncate">{t("view.source")}</span>
           <span className="max-w-[9rem] truncate text-fg-subtle">{view.tableSlug}</span>
         </div>
+      )}
+
+      {/* Печатные формы: шаблон .docx, из которого собирается PDF записи.
+          Рядом с настройками таблицы, потому что шаблоны у таблицы общие
+          — во всех её view одни и те же. */}
+      {can.settings && (
+        <Row
+          icon={IconPrinter}
+          label={t("docs.title")}
+          value={String(docTemplates.length)}
+          onClick={() => open("docs")}
+        />
       )}
 
       {/* Поля правятся там, где для них есть редактор: у вкладки связи
@@ -1270,6 +1412,19 @@ function switchableTypes(view: View): string[] {
   const allowed = view.isRelationView ? new Set(TAB_VIEW_TYPES) : IMPLEMENTED_VIEW_TYPES;
 
   return VIEW_TYPES.filter((type) => allowed.has(type) || type === view.type);
+}
+
+/**
+ * Выбранные поля вперёд и в порядке уровней, остальные — как были.
+ * Список, в котором галочки разбросаны, не показывает вложенность.
+ */
+function order(fields: Field[], selected: string[]): Field[] {
+  const chosen = selected
+    .map((id) => fields.find((field) => columnKey(field) === id))
+    .filter((field): field is Field => Boolean(field));
+
+  const rest = fields.filter((field) => !selected.includes(columnKey(field)));
+  return [...chosen, ...rest];
 }
 
 /** Поля, показанные во view, в порядке view. Та же логика, что в resolveColumns. */

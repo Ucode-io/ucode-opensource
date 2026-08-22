@@ -3,27 +3,27 @@ import { IconDots } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
+import { TemplateCreateDialog } from "@/features/templates";
 import { useUi } from "@/shared/lib/ui-store";
 import { useCreateMenu, useDeleteMenu, useUpdateMenu } from "../api/mutations";
 import { actionsFor, typeWordKey, type MenuActionId } from "../model/actions";
 import type { MenuNode } from "../model/types";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
-import { MenuFormDialog, type MenuFormValue } from "./MenuFormDialog";
-
-type CreatableType = "FOLDER" | "TABLE" | "LINK";
+import {
+  CREATE_TITLES,
+  EMPTY_MENU_FORM,
+  MenuFormDialog,
+  menuAttributes,
+  type CreatableType,
+  type MenuFormValue,
+} from "./MenuFormDialog";
 
 type Dialog =
   | { kind: "edit" }
   | { kind: "create"; type: CreatableType }
   | { kind: "delete" }
+  | { kind: "template" }
   | null;
-
-/** Заголовок окна создания зависит только от типа. */
-const CREATE_TITLES: Record<CreatableType, "menuForm.createFolder" | "menuForm.createTable" | "menuForm.createLink"> = {
-  FOLDER: "menuForm.createFolder",
-  TABLE: "menuForm.createTable",
-  LINK: "menuForm.createLink",
-};
 
 /**
  * Кнопка «⋮» на строке меню. Набор пунктов собирается из реестра действий
@@ -49,14 +49,21 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
     if (id === "create-folder") setDialog({ kind: "create", type: "FOLDER" });
     if (id === "create-table") setDialog({ kind: "create", type: "TABLE" });
     if (id === "create-link") setDialog({ kind: "create", type: "LINK" });
+    if (id === "create-files") setDialog({ kind: "create", type: "MINIO_FOLDER" });
+    if (id === "create-microfrontend") setDialog({ kind: "create", type: "MICROFRONTEND" });
     if (id === "delete") setDialog({ kind: "delete" });
-    // settings и make-template подключаются вместе со своими экранами.
+    if (id === "make-template") setDialog({ kind: "template" });
   };
 
   const submitForm = (value: MenuFormValue) => {
     if (dialog?.kind === "edit") {
       update.mutate(
-        { node, labels: value.labels, icon: value.icon, ...linkAttributes(node.type, value) },
+        {
+          node,
+          labels: value.labels,
+          icon: value.icon,
+          attributes: menuAttributes(node.type, value),
+        },
         { onSuccess: () => setDialog(null) },
       );
     } else if (dialog?.kind === "create") {
@@ -67,7 +74,10 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
           type: dialog.type,
           parentId: node.id,
           ...(dialog.type === "TABLE" ? { slug: value.slug } : {}),
-          ...linkAttributes(dialog.type, value),
+          ...(dialog.type === "MICROFRONTEND"
+            ? { microfrontendId: value.microfrontendId }
+            : {}),
+          attributes: menuAttributes(dialog.type, value),
         },
         { onSuccess: () => setDialog(null) },
       );
@@ -110,7 +120,16 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
       {dialog?.kind === "edit" && (
         <MenuFormDialog
           title={t("menuForm.editTitle", { type: typeWord })}
-          initial={{ labels: node.labels, icon: node.icon, href: node.href ?? "", slug: "" }}
+          initial={{
+            ...EMPTY_MENU_FORM,
+            labels: node.labels,
+            icon: node.icon,
+            href: node.href ?? "",
+            folder: node.folder,
+            embed: Boolean(node.embedUrl),
+            microfrontendId: node.microfrontendId,
+            params: Object.entries(node.params).map(([key, value]) => ({ key, value })),
+          }}
           type={node.type}
           busy={update.isPending}
           onSubmit={submitForm}
@@ -121,11 +140,20 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
       {dialog?.kind === "create" && (
         <MenuFormDialog
           title={t(CREATE_TITLES[dialog.type])}
-          initial={{ labels: {}, icon: "", href: "", slug: "" }}
+          initial={EMPTY_MENU_FORM}
           type={dialog.type}
           needsSlug={dialog.type === "TABLE"}
+          needsRemote={dialog.type === "MICROFRONTEND"}
           busy={create.isPending}
           onSubmit={submitForm}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {dialog?.kind === "template" && (
+        <TemplateCreateDialog
+          menuId={node.id}
+          menuLabel={node.label}
           onClose={() => setDialog(null)}
         />
       )}
@@ -156,7 +184,3 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
   );
 }
 
-/** Адрес ссылки живёт в attributes.link — у остальных типов его нет. */
-function linkAttributes(type: string, value: MenuFormValue) {
-  return type === "LINK" ? { attributes: { link: value.href } } : {};
-}

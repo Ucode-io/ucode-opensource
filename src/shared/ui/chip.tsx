@@ -20,8 +20,14 @@ export const CHIP_COLORS = [
 
 export type ChipColor = (typeof CHIP_COLORS)[number];
 
-/* Классы перечислены целиком: Tailwind не видит собранные строкой имена. */
-const styles: Record<ChipColor, string> = {
+/*
+ * Классы перечислены целиком: Tailwind не видит собранные строкой имена.
+ *
+ * Наружу — ради событий календаря: там тот же оттенок ложится не на чип,
+ * а на карточку целиком, и своя палитра рядом с этой разошлась бы
+ * с первым же новым цветом.
+ */
+export const CHIP_STYLES: Record<ChipColor, string> = {
   gray: "bg-chip-gray-bg text-chip-gray-fg",
   blue: "bg-chip-blue-bg text-chip-blue-fg",
   green: "bg-chip-green-bg text-chip-green-fg",
@@ -173,7 +179,7 @@ export function Chip({
 }) {
   return (
     <span
-      className={`inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-1.5 text-xs ${styles[color]}`}
+      className={`inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-1.5 text-xs ${CHIP_STYLES[color]}`}
     >
       {/* Цвет точки — сам текст чипа: третий токен на каждый оттенок
           пришлось бы держать в двух темах ради четырёх пикселей. */}

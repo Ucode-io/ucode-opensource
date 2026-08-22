@@ -19,7 +19,21 @@ import { isTabView, type View } from "./types";
  * Чистая функция: проверяется тестом, а не открыванием экрана.
  */
 export function resolveColumns(view: View | undefined, fields: Field[]): Field[] {
-  return view ? resolveColumnIds(view.columnIds, fields) : [];
+  if (!view) return [];
+
+  const columns = resolveColumnIds(view.columnIds, fields);
+  if (columns.length || !view.barFieldSlugs.length) return columns;
+
+  /*
+   * Таймлайн старой админки: там панель колонок писала не `columns`,
+   * а `attributes.visible_field` — слаги через косую черту (см.
+   * toBarFieldSlugs). У такого view `columns` пуст, и без этой ступени
+   * он открылся бы полосами без подписей. Ступень срабатывает ровно
+   * до первого сохранения колонок у нас.
+   */
+  return view.barFieldSlugs
+    .map((slug) => fields.find((field) => field.slug === slug))
+    .filter((field): field is Field => Boolean(field));
 }
 
 /**

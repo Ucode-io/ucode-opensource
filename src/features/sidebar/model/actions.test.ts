@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { actionsFor, typeWordKey } from "./actions";
+import { showsTable } from "./types";
 import type { MenuNode, MenuPermissions } from "./types";
 
 const all: MenuPermissions = {
@@ -17,6 +18,11 @@ const node = (over: Partial<MenuNode> = {}): MenuNode => ({
   icon: "",
   type: "TABLE",
   kind: "leaf",
+  tableId: "",
+  folder: "",
+  embedUrl: "",
+  microfrontendId: "",
+  params: {},
   order: 0,
   isStatic: false,
   parentId: "root",
@@ -52,11 +58,21 @@ test("без права действие не показывается", () => {
   expect(ids(readOnly)).toEqual([]);
 });
 
-test("шаблон из папки делает только администратор", () => {
+test("действия без своего экрана не показываются никому", () => {
+  // «Настройки пункта» остались в типах и переводах, но обработчика
+  // у них нет: кнопка, которая ничего не делает, хуже отсутствующей.
+  // Право и роль тут ни при чём — их нет ни у кого.
+  expect(ids(node({ type: "FOLDER", kind: "group" }), true)).not.toContain("settings");
+});
+
+test("шаблон делают из папки и только администратор", () => {
   const folder = node({ type: "FOLDER", kind: "group" });
 
-  expect(ids(folder, false)).not.toContain("make-template");
   expect(ids(folder, true)).toContain("make-template");
+  // Не администратору шаблоны недоступны — так было и в старой админке.
+  expect(ids(folder, false)).not.toContain("make-template");
+  // У таблицы шаблонить нечего: в тело уезжает дерево пункта.
+  expect(ids(node({ type: "TABLE" }), true)).not.toContain("make-template");
 });
 
 test("у системного пункта нет удаления", () => {
@@ -75,4 +91,14 @@ test("удаление отделено разделителем и помече
 test("слово для незнакомого типа не оставляет подпись пустой", () => {
   expect(typeWordKey("TABLE")).toBe("menuType.TABLE");
   expect(typeWordKey("SOMETHING_NEW")).toBe("menuType.UNKNOWN");
+});
+
+test("ссылка на существующую таблицу открывается таблицей, а не объяснением", () => {
+  // Старая админка привязывала готовую таблицу пунктом типа LINK
+  // с table_id (LinkTableModal.jsx:53). Адреса наружу у него нет,
+  // а таблица и её view — есть.
+  expect(showsTable({ type: "LINK", tableId: "t1" })).toBe(true);
+  expect(showsTable({ type: "LINK", tableId: "" })).toBe(false);
+  expect(showsTable({ type: "TABLE", tableId: "" })).toBe(true);
+  expect(showsTable({ type: "WIKI", tableId: "t1" })).toBe(false);
 });

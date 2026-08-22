@@ -42,7 +42,9 @@ import {
   useUi,
   type DrawerMode,
 } from "@/shared/lib/ui-store";
+import { CommitInput } from "@/shared/ui/commit-input";
 import { Icon } from "@/shared/ui/icon";
+import { Tooltip } from "@/shared/ui/tooltip";
 import { LanguageTabs } from "@/shared/ui/language-tabs";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { ResizeHandle } from "@/shared/ui/resize-handle";
@@ -109,6 +111,9 @@ export function ItemDrawer({
   onLink,
   onSettings,
   onReorder,
+  onAddSection,
+  onRenameSection,
+  onRemoveSection,
   onHeading,
   onClose,
 }: {
@@ -224,6 +229,13 @@ export function ItemDrawer({
    * Не задан — поля не перетаскиваются.
    */
   onReorder?: ((moved: string, target: string, after: boolean) => void) | undefined;
+  /**
+   * Правка секций карточки. Не заданы — секции только показываются:
+   * раскладку правит тот же, кому позволено её двигать.
+   */
+  onAddSection?: ((label: string) => void) | undefined;
+  onRenameSection?: ((index: number, label: string) => void) | undefined;
+  onRemoveSection?: ((index: number) => void) | undefined;
   /**
    * Заголовком карточки назначено другое поле. `variants` — карта
    * «язык → слаг» у мультиязычного поля: заголовок нужен на каждом языке.
@@ -601,15 +613,44 @@ export function ItemDrawer({
               )}
             </Heading>
 
-            {groups.map((group) => (
-              <section key={group.label || "—"}>
+            {groups.map((group, index) => (
+              <section key={group.label || `—${index}`}>
                 {/* Заголовок секции — только у именованной: у карточки почти
                     всегда одна безымянная секция, и пустая полоска над ней
-                    читается как сломанная вёрстка. */}
-                {group.label && (
-                  <h3 className="mt-4 mb-1 px-1 text-2xs font-medium tracking-wide text-fg-subtle uppercase">
-                    {group.label}
-                  </h3>
+                    читается как сломанная вёрстка.
+ 
+                    С правом на раскладку заголовок правится на месте:
+                    отдельного экрана настроек у секции нет, а имя — это
+                    всё, что у неё есть. */}
+                {(group.label || onRenameSection) && (
+                  <div className="group/section mt-4 mb-1 flex items-center gap-1 px-1">
+                    {onRenameSection && group.index >= 0 ? (
+                      <CommitInput
+                        value={group.label}
+                        label={t("drawer.sectionName")}
+                        placeholder={t("drawer.sectionUnnamed")}
+                        allowEmpty
+                        onCommit={(label) => onRenameSection(group.index, label)}
+                        className="h-6 border-transparent bg-transparent px-1 text-2xs font-medium tracking-wide uppercase"
+                      />
+                    ) : (
+                      <h3 className="text-2xs font-medium tracking-wide text-fg-subtle uppercase">
+                        {group.label}
+                      </h3>
+                    )}
+
+                    {onRemoveSection && group.index > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveSection(group.index)}
+                        aria-label={t("drawer.sectionRemove")}
+                        title={t("drawer.sectionRemove")}
+                        className="grid size-5 shrink-0 place-items-center rounded text-fg-subtle opacity-0 transition hover:bg-surface-hover hover:text-danger group-hover/section:opacity-100"
+                      >
+                        <Icon as={IconX} size={12} />
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {group.fields.map((field) => (
@@ -720,6 +761,19 @@ export function ItemDrawer({
                 ))}
               </section>
             ))}
+
+            {/* Новая секция заводится пустой и тут же видна: в неё
+                переносят поля мышью. */}
+            {onAddSection && (
+              <button
+                type="button"
+                onClick={() => onAddSection("")}
+                className="mt-3 flex items-center gap-1.5 px-1 text-2xs text-fg-subtle transition-colors hover:text-fg"
+              >
+                <Icon as={IconPlus} size={12} />
+                {t("drawer.sectionAdd")}
+              </button>
+            )}
           </div>
         )}
 
@@ -931,24 +985,30 @@ const HEADING_TYPES = new Set(["SINGLE_LINE", "MULTI_LINE", "TEXT", "INCREMENT_I
 function groupBySection(
   fields: Field[],
   sections: { label: string; slugs: string[] }[],
-): { label: string; fields: Field[] }[] {
-  if (!sections.length) return [{ label: "", fields }];
+): { label: string; index: number; fields: Field[] }[] {
+  if (!sections.length) return [{ label: "", index: -1, fields }];
 
   const taken = new Set<string>();
-  const groups = sections.map((section) => {
+  const groups = sections.map((section, index) => {
     const inSection = fields.filter((field) => {
       if (!section.slugs.includes(field.slug) || taken.has(field.slug)) return false;
       taken.add(field.slug);
       return true;
     });
 
-    return { label: section.label, fields: inSection };
+    return { label: section.label, index, fields: inSection };
   });
 
+  /* Всё, чего в секциях не оказалось, — последней безымянной группой.
+     Номера у неё нет: править её как секцию нельзя, её в раскладке нет. */
   const rest = fields.filter((field) => !taken.has(field.slug));
-  if (rest.length) groups.push({ label: "", fields: rest });
+  if (rest.length) groups.push({ label: "", index: -1, fields: rest });
 
-  return groups.filter((group) => group.fields.length);
+  /*
+   * Пустая секция остаётся видимой, когда раскладку правят: в неё
+   * переносят поля мышью, а невидимая цель — это цель, которой нет.
+   */
+  return groups.filter((group) => group.fields.length || group.index >= 0);
 }
 
 /**
@@ -1001,11 +1061,12 @@ function FieldLabel({
         />
       </span>
 
-      <span className="truncate">{label}</span>
-
-      <span className="pointer-events-none absolute bottom-full left-0 z-10 mb-1 max-w-72 truncate rounded-md border border-border bg-surface px-1.5 py-0.5 text-xs text-fg opacity-0 shadow-popover transition-opacity delay-0 group-hover/label:opacity-100 group-hover/label:delay-500">
-        {label}
-      </span>
+      {/* Подсказка — слаг, а не подпись: подпись стоит рядом, а слаг
+          это имя поля в API, фильтрах и формулах, и больше его нигде
+          не видно. */}
+      <Tooltip label={field.slug}>
+        <span className="truncate">{label}</span>
+      </Tooltip>
     </span>
   );
 }

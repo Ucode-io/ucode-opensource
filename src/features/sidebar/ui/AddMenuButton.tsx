@@ -3,13 +3,23 @@ import { IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
+import { TemplateDialog } from "@/features/templates";
 import { useCreateMenu } from "../api/mutations";
-import { MenuFormDialog, type MenuFormValue } from "./MenuFormDialog";
+import {
+  CREATE_TITLES,
+  EMPTY_MENU_FORM,
+  MenuFormDialog,
+  menuAttributes,
+  type CreatableType,
+  type MenuFormValue,
+} from "./MenuFormDialog";
 
 /** Кнопка «+» в шапке сайдбара: создаёт пункт на верхнем уровне. */
 export function AddMenuButton({ parentId }: { parentId: string }) {
   const { t } = useTranslation();
-  const [type, setType] = useState<"FOLDER" | "TABLE" | "LINK" | null>(null);
+  const [type, setType] = useState<CreatableType | null>(null);
+  /** Открыт выбор шаблона: готовый набор таблиц разворачивается целиком. */
+  const [templates, setTemplates] = useState(false);
   const create = useCreateMenu();
 
   const submit = (value: MenuFormValue) => {
@@ -21,7 +31,8 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
         type,
         parentId,
         ...(type === "TABLE" ? { slug: value.slug } : {}),
-        ...(type === "LINK" ? { attributes: { link: value.href } } : {}),
+        ...(type === "MICROFRONTEND" ? { microfrontendId: value.microfrontendId } : {}),
+        attributes: menuAttributes(type, value),
       },
       { onSuccess: () => setType(null) },
     );
@@ -65,27 +76,48 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
             <PopoverItem
               onClick={() => {
                 close();
+                setType("MINIO_FOLDER");
+              }}
+            >
+              {t("menuAction.createFiles")}
+            </PopoverItem>
+            <PopoverItem
+              onClick={() => {
+                close();
                 setType("LINK");
               }}
             >
               {t("menuAction.createLink")}
             </PopoverItem>
+            <PopoverItem
+              onClick={() => {
+                close();
+                setType("MICROFRONTEND");
+              }}
+            >
+              {t("menuAction.createMicrofrontend")}
+            </PopoverItem>
+            <PopoverItem
+              onClick={() => {
+                close();
+                setTemplates(true);
+              }}
+            >
+              {t("menuAction.fromTemplate")}
+            </PopoverItem>
           </>
         )}
       </Popover>
 
+      {templates && <TemplateDialog onClose={() => setTemplates(false)} />}
+
       {type && (
         <MenuFormDialog
-          title={t(
-            type === "FOLDER"
-              ? "menuForm.createFolder"
-              : type === "LINK"
-                ? "menuForm.createLink"
-                : "menuForm.createTable",
-          )}
-          initial={{ labels: {}, icon: "", href: "", slug: "" }}
+          title={t(CREATE_TITLES[type])}
+          initial={EMPTY_MENU_FORM}
           type={type}
           needsSlug={type === "TABLE"}
+          needsRemote={type === "MICROFRONTEND"}
           busy={create.isPending}
           onSubmit={submit}
           onClose={() => setType(null)}
