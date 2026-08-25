@@ -279,7 +279,8 @@ function TableFilter({ value, onChange }: { value: string; onChange: (slug: stri
       onSearch={setSearch}
       onLoadMore={tables.loadMore}
       onChange={onChange}
-      className="h-7"
+      size="sm"
+      className="w-full"
     />
   );
 }

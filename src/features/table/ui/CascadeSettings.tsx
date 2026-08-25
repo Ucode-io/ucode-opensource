@@ -1,7 +1,7 @@
 import { IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
-import { Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { useTableSchema } from "../api/schema";
 import type { CascadeStep } from "../model/cascade";
 import { localized, type Relation } from "../model/types";
@@ -134,21 +134,20 @@ function CascadeLevel({
     <div className="flex items-center gap-1 px-1 pb-1">
       <span className="text-2xs text-fg-subtle">↑</span>
 
-      <Select
+      <Dropdown
+        size="sm"
         value={value}
-        onChange={(event) => {
-          const [tableSlug = "", fieldSlug = ""] = event.target.value.split("#");
+        placeholder={t("cascade.addLevel")}
+        className="min-w-0 flex-1"
+        items={options.map((item) => ({
+          value: `${item.toSlug}#${item.fieldFrom}`,
+          label: label(item, language),
+        }))}
+        onChange={(picked) => {
+          const [tableSlug = "", fieldSlug = ""] = picked.split("#");
           if (tableSlug && fieldSlug) onChange({ tableSlug, fieldSlug });
         }}
-        className="h-7 min-w-0 flex-1 px-1.5 text-xs"
-      >
-        <option value="">{t("cascade.addLevel")}</option>
-        {options.map((item) => (
-          <option key={item.id} value={`${item.toSlug}#${item.fieldFrom}`}>
-            {label(item, language)}
-          </option>
-        ))}
-      </Select>
+      />
 
       {onRemove && (
         <button

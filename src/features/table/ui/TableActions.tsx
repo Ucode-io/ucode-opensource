@@ -16,7 +16,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { CommitInput } from "@/shared/ui/commit-input";
 import { DynamicIcon } from "@/shared/ui/dynamic-icon";
 import { Icon } from "@/shared/ui/icon";
-import { Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { Modal } from "@/shared/ui/modal";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { SelectMenu } from "@/shared/ui/select-menu";
@@ -440,27 +440,20 @@ function ActionForm({
 
         <label className="mt-2 flex flex-col gap-0.5">
           <span className="px-0.5 text-2xs text-fg-muted">{t("actions.type")}</span>
-          <Select
+          <Dropdown
             value={draft.actionType}
-            onChange={(event) => patch({ actionType: event.target.value })}
-          >
-            {ACTION_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </Select>
+            items={ACTION_TYPES.map((type) => ({ value: type, label: type }))}
+            onChange={(actionType) => patch({ actionType })}
+          />
         </label>
 
         <label className="mt-2 flex flex-col gap-0.5">
           <span className="px-0.5 text-2xs text-fg-muted">{t("actions.method")}</span>
-          <Select value={draft.method} onChange={(event) => patch({ method: event.target.value })}>
-            {ACTION_METHODS.map((method) => (
-              <option key={method} value={method}>
-                {method}
-              </option>
-            ))}
-          </Select>
+          <Dropdown
+            value={draft.method}
+            items={ACTION_METHODS.map((method) => ({ value: method, label: method }))}
+            onChange={(method) => patch({ method })}
+          />
         </label>
 
         <label className="mt-2 flex flex-col gap-0.5">

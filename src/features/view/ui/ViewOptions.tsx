@@ -56,8 +56,9 @@ import { Input } from "@/shared/ui/input";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
+import { moveBefore } from "@/shared/lib/order";
 import { TAB_GROUP_TYPES, subGroupField, tabGroupField } from "../api/tab-group";
-import { columnKey, moveBefore } from "../model/columns";
+import { columnKey } from "../model/columns";
 import { hasUrl, type UrlTemplate } from "../model/url-template";
 import { IMPLEMENTED_VIEW_TYPES, TAB_VIEW_TYPES, VIEW_TYPES, type View } from "../model/types";
 import { CalendarFields, dateFields } from "./CalendarFields";
@@ -862,11 +863,22 @@ function Panel({
    */
   const isTree = view.type === "TREE";
   /*
+   * У ГРАФИКОВ строк на экране нет вовсе — есть числа, посчитанные
+   * по ним. Поэтому отсюда уходит всё, что про строку: переход
+   * по щелчку и адрес «новой записи» (щёлкать не по чему), закреплённые
+   * колонки и группировка (колонок и строк нет), раскладка вкладками
+   * (она делит строки, а не считает), догрузка прокруткой (страниц нет).
+   *
+   * Остаются колонки — они решают, из каких полей выбирают ось, —
+   * и оба отбора: они решают, что вообще попадёт в расчёт.
+   */
+  const isChart = view.type === "CHART";
+  /*
    * Настройки таблицы, которых у доски нет: закреплённых колонок
    * (колонок нет вовсе), номеров страниц (доска листается прокруткой)
    * и группировки строк — на доске за неё отвечают сами колонки.
    */
-  const isGrid = !isTree && !isBoard && !isCalendar;
+  const isGrid = !isTree && !isBoard && !isCalendar && !isChart;
   /*
    * Где строки собираются в группы: таблица и таймлайн. У доски за это
    * отвечают её колонки, у календаря — клетки дней, а дерево строит
@@ -928,7 +940,7 @@ function Panel({
               onClick={() => open("type")}
             />
           )}
-          {handlers.onNavigate && !isTree && (
+          {handlers.onNavigate && !isTree && !isChart && (
             <Row
               icon={IconExternalLink}
               label={t("view.navigation")}
@@ -975,7 +987,7 @@ function Panel({
           onClick={() => open("calendar")}
         />
       )}
-      {can.fixColumn && !isBoard && !isCalendar && (
+      {can.fixColumn && !isBoard && !isCalendar && !isChart && (
         <Row
           icon={IconPin}
           label={t("view.fixColumns")}
@@ -998,7 +1010,7 @@ function Panel({
       )}
       {/* Раскладка вкладками — своё право роли (`tab_group`), отдельное
           от настройки view: так их и выдаёт бэкенд. */}
-      {can.settings && can.tabGroup && handlers.onTabGroup && !isTree && (
+      {can.settings && can.tabGroup && handlers.onTabGroup && !isTree && !isChart && (
         <Row
           icon={isBoard ? IconLayoutColumns : IconLayoutNavbar}
           label={t(isBoard ? "view.boardGroup" : "view.tabGroup")}

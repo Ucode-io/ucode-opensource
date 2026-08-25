@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Icon } from "@/shared/ui/icon";
-import { Field, Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import {
   EMPTY_FUNCTION_DRAFT,
@@ -262,17 +263,12 @@ function FunctionDialog({ item, onClose }: { item: ProjectFunction | null; onClo
         </Field>
 
         <Field label={t("functions.type")} {...(item ? { hint: t("functions.typeFixed") } : {})}>
-          <Select
+          <Dropdown
             value={draft.type}
             disabled={Boolean(item)}
-            onChange={(event) => put({ type: event.target.value })}
-          >
-            {FUNCTION_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </Select>
+            items={FUNCTION_TYPES.map((type) => ({ value: type, label: type }))}
+            onChange={(type) => put({ type })}
+          />
         </Field>
 
         <Field label={t("functions.description")}>

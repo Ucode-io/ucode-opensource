@@ -7,7 +7,8 @@ import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Icon } from "@/shared/ui/icon";
-import { Field, Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import {
   DEFAULT_SESSION_LIMIT,
@@ -304,17 +305,12 @@ function ClientTypeForm({
         </Field>
 
         <Field label={t("tableSettings.loginTable")} hint={t("clientTypes.tableHint")}>
-          <Select
+          <Dropdown
             value={draft.tableSlug}
-            onChange={(event) => put({ tableSlug: event.target.value })}
-          >
-            <option value="">{creating ? t("clientTypes.tableAuto") : "—"}</option>
-            {loginTables.map((table) => (
-              <option key={table.slug} value={table.slug}>
-                {table.label}
-              </option>
-            ))}
-          </Select>
+            placeholder={creating ? t("clientTypes.tableAuto") : "—"}
+            items={loginTables.map((table) => ({ value: table.slug, label: table.label }))}
+            onChange={(tableSlug) => put({ tableSlug })}
+          />
         </Field>
 
         <Field label={t("clientTypes.sessionLimit")} hint={t("clientTypes.sessionLimitHint")}>
@@ -578,41 +574,32 @@ function ConnectionForm({
 
         <Field label={t("clientConnections.table")}>
           {/* Поиск отдан серверу: таблиц в живом проекте сотни, и список
-              выбора без него — это стена из ста пятидесяти строк. */}
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("menuForm.tableSearch")}
-            aria-label={t("menuForm.tableSearch")}
-            className="mb-2"
-          />
-
-          <Select
-            required
+              выбора без него — это стена из ста пятидесяти строк. Поле
+              поиска живёт внутри списка: искать вслепую, не видя строк,
+              незачем. */}
+          <Dropdown
             value={draft.tableSlug}
-            onChange={(event) => put({ tableSlug: event.target.value })}
-          >
-            <option value="">{loadingTables ? t("common.loading") : "—"}</option>
-            {tables.map((table) => (
-              <option key={table.slug} value={table.slug}>
-                {localized(table.labels, language, table.label)}
-              </option>
-            ))}
-          </Select>
+            placeholder="—"
+            items={tables.map((table) => ({
+              value: table.slug,
+              label: localized(table.labels, language, table.label),
+            }))}
+            search={search}
+            searchPlaceholder={t("menuForm.tableSearch")}
+            emptyText={t("menuForm.tableEmpty")}
+            loading={loadingTables}
+            onSearch={setSearch}
+            onChange={(tableSlug) => put({ tableSlug })}
+          />
         </Field>
 
         <Field label={t("clientConnections.field")} hint={t("clientConnections.fieldHint")}>
-          <Select
+          <Dropdown
             value={draft.fieldSlug}
-            onChange={(event) => put({ fieldSlug: event.target.value })}
-          >
-            <option value="">—</option>
-            {loginFields.map((field) => (
-              <option key={field.id} value={field.slug}>
-                {field.label}
-              </option>
-            ))}
-          </Select>
+            placeholder="—"
+            items={loginFields.map((field) => ({ value: field.slug, label: field.label }))}
+            onChange={(fieldSlug) => put({ fieldSlug })}
+          />
         </Field>
       </div>
 

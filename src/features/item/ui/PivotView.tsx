@@ -13,6 +13,7 @@ import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import {
   AGGREGATIONS,
+  NUMERIC_FIELDS,
   isHidden,
   pathKey,
   pivotTable,
@@ -40,6 +41,7 @@ export function PivotView({
   setup,
   language,
   loaded,
+  total,
   onSetup,
 }: {
   /** Колонки view: из них выбирают поля сводной. */
@@ -49,6 +51,14 @@ export function PivotView({
   language: string;
   /** Приехали не все строки диапазона — счётчик тогда врать не должен. */
   loaded: boolean;
+  /**
+   * Сколько строк под этим отбором ВСЕГО, по данным сервера.
+   *
+   * Без него счётчик говорит «посчитано по 200 загруженным» и умалчивает
+   * главное: загружено 200 из двенадцати тысяч. Число знает сервер —
+   * оно приходит в каждом ответе get-list.
+   */
+  total: number;
   onSetup: (next: Partial<PivotSetup>) => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -69,7 +79,7 @@ export function PivotView({
   const label = (field: Field) => localized(field.labels, language, field.label);
   const bySlug = useMemo(() => new Map(columns.map((field) => [field.slug, field])), [columns]);
   /** Считать можно по числовому полю; количество — по любому. */
-  const numeric = columns.filter((field) => NUMERIC.has(field.type));
+  const numeric = columns.filter((field) => NUMERIC_FIELDS.has(field.type));
 
   const options = (fields: Field[], empty: string) => [
     { value: "", label: empty },
@@ -144,7 +154,12 @@ export function PivotView({
           {/* Счётчик виден всегда, в том числе свёрнутым: это итог
               по загруженному, а не по таблице, и прятать его нельзя. */}
           <span className="ml-auto shrink-0 text-xs text-fg-subtle">
-            {t(loaded ? "pivot.countedAll" : "pivot.counted", { count: table.count })}
+            {loaded
+              ? t("pivot.countedAll", { count: table.count })
+              : t("pivot.counted", {
+                  count: table.count,
+                  total: total.toLocaleString(i18n.language),
+                })}
           </span>
         </div>
 
@@ -160,6 +175,7 @@ export function PivotView({
                     <Dropdown
                       value={slug}
                       placeholder={t("pivot.pick")}
+                      className="min-w-0 flex-1"
                       items={options(columns, t("pivot.pick"))}
                       onChange={(next) =>
                         setRows(rowSlugs.map((item, at) => (at === index ? next : item)))
@@ -426,9 +442,6 @@ function Header({
     </th>
   );
 }
-
-/** Поля, по которым есть что считать. Количество считается по любому. */
-const NUMERIC = new Set(["NUMBER", "FLOAT", "FLOAT_NOLIMIT", "INCREMENT_ID", "MONEY", "RATING"]);
 
 /** Первое поле, которого ещё нет в строках: новый уровень не должен повторять. */
 function firstUnused(columns: Field[], taken: string[]): string {

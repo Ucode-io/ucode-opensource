@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/shared/ui/checkbox";
-import { Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Input } from "@/shared/ui/input";
 import {
   hasMapSettings,
   hasPhotoSettings,
@@ -73,23 +74,20 @@ export function TypeSettings({
     return (
       <div className="flex flex-col gap-1.5 px-2 py-1">
         <Labeled label={t("fieldForm.photoRatio")}>
-          <Select
+          <Dropdown
+            size="sm"
             value={draft.ratio}
-            onChange={(event) => onChange({ ratio: event.target.value })}
-            className="h-7 px-1.5 text-xs"
-          >
-            <option value="">—</option>
-            {PHOTO_RATIOS.map((ratio) => (
-              <option key={ratio.value} value={ratio.value}>
-                {ratio.label}
-              </option>
-            ))}
-            {/* Пропорция из старых настроек, которой нет в списке:
-                в attributes лежит число, и произвольное там законно. */}
-            {draft.ratio && !PHOTO_RATIOS.some((ratio) => ratio.value === draft.ratio) && (
-              <option value={draft.ratio}>{draft.ratio}</option>
-            )}
-          </Select>
+            placeholder="—"
+            items={[
+              ...PHOTO_RATIOS.map((ratio) => ({ value: ratio.value, label: ratio.label })),
+              /* Пропорция из старых настроек, которой нет в списке:
+                 в attributes лежит число, и произвольное там законно. */
+              ...(draft.ratio && !PHOTO_RATIOS.some((ratio) => ratio.value === draft.ratio)
+                ? [{ value: draft.ratio, label: draft.ratio }]
+                : []),
+            ]}
+            onChange={(ratio) => onChange({ ratio })}
+          />
         </Labeled>
       </div>
     );

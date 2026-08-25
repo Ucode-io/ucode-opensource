@@ -7,9 +7,12 @@ export function Input({ className = "", ...props }: ComponentProps<"input">) {
   return <input {...props} className={`${control} ${className}`} />;
 }
 
-export function Select({ className = "", ...props }: ComponentProps<"select">) {
-  return <select {...props} className={`${control} ${className}`} />;
-}
+/*
+ * Обёртки над `<select>` здесь нет намеренно. Системный список рисуется
+ * шрифтом и цветами операционной системы, тёмную тему не знает, значка
+ * и поиска не умеет, а список в сто строк выдаёт стеной. Выпадающий
+ * список у нас один — shared/ui/dropdown.
+ */
 
 export function Field({
   label,

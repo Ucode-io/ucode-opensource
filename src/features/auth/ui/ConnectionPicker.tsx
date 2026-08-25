@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
-import { Field, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field } from "@/shared/ui/input";
 import type { Connection, ConnectionSelection } from "../model/types";
 import { AuthCard } from "./AuthCard";
 import { ErrorText } from "./ErrorText";
@@ -44,22 +45,15 @@ export function ConnectionPicker({
       >
         {connections.map((connection) => (
           <Field key={connection.id} label={connection.tableSlug}>
-            <Select
-              required
+            <Dropdown
               value={selection[connection.id] ?? ""}
-              onChange={(e) =>
-                setSelection((current) => ({ ...current, [connection.id]: e.target.value }))
-              }
-            >
-              <option value="" disabled>
-                —
-              </option>
-              {connection.options.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
+              placeholder="—"
+              items={connection.options.map((option) => ({
+                value: option.id,
+                label: option.label,
+              }))}
+              onChange={(id) => setSelection((current) => ({ ...current, [connection.id]: id }))}
+            />
           </Field>
         ))}
 

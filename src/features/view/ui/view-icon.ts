@@ -1,12 +1,13 @@
 import {
-  IconBinaryTree2,
-  IconCalendarMonth,
+  IconCalendarWeek,
+  IconChartPie4,
   IconClearAll,
   IconLayoutColumns,
   IconLayoutGrid,
   IconLayoutList,
-  IconSum,
+  IconSitemap,
   IconTable,
+  IconTablePlus,
   type Icon as TablerIcon,
 } from "@tabler/icons-react";
 
@@ -15,34 +16,35 @@ import {
  *
  * Значок здесь работает в 14px рядом с подписью, и в этом размере
  * выигрывает силуэт, а не подробность: значок из трёх линий читается,
- * значок из десяти превращается в пятно. Второе требование — чтобы
- * восемь значков не путались МЕЖДУ СОБОЙ: рамка с сеткой внутри
- * годится ровно одному типу, и это TABLE.
+ * значок из десяти превращается в пятно.
  *
- * Поэтому:
- *   CALENDAR  — сетка месяца, а не пустая рамка с одной засечкой:
- *               у `IconCalendar` внутри мелкая «1», которая в 14px
+ * Набор выбран заказчиком; здесь записано, что каждый значит, чтобы
+ * следующая правка не свелась к «поменяю, вроде похоже»:
+ *   CALENDAR  — неделя строкой. Не пустая рамка с засечкой: у голого
+ *               `IconCalendar` внутри мелкая «1», которая в 14px
  *               становится кляксой.
- *   PIVOT     — Σ: сводная не показывает строки, она их СЧИТАЕТ.
- *               Любая рамка с делениями читалась бы как TABLE или GRID,
- *               а прежний `IconChartArrowsVertical` — как «статистика»,
- *               то есть ни как что.
- *   TIMELINE  — три ступенчатые полосы: ровно силуэт ленты, где у каждой
+ *   PIVOT     — таблица с плюсом, тот же значок, что у пункта меню
+ *               типа PIVOT в сайдбаре (`sidebar/ui/MenuIcon`). Один
+ *               смысл — один значок в обоих местах.
+ *   TIMELINE  — три ступенчатые полосы: силуэт ленты, где у каждой
  *               строки свой отрезок во времени. Значка гантта у Tabler
- *               нет (проверено в 3.46, последней), а прежний `IconTimeline`
+ *               нет (проверено в 3.46, последней), а `IconTimeline`
  *               — ломаная линия, то есть график, а не лента.
- *   TREE      — дерево с узлами. `IconSitemap` — три прямоугольника
- *               со связями: в 14px это три пятна.
+ *   TREE      — карта узлов со связями.
+ *   CHART     — сектор круга. Экран показывает восемь форм сразу,
+ *               и значок отвечает «здесь диаграммы», а не называет
+ *               одну из них.
  */
 const ICONS: Record<string, TablerIcon> = {
   TABLE: IconTable,
   BOARD: IconLayoutColumns,
-  CALENDAR: IconCalendarMonth,
+  CALENDAR: IconCalendarWeek,
+  CHART: IconChartPie4,
   GRID: IconLayoutGrid,
-  PIVOT: IconSum,
+  PIVOT: IconTablePlus,
   SECTION: IconLayoutList,
   TIMELINE: IconClearAll,
-  TREE: IconBinaryTree2,
+  TREE: IconSitemap,
 };
 
 export function viewIcon(type: string): TablerIcon {

@@ -22,6 +22,21 @@ import type { Item } from "./types";
 /** Чем сводят значения в клетке. Порядок — как в переключателе. */
 export const AGGREGATIONS = ["count", "sum", "avg", "min", "max"] as const;
 
+/**
+ * Поля, по которым есть что складывать. Количество считается по любому.
+ *
+ * Один набор на сводную и на графики: это ответ на вопрос «по какому
+ * полю можно взять сумму», и второго ответа у него быть не должно.
+ */
+export const NUMERIC_FIELDS = new Set([
+  "NUMBER",
+  "FLOAT",
+  "FLOAT_NOLIMIT",
+  "INCREMENT_ID",
+  "MONEY",
+  "RATING",
+]);
+
 export type Aggregation = (typeof AGGREGATIONS)[number];
 
 export function toAggregation(value: string | undefined): Aggregation {
@@ -288,7 +303,7 @@ function emptyLast(a: string, b: string): number | null {
  * Среднее — по числу значений в наборе, а не по числу строк таблицы:
  * строки без числа в расчёт не попали вовсе.
  */
-function reduce(values: number[], aggregation: Aggregation): number {
+export function reduce(values: number[], aggregation: Aggregation): number {
   if (!values.length) return 0;
 
   switch (aggregation) {
@@ -305,7 +320,7 @@ function reduce(values: number[], aggregation: Aggregation): number {
 }
 
 /** Число из значения поля. Не число — null: такую строку пропускаем. */
-function toNumber(value: unknown): number | null {
+export function toNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string" && value.trim()) {
     const parsed = Number(value);

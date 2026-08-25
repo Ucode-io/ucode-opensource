@@ -6,10 +6,77 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+
+/** Отступ меню от кнопки и от края экрана. */
+const GAP = 4;
+const EDGE = 8;
+/** Меню не уже этого, даже если кнопка — квадратный значок. */
+const MIN_WIDTH = 192;
+
+/**
+ * Открытые меню, от внешнего к внутреннему. Нужен ради Escape: список
+ * годов в календаре и календарь — это два меню одно в другом, каждое
+ * со своим обработчиком на документе, и без стека одно нажатие
+ * закрывало бы оба. Закрывается верхнее.
+ */
+const opened: Array<() => void> = [];
+
+/**
+ * Куда поставить меню. Чистая функция: всё, что зависит от DOM, замерено
+ * до неё, — иначе эту арифметику нечем проверить, а именно в ней меню
+ * уезжает за край экрана.
+ *
+ * `bottom` вместо `top` — это разворот вверх: цепляемся нижним краем,
+ * и высота меню в расчёт не входит.
+ */
+export function placement({
+  anchor,
+  width,
+  height,
+  view,
+  align,
+}: {
+  anchor: { top: number; bottom: number; left: number; right: number };
+  /** Ширина меню — уже с учётом минимальной. */
+  width: number;
+  /** Высота содержимого, ничем не ограниченная. */
+  height: number;
+  view: { width: number; height: number };
+  align: "start" | "end";
+}): { left: number; top?: number; bottom?: number; maxHeight: number } {
+  const below = view.height - anchor.bottom - GAP - EDGE;
+  const above = anchor.top - GAP - EDGE;
+  // Вверх — только если снизу не помещается И сверху места больше.
+  const up = height > below && above > below;
+
+  const wanted = align === "end" ? anchor.right - width : anchor.left;
+
+  return {
+    left: Math.max(EDGE, Math.min(wanted, view.width - width - EDGE)),
+    ...(up ? { bottom: view.height - anchor.top + GAP } : { top: anchor.bottom + GAP }),
+    /* Не ниже 96: у кнопки, прижатой к самому низу окна, места нет
+       ни там ни там, и без нижней границы меню схлопнулось бы в полоску. */
+    maxHeight: Math.max(up ? above : below, 96),
+  };
+}
 
 /**
  * Всплывающее меню. Своё, а не библиотека: нужно закрытие по клику мимо,
  * по Escape и позиционирование под кнопкой — это три обработчика.
+ *
+ * Меню уходит ПОРТАЛОМ и позиционируется `fixed` по координатам кнопки.
+ * Лежать в потоке оно не может: почти каждая кнопка с меню стоит внутри
+ * чего-то прокручиваемого — панель настроек поля, тело модального окна,
+ * список колонок, — а прокручиваемый предок обрезает всё, что вылезло
+ * за его край, и никакой z-index этого не отменяет. Он же создаёт
+ * контекст наложения, из-за которого меню проваливалось под соседа.
+ *
+ * Портал уходит не всегда в `<body>`: если кнопка живёт внутри модального
+ * окна, меню отправляется в это же окно. Так сохраняется лестница слоёв
+ * (см. app/styles.css): внутри окна меню лежит над его содержимым, а
+ * снаружи — под самим окном. Из `<body>` меню накрывало бы окно, поверх
+ * которого его никто не звал.
  */
 export function Popover({
   trigger,
@@ -21,97 +88,100 @@ export function Popover({
   align?: "start" | "end";
 }) {
   const [open, setOpen] = useState(false);
-  /** Вверх — когда снизу не помещается: у нижних пунктов сайдбара это норма. */
-  const [up, setUp] = useState(false);
-  /**
-   * Правым краем к кнопке — когда справа не помещается: у чипов
-   * в панели настроек view это норма, панель и так стоит у края экрана.
-   */
-  const [end, setEnd] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  /** Куда уходит портал: своё модальное окно или `<body>`. */
+  const host = useRef<Element | null>(null);
+
+  if (open) host.current = root.current?.closest("[data-modal]") ?? document.body;
 
   /**
-   * Направление считается по факту, после отрисовки: высота зависит от числа
-   * пунктов, а место под кнопкой — от прокрутки. useLayoutEffect, а не
-   * useEffect: замер и переворот должны успеть до кадра, иначе меню мигает.
+   * Координаты считаются по факту, после отрисовки: размер зависит от числа
+   * пунктов, а место под кнопкой — от прокрутки. useLayoutEffect и правка
+   * стиля напрямую, а не через состояние: замер и раскладка должны успеть
+   * до кадра, иначе меню мигает не на том месте.
    */
   useLayoutEffect(() => {
-    if (!open) {
-      setUp(false);
-      setEnd(false);
-      return;
-    }
+    if (!open) return;
 
-    const trigger = root.current?.getBoundingClientRect();
-    const box = menu.current?.getBoundingClientRect();
-    if (!trigger || !box) return;
+    const place = () => {
+      const box = menu.current;
+      const anchor = root.current?.getBoundingClientRect();
+      if (!box || !anchor) return;
 
-    // Переворачиваем, только если сверху места действительно больше.
-    setUp(trigger.bottom + box.height > window.innerHeight && trigger.top > box.height);
+      /* Ширину задаём ДО замера: от неё зависит и сам замер, и левый край.
+         Меню не уже кнопки — список под полем во всю его ширину. */
+      box.style.minWidth = `${Math.max(anchor.width, MIN_WIDTH)}px`;
+      box.style.maxWidth = `${window.innerWidth - EDGE * 2}px`;
+      // Снимаем прошлую границу: иначе она же и вернётся замером высоты.
+      box.style.maxHeight = "";
 
-    /*
-     * То же вбок — но по краю того, кто меню обрежет, а не по краю окна:
-     * контент лежит в карточке с отступом, и меню, влезающее в экран,
-     * всё равно оказывалось бы срезанным её краем.
-     */
-    const bounds = clipBounds(menu.current);
-    setEnd(trigger.left + box.width > bounds.right && trigger.right - box.width > bounds.left);
+      const spot = placement({
+        anchor,
+        width: box.getBoundingClientRect().width,
+        height: box.scrollHeight,
+        view: { width: window.innerWidth, height: window.innerHeight },
+        align,
+      });
 
-    /*
-     * Меню лежит внутри своего родителя, и если тот прокручивается
-     * (список полей в панели настроек, список пунктов в сайдбаре), край
-     * прокрутки его обрезает: видно половину строки, и добраться до
-     * остальных нечем. Разворот вверх тут не спасает — он считается по
-     * окну, а режет контейнер.
-     *
-     * `nearest` подкручивает ровно тот контейнер, который мешает, и
-     * ничего не делает, когда меню и так видно целиком.
-     *
-     * Но только по вертикали. Горизонтальную прокрутку браузер применяет
-     * к карточке контента — у неё `overflow-hidden`, а такой контейнер
-     * scrollIntoView всё равно прокручивает: меню у правого края уводило
-     * вбок весь экран вместе с таблицей, и вернуть его было нечем —
-     * полосы прокрутки у скрытого переполнения нет. Запоминаем смещения
-     * предков и возвращаем на место; всё это до кадра, поэтому не мигает.
-     */
-    const scrolled: [Element, number][] = [];
-    for (let node = menu.current?.parentElement; node; node = node.parentElement) {
-      // Нули тоже: именно из нуля контейнер и уезжает.
-      scrolled.push([node, node.scrollLeft]);
-    }
+      box.style.left = `${spot.left}px`;
+      box.style.top = spot.top === undefined ? "" : `${spot.top}px`;
+      box.style.bottom = spot.bottom === undefined ? "" : `${spot.bottom}px`;
+      /* Высота ограничена местом на экране, а не числом пунктов: длинный
+         список прокручивается внутри себя, а не уезжает за край. */
+      box.style.maxHeight = `${spot.maxHeight}px`;
+    };
 
-    menu.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    place();
 
-    for (const [node, left] of scrolled) node.scrollLeft = left;
-  }, [open]);
+    /* Меню приколото к координатам, а кнопка под ним ездит: прокрутка
+       любого предка (capture — она не всплывает) и смена размера окна
+       пересчитывают положение. */
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, align]);
 
   useEffect(() => {
     if (!open) return;
+
+    const close = () => setOpen(false);
+    opened.push(close);
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
 
       /*
-       * Модальное окно, открытое из меню, лежит порталом в <body> — то
-       * есть DOM-снаружи, хотя по смыслу оно внутри. Без этой проверки
-       * нажатие на его кнопку читалось как «мимо»: меню закрывалось,
-       * уносило с собой окно (оно живёт в поддереве пункта меню), и click
-       * до кнопки уже не долетал. «Выйти из аккаунта?» исчезало, ничего
-       * не сделав.
+       * Слой, открытый ИЗ меню, — не «мимо»: ни модальное окно, ни
+       * вложенное меню. Без этой проверки нажатие на кнопку такого окна
+       * закрывало бы меню, уносило окно с собой (оно живёт в поддереве
+       * пункта меню), и click до кнопки уже не долетал: «Выйти
+       * из аккаунта?» исчезало, ничего не сделав. С вложенным меню то же
+       * самое: выбор года закрывал бы календарь под ним.
+       *
+       * Сравнение с host обязательно: окно, ВНУТРИ которого живёт само
+       * меню, — это обычный фон, клик по нему меню закрывает.
        */
-      if (target.closest("[data-modal]")) return;
+      const layer = target.closest("[data-modal],[data-popover]");
+      if (layer && layer !== host.current) return;
 
-      if (!root.current?.contains(target)) setOpen(false);
+      if (root.current?.contains(target)) return;
+
+      close();
     };
+    // Закрывается верхнее меню, а не все сразу: см. `opened`.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") opened.at(-1)?.();
     };
 
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
+      opened.splice(opened.indexOf(close), 1);
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
@@ -121,41 +191,25 @@ export function Popover({
     <div ref={root} className="relative">
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
 
-      {open && (
-        <div
-          ref={menu}
-          role="menu"
-          className={`absolute z-50 min-w-48 rounded-lg border border-border bg-surface p-1 shadow-popover ${
-            align === "end" || end ? "right-0" : "left-0"
-          } ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        host.current &&
+        createPortal(
+          /* Колонка со своей прокруткой: пункты, которых больше, чем места,
+             прокручиваются здесь. Содержимое со своим прокручиваемым куском
+             (список у Dropdown) забирает остаток высоты через flex-1
+             и прокручивается внутри себя — так поиск над ним не уезжает. */
+          <div
+            ref={menu}
+            role="menu"
+            data-popover
+            className="fixed z-50 flex flex-col overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-popover"
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          host.current,
+        )}
     </div>
   );
-}
-
-/**
- * Границы, за которые меню не пустят: самый узкий из обрезающих предков,
- * а если таких нет — окно.
- *
- * Обрезает не только `overflow: hidden`: `clip`, `auto` и `scroll` — тоже.
- * Поэтому проверяется «не visible», а не конкретное значение.
- */
-function clipBounds(element: HTMLElement | null): { left: number; right: number } {
-  let left = 0;
-  let right = window.innerWidth;
-
-  for (let node = element?.parentElement; node; node = node.parentElement) {
-    if (getComputedStyle(node).overflowX === "visible") continue;
-
-    const rect = node.getBoundingClientRect();
-    left = Math.max(left, rect.left);
-    right = Math.min(right, rect.right);
-  }
-
-  return { left, right };
 }
 
 export function PopoverItem({

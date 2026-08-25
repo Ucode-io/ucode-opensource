@@ -12,12 +12,12 @@ import { useTranslation } from "react-i18next";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import { Field, Input } from "@/shared/ui/input";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Modal } from "@/shared/ui/modal";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
-import { Select } from "@/shared/ui/input";
 import { useClientTypes } from "../api/client-types";
 import {
   CUSTOM_RIGHTS,
@@ -731,18 +731,12 @@ function RoleCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreat
         </Field>
 
         <Field label={t("roles.clientType")} hint={t("roles.clientTypeHint")}>
-          <Select
-            required
+          <Dropdown
             value={clientTypeId}
-            onChange={(event) => setClientTypeId(event.target.value)}
-          >
-            <option value="">—</option>
-            {clientTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="—"
+            items={clientTypes.map((type) => ({ value: type.id, label: type.name }))}
+            onChange={setClientTypeId}
+          />
         </Field>
 
         <div className="flex justify-end gap-2">

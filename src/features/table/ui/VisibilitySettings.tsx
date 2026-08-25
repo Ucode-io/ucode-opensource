@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { HIDE_COMPARISONS, type FieldDraft } from "../model/field-draft";
 import { localized, type Field } from "../model/types";
@@ -57,36 +57,32 @@ export function VisibilitySettings({
       <span className="text-2xs text-fg-muted">{t("visibility.title")}</span>
 
       <Labeled label={t("visibility.field")}>
-        <Select
+        <Dropdown
+          size="sm"
           value={draft.hideField}
-          onChange={(event) => pick(event.target.value)}
-          className="h-7 px-1.5 text-xs"
-        >
-          <option value="">—</option>
-          {sources.map((field) => (
-            <option key={field.id} value={field.slug}>
-              {localized(field.labels, language, field.label) || field.slug}
-            </option>
-          ))}
-        </Select>
+          placeholder="—"
+          items={sources.map((field) => ({
+            value: field.slug,
+            label: localized(field.labels, language, field.label) || field.slug,
+          }))}
+          onChange={pick}
+        />
       </Labeled>
 
       {draft.hideField && (
         <>
           {numeric && (
             <Labeled label={t("visibility.compare")}>
-              <Select
+              <Dropdown
+                size="sm"
                 value={draft.hideCompare}
-                onChange={(event) => onChange({ hideCompare: event.target.value })}
-                className="h-7 px-1.5 text-xs"
-              >
-                <option value="">{t("visibility.compare.equals")}</option>
-                {HIDE_COMPARISONS.map((item) => (
-                  <option key={item} value={item}>
-                    {t(`visibility.compare.${item}`)}
-                  </option>
-                ))}
-              </Select>
+                placeholder={t("visibility.compare.equals")}
+                items={HIDE_COMPARISONS.map((item) => ({
+                  value: item,
+                  label: t(`visibility.compare.${item}`),
+                }))}
+                onChange={(hideCompare) => onChange({ hideCompare })}
+              />
             </Labeled>
           )}
 

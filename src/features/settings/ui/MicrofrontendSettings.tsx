@@ -19,6 +19,7 @@ import {
 } from "@/features/microfrontend";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
@@ -194,24 +195,23 @@ function LoginBinding({ items }: { items: ManagedMicrofrontend[] }) {
           />
         </div>
 
-        <select
+        {/* Пустой выбор — это и есть «отвязать»: своей ручки снятия
+            у бэкенда нет, снимается пустым `microfront_id`. Поэтому
+            «не привязан» стоит строкой в списке, а не только подписью
+            на кнопке: с неё выбрать нельзя. */}
+        <Dropdown
+          size="sm"
           value={binding?.microfrontId ?? ""}
+          placeholder={t("microfrontends.loginNone")}
+          ariaLabel={t("microfrontends.title")}
+          className="w-64"
           disabled={!subdomain || bind.isPending}
-          onChange={(event) =>
-            bind.mutate({ binding, microfrontId: event.target.value, subdomain })
-          }
-          aria-label={t("microfrontends.title")}
-          className="h-7 min-w-48 rounded-md border border-border-strong bg-surface px-1.5 text-sm text-fg outline-none focus:border-accent disabled:opacity-40"
-        >
-          {/* Пустой выбор — это и есть «отвязать»: своей ручки снятия
-              у бэкенда нет, снимается пустым `microfront_id`. */}
-          <option value="">{t("microfrontends.loginNone")}</option>
-          {items.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name || item.url}
-            </option>
-          ))}
-        </select>
+          items={[
+            { value: "", label: t("microfrontends.loginNone") },
+            ...items.map((item) => ({ value: item.id, label: item.name || item.url })),
+          ]}
+          onChange={(microfrontId) => bind.mutate({ binding, microfrontId, subdomain })}
+        />
       </div>
     </div>
   );
@@ -385,18 +385,14 @@ function VersionsDialog({
             {opened && (
               <>
                 <div className="flex items-center gap-2">
-                  <select
+                  <Dropdown
+                    size="sm"
                     value={current?.path ?? ""}
-                    onChange={(event) => setFile(event.target.value)}
-                    aria-label={t("functions.code")}
-                    className="h-7 min-w-0 flex-1 rounded-md border border-border-strong bg-surface px-1.5 font-mono text-2xs text-fg outline-none focus:border-accent"
-                  >
-                    {files.files.map((one) => (
-                      <option key={one.path} value={one.path}>
-                        {one.path}
-                      </option>
-                    ))}
-                  </select>
+                    ariaLabel={t("functions.code")}
+                    className="min-w-0 flex-1 font-mono"
+                    items={files.files.map((one) => ({ value: one.path, label: one.path }))}
+                    onChange={setFile}
+                  />
 
                   {/* Откат кладёт снимок в `u-gen`. Живым он станет
                       только после публикации — так и написано. */}

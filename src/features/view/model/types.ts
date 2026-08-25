@@ -1,3 +1,4 @@
+import type { ChartConfig } from "@/features/item";
 import i18n from "@/shared/lib/i18n";
 import type { UrlTemplate } from "./url-template";
 
@@ -7,11 +8,22 @@ import type { UrlTemplate } from "./url-template";
  * два пункта могут показывать одну таблицу разными наборами view.
  */
 
-/** Типы, которые отдаёт бэкенд. Рисуются те, что в IMPLEMENTED_VIEW_TYPES. */
+/**
+ * Типы, которые отдаёт бэкенд. Рисуются те, что в IMPLEMENTED_VIEW_TYPES.
+ *
+ * CHART бэкенд не знает — и знать ему нечего: колонка `type` это
+ * VARCHAR без ограничения (migrations/postgres/000001_init_tables.up.sql,
+ * таблица `view`), ручки создания и правки тип не проверяют вовсе
+ * (gateway, api/handlers/v2/view.go), а `helper.VIEW_TYPES` читается
+ * ровно в одной ветке — под BOARD (storage/postgres/view.go:65).
+ * PIVOT, TIMELINE, GRID и SECTION в той же карте тоже отсутствуют
+ * и живут годами.
+ */
 export const VIEW_TYPES = [
   "TABLE",
   "BOARD",
   "CALENDAR",
+  "CHART",
   "GRID",
   "PIVOT",
   "SECTION",
@@ -36,13 +48,19 @@ export const IMPLEMENTED_VIEW_TYPES = new Set<string>([
   "CALENDAR",
   "TIMELINE",
   "PIVOT",
+  "CHART",
 ]);
 
 /**
  * Типы, которыми бывает ВКЛАДКА СВЯЗИ в карточке записи.
  *
- * Совпадает с IMPLEMENTED_VIEW_TYPES, но список свой не зря: два типа
- * во вкладке устроены иначе, чем на экране.
+ * Почти IMPLEMENTED_VIEW_TYPES, но список свой не зря: два типа
+ * во вкладке устроены иначе, чем на экране, а один в неё не идёт вовсе.
+ *
+ * ГРАФИКОВ во вкладке нет. Не запрет по существу — сводки по строкам
+ * одной связи бывают осмысленными, — а честный отказ показывать
+ * вкладку, за которой пусто: раскладку графиков рисует экран
+ * (routes/_authed.m.$menuId), и во вкладке её сейчас никто не рисует.
  *
  * У КАЛЕНДАРЯ период и видимый день живут в своём состоянии, а не
  * в адресе: адрес занят основной таблицей — той, из которой открыли
@@ -62,7 +80,9 @@ export const IMPLEMENTED_VIEW_TYPES = new Set<string>([
  * groupByParent). Старая админка фильтры в эту ручку шлёт и получает
  * то самое «всё» — см. docs/backend-notes.md.
  */
-export const TAB_VIEW_TYPES = VIEW_TYPES.filter((type) => IMPLEMENTED_VIEW_TYPES.has(type));
+export const TAB_VIEW_TYPES = VIEW_TYPES.filter(
+  (type) => IMPLEMENTED_VIEW_TYPES.has(type) && type !== "CHART",
+);
 
 export type View = {
   id: string;
@@ -247,6 +267,15 @@ export type View = {
    * Тоже только читается — по той же причине, что и `statusFieldSlug`.
    */
   disableDates: { tableSlug: string; daySlug: string } | null;
+  /**
+   * Графики экрана CHART (`attributes.charts`), в порядке показа.
+   * У остальных типов пусто.
+   *
+   * Настройка view, а не человека: это раскладка, которую админ собрал
+   * всем, — как колонки таблицы. Ключ наш; бэкенд про него не знает
+   * и знать не должен — attributes это свободный JSONB.
+   */
+  charts: ChartConfig[];
   /**
    * Режим, с которого календарь открывается (`attributes.period`):
    * MONTH, WEEK или DAY. Пусто — MONTH.

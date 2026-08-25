@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Field } from "@/features/table";
-import { moveBefore, pickView, resolveColumns, tabViews } from "./columns";
+import { pickView, resolveColumns, tabViews } from "./columns";
 import { EMPTY_URL_TEMPLATE } from "./url-template";
 import type { View } from "./types";
 
@@ -44,6 +44,7 @@ const view = (columnIds: string[]): View => ({
   dateToSlug: "",
   statusFieldSlug: "",
   disableDates: null,
+  charts: [],
   period: "",
   tabGroupId: "",
   subGroupId: "",
@@ -126,14 +127,4 @@ test("ссылка на удалённый view открывает первую 
   expect(pickView([table, board], "b")?.id).toBe("b");
   expect(pickView([table, board], "ghost")?.id).toBe("t");
   expect(pickView([], "t")).toBeUndefined();
-});
-
-test("перетащенная колонка встаёт перед целью — и сверху вниз, и снизу вверх", () => {
-  expect(moveBefore(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "a", "c", "d"]);
-  expect(moveBefore(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
-});
-
-test("бросок на себя и мимо списка порядок не меняют", () => {
-  expect(moveBefore(["a", "b"], "a", "a")).toEqual(["a", "b"]);
-  expect(moveBefore(["a", "b"], "a", "z")).toEqual(["a", "b"]);
 });

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/shared/ui/checkbox";
-import { Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { useTableSchema } from "../api/schema";
 import { tableFromSlug, type FieldDraft } from "../model/field-draft";
 import { localized, type Relation } from "../model/types";
@@ -56,37 +56,33 @@ export function AutofillSettings({
       <span className="text-2xs text-fg-muted">{t("autofill.title")}</span>
 
       <Labeled label={t("autofill.relation")}>
-        <Select
+        <Dropdown
+          size="sm"
           value={draft.autofillTable}
+          placeholder="—"
+          items={sources.map((relation) => ({
+            value: `${relation.toSlug}#${relation.fieldFrom}`,
+            label: relation.toSlug,
+          }))}
           // Поле выбиралось в прежней таблице: в новой такого слага нет,
           // и оставить его значит просить бэкенд о несуществующем поле.
-          onChange={(event) => onChange({ autofillTable: event.target.value, autofillField: "" })}
-          className="h-7 px-1.5 text-xs"
-        >
-          <option value="">—</option>
-          {sources.map((relation) => (
-            <option key={relation.id} value={`${relation.toSlug}#${relation.fieldFrom}`}>
-              {relation.toSlug}
-            </option>
-          ))}
-        </Select>
+          onChange={(autofillTable) => onChange({ autofillTable, autofillField: "" })}
+        />
       </Labeled>
 
       {slug && (
         <>
           <Labeled label={t("autofill.field")}>
-            <Select
+            <Dropdown
+              size="sm"
               value={draft.autofillField}
-              onChange={(event) => onChange({ autofillField: event.target.value })}
-              className="h-7 px-1.5 text-xs"
-            >
-              <option value="">—</option>
-              {usable.map((field) => (
-                <option key={field.id} value={field.slug}>
-                  {localized(field.labels, language, field.label)}
-                </option>
-              ))}
-            </Select>
+              placeholder="—"
+              items={usable.map((field) => ({
+                value: field.slug,
+                label: localized(field.labels, language, field.label),
+              }))}
+              onChange={(autofillField) => onChange({ autofillField })}
+            />
           </Labeled>
 
           <label className="flex h-7 cursor-pointer items-center gap-2 rounded-md transition-colors hover:bg-surface-hover">

@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
-import { Field, Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field, Input } from "@/shared/ui/input";
 import { LanguageTabs } from "@/shared/ui/language-tabs";
 import { ImagePicker } from "./ImagePicker";
 import {
@@ -92,27 +93,23 @@ export function ProjectSettings() {
         </Field>
 
         <Field label={t("settings.timezone")}>
-          <Select value={timezoneId} onChange={(event) => setTimezoneId(event.target.value)}>
-            <option value="">{t("settings.noTimezone")}</option>
-            {timezones.map((zone) => (
-              <option key={zone.id} value={zone.id}>
-                {zone.name}
-              </option>
-            ))}
-          </Select>
+          <Dropdown
+            value={timezoneId}
+            placeholder={t("settings.noTimezone")}
+            items={timezones.map((zone) => ({ value: zone.id, label: zone.name }))}
+            onChange={setTimezoneId}
+          />
         </Field>
 
         {/* Валюта проекта: ею подписаны денежные поля. Тот же справочник,
             что у языков и поясов, — только с другим типом. */}
         <Field label={t("settings.currency")}>
-          <Select value={currencyId} onChange={(event) => setCurrencyId(event.target.value)}>
-            <option value="">{t("settings.noCurrency")}</option>
-            {currencies.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </Select>
+          <Dropdown
+            value={currencyId}
+            placeholder={t("settings.noCurrency")}
+            items={currencies.map((item) => ({ value: item.id, label: item.name }))}
+            onChange={setCurrencyId}
+          />
         </Field>
       </div>
 

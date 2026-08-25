@@ -3,6 +3,7 @@ import { IconFileSpreadsheet, IconLoader2 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { localized, type Field } from "@/features/table";
 import { Button } from "@/shared/ui/button";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import { Modal } from "@/shared/ui/modal";
 import { useImportExcel, useReadExcel } from "../api/excel";
@@ -116,20 +117,14 @@ export function ExcelImportDialog({
                     {localized(field.labels, language, field.label)}
                   </span>
 
-                  <select
+                  <Dropdown
                     value={mapping[field.id] ?? ""}
-                    onChange={(event) =>
-                      setMapping((prev) => ({ ...prev, [field.id]: event.target.value }))
-                    }
-                    className="h-8 w-56 shrink-0 rounded-md border border-border-strong bg-surface px-2 text-sm text-fg"
-                  >
-                    <option value="">{t("view.importSkip")}</option>
-                    {file.columns.map((column) => (
-                      <option key={column} value={column}>
-                        {column}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={t("view.importSkip")}
+                    ariaLabel={localized(field.labels, language, field.label)}
+                    className="w-56 shrink-0"
+                    items={file.columns.map((column) => ({ value: column, label: column }))}
+                    onChange={(column) => setMapping((prev) => ({ ...prev, [field.id]: column }))}
+                  />
                 </label>
               ))}
             </div>

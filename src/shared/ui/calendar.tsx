@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ChangeEvent } from "react";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { DayPicker } from "react-day-picker";
 import { ru, uz } from "react-day-picker/locale";
+import { Dropdown } from "./dropdown";
 import { Icon } from "./icon";
 
 /**
@@ -71,6 +72,32 @@ export function Calendar({
         Chevron: ({ orientation }) => (
           <Icon as={orientation === "left" ? IconChevronLeft : IconChevronRight} size={16} />
         ),
+        /*
+         * Месяц и год — нашим списком, а не родным `<select>`, который
+         * рисует библиотека. Системное меню не знает тёмной темы
+         * и в каждой ОС выглядит по-своему, а стоит оно посреди нашего
+         * календаря.
+         *
+         * Событие подделываем: обработчик библиотеки читает из него
+         * ровно `target.value` и больше ничего (DayPicker.js,
+         * handleMonthChange).
+         */
+        Dropdown: ({ options = [], value, onChange, disabled, className, ...rest }) => (
+          <Dropdown
+            size="sm"
+            className={className ?? ""}
+            value={String(value ?? "")}
+            {...(rest["aria-label"] ? { ariaLabel: rest["aria-label"] } : {})}
+            disabled={disabled ?? false}
+            items={options.map((option) => ({
+              value: String(option.value),
+              label: option.label,
+            }))}
+            onChange={(next) =>
+              onChange?.({ target: { value: next } } as ChangeEvent<HTMLSelectElement>)
+            }
+          />
+        ),
       }}
       classNames={{
         root: "relative w-fit select-none",
@@ -79,12 +106,11 @@ export function Calendar({
         month_caption: "flex h-8 items-center px-1 text-sm font-medium",
         caption_label: "flex items-center gap-0.5 capitalize",
         dropdowns: "flex items-center gap-1",
-        dropdown_root: "relative flex items-center rounded-md px-1 hover:bg-surface-hover",
-        /* Родной <select> лежит поверх и прозрачен: список раскрывает
-           система — он длиной в сто лет и прокручивается как надо, —
-           а видно нашу подпись со стрелкой (см. компонент Dropdown
-           библиотеки: select и caption_label лежат в одном span). */
-        dropdown: "absolute inset-0 cursor-pointer opacity-0",
+        /* Ширины фиксированные: подпись месяца меняется от «май»
+           до «сентябрь», и без них соседний список ездил бы вбок
+           при каждом перелистывании. */
+        months_dropdown: "w-32",
+        years_dropdown: "w-20",
         nav: "absolute right-0 top-0 flex items-center gap-0.5",
         button_previous: navButton,
         button_next: navButton,

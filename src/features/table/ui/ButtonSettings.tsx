@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { IconPicker } from "@/features/icons";
-import { Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { useFunctions } from "../api/functions";
 import type { FieldDraft } from "../model/field-draft";
 import { Labeled } from "./FormulaSettings";
@@ -48,26 +48,23 @@ export function ButtonSettings({
       )}
 
       <Labeled label={t("button.function")}>
-        <Select
+        <Dropdown
+          size="sm"
           value={draft.functionId}
-          onChange={(event) => onChange({ functionId: event.target.value })}
-          className="h-7 px-1.5 text-xs"
-        >
-          <option value="">—</option>
-          {/*
-            Выбранная функция могла быть удалена — тогда её нет в списке,
-            и select показал бы первую попавшуюся. Держим её отдельной
-            строкой: настройка видна, и случайной подмены не происходит.
-          */}
-          {draft.functionId && !functions.some((item) => item.id === draft.functionId) && (
-            <option value={draft.functionId}>{draft.functionId}</option>
-          )}
-          {functions.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </Select>
+          placeholder="—"
+          items={[
+            /*
+              Выбранная функция могла быть удалена — тогда её нет в списке,
+              и на кнопке осталось бы пустое место. Держим её отдельной
+              строкой: настройка видна, и случайной подмены не происходит.
+            */
+            ...(draft.functionId && !functions.some((item) => item.id === draft.functionId)
+              ? [{ value: draft.functionId, label: draft.functionId }]
+              : []),
+            ...functions.map((item) => ({ value: item.id, label: item.name })),
+          ]}
+          onChange={(functionId) => onChange({ functionId })}
+        />
       </Labeled>
 
       {/* Без функции кнопка нарисуется, но ничего не сделает: сказать

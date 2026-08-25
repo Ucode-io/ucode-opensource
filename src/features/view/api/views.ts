@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toCharts, toChartsAttribute, type ChartConfig } from "@/features/item";
 import type { Field } from "@/features/table";
 import { api } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
@@ -295,6 +296,11 @@ export type ViewEdit = {
   dateFrom?: string;
   /** Слаг поля конца события. Пустая строка — событие точкой в дне. */
   dateTo?: string;
+  /**
+   * Графики экрана CHART целиком, в порядке показа. Пустой список —
+   * убрать все: это тоже правка, а не «не трогали».
+   */
+  charts?: ChartConfig[];
 };
 
 /**
@@ -328,6 +334,7 @@ export function toUpdateBody({
   subGroup,
   dateFrom,
   dateTo,
+  charts,
 }: ViewEdit): Record<string, unknown> {
   const raw = view.raw;
   const trimmed = name?.trim();
@@ -373,6 +380,12 @@ export function toUpdateBody({
      * от «поля с пустым id», а null отличается.
      */
     ...(subGroup === undefined ? {} : { sub_group_by_id: subGroup || null }),
+    /*
+     * Графики. Список целиком, включая пустой: убрать последний график
+     * — такая же правка, как добавить первый, и «не трогали» здесь
+     * означает только `undefined`.
+     */
+    ...(charts === undefined ? {} : { charts: toChartsAttribute(charts) }),
   };
 
   return {
@@ -495,6 +508,7 @@ export function toView(dto: ViewDto): View {
     dateToSlug: toDateSlug(dto.calendar_to_slug, dto.attributes, "calendar_to_slug"),
     statusFieldSlug: dto.status_field_slug?.trim() ?? "",
     disableDates: toDisableDates(dto.disable_dates),
+    charts: toCharts(dto.attributes?.["charts"]),
     period: typeof dto.attributes?.["period"] === "string" ? dto.attributes["period"] : "",
     raw: { ...dto },
   };

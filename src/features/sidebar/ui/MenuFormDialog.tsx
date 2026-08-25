@@ -10,7 +10,8 @@ import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
 import type { TranslationKey } from "@/shared/lib/i18n";
-import { Field, Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field, Input } from "@/shared/ui/input";
 import { slugify } from "@/shared/lib/slug";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { Modal } from "@/shared/ui/modal";
@@ -417,18 +418,12 @@ function RemoteFields({
           label={t("menuForm.microfrontend")}
           hint={isLoading ? t("common.loading") : t("menuForm.microfrontendHint")}
         >
-          <Select
-            required
+          <Dropdown
             value={value.microfrontendId}
-            onChange={(event) => onChange({ microfrontendId: event.target.value })}
-          >
-            <option value="">{t("menuForm.microfrontendPick")}</option>
-            {items.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </Select>
+            placeholder={t("menuForm.microfrontendPick")}
+            items={items.map((item) => ({ value: item.id, label: item.name }))}
+            onChange={(microfrontendId) => onChange({ microfrontendId })}
+          />
         </Field>
       )}
 

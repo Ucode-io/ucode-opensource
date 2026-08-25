@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Chip } from "@/shared/ui/chip";
 import { Icon } from "@/shared/ui/icon";
-import { Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Input } from "@/shared/ui/input";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { useRelationRows } from "../api/relation-rows";
 import { useTableSchema } from "../api/schema";
@@ -222,52 +223,46 @@ function AggregateEditor({
   return (
     <div className="flex flex-col gap-1.5 px-2 py-1">
       <Labeled label={t("formula.aggregate")}>
-        <Select
+        <Dropdown
+          size="sm"
           value={aggregate.type}
-          onChange={(event) => patch({ type: event.target.value as Aggregate["type"] })}
-          className="h-7 px-1.5 text-xs"
-        >
-          <option value="">—</option>
-          {AGGREGATES.map((type) => (
-            <option key={type} value={type}>
-              {t(`formula.${type}` as TranslationKey)}
-            </option>
-          ))}
-        </Select>
+          placeholder="—"
+          items={AGGREGATES.map((type) => ({
+            value: type,
+            label: t(`formula.${type}` as TranslationKey),
+          }))}
+          onChange={(type) => patch({ type: type as Aggregate["type"] })}
+        />
       </Labeled>
 
       <Labeled label={t("formula.table")}>
-        <Select
+        <Dropdown
+          size="sm"
           value={aggregate.tableFrom}
+          placeholder="—"
+          items={linked.map((relation) => ({
+            value: `${relation.toSlug}#${relation.id}`,
+            label: relation.toSlug,
+          }))}
           // Поле и отбор считались по прежней таблице: в новой таких
           // слагов нет, и оставить их значит отправить отбор по полям,
           // которых там не существует.
-          onChange={(event) => patch({ tableFrom: event.target.value, field: "", filters: [] })}
-          className="h-7 px-1.5 text-xs"
-        >
-          <option value="">—</option>
-          {linked.map((relation) => (
-            <option key={relation.id} value={`${relation.toSlug}#${relation.id}`}>
-              {relation.toSlug}
-            </option>
-          ))}
-        </Select>
+          onChange={(tableFrom) => patch({ tableFrom, field: "", filters: [] })}
+        />
       </Labeled>
 
       {slug && (
         <Labeled label={t("formula.field")}>
-          <Select
+          <Dropdown
+            size="sm"
             value={aggregate.field}
-            onChange={(event) => patch({ field: event.target.value })}
-            className="h-7 px-1.5 text-xs"
-          >
-            <option value="">—</option>
-            {summable.map((field) => (
-              <option key={field.id} value={field.slug}>
-                {localized(field.labels, language, field.label)}
-              </option>
-            ))}
-          </Select>
+            placeholder="—"
+            items={summable.map((field) => ({
+              value: field.slug,
+              label: localized(field.labels, language, field.label),
+            }))}
+            onChange={(field) => patch({ field })}
+          />
         </Labeled>
       )}
 
@@ -358,20 +353,19 @@ function FilterList({
         return (
           <div key={index} className="flex flex-col gap-1 rounded-md border border-border p-1">
             <div className="flex items-center gap-1">
-              <Select
+              <Dropdown
+                size="sm"
                 value={filter.key}
+                placeholder="—"
+                className="min-w-0 flex-1"
+                items={usable.map((item) => ({
+                  value: filterKey(item),
+                  label: localized(item.labels, language, item.label),
+                }))}
                 // Ключ составной — «слаг#ТИП#таблица»: в нём и лежит всё,
                 // что нужно и нам, и бэкенду, чтобы понять условие.
-                onChange={(event) => patch(index, { key: event.target.value, value: null })}
-                className="h-7 min-w-0 flex-1 px-1.5 text-xs"
-              >
-                <option value="">—</option>
-                {usable.map((item) => (
-                  <option key={item.id} value={filterKey(item)}>
-                    {localized(item.labels, language, item.label)}
-                  </option>
-                ))}
-              </Select>
+                onChange={(key) => patch(index, { key, value: null })}
+              />
 
               <button
                 type="button"

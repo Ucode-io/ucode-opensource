@@ -37,6 +37,7 @@ import {
   periodRange,
   formatPivotSort,
   parsePivotSort,
+  ChartView,
   PivotView,
   toAggregation,
   toPeriod,
@@ -44,6 +45,7 @@ import {
   Timeline,
   useUndatedRows,
   type CalendarPeriod,
+  type ChartConfig,
   type PivotSetup,
   type TimelineScale,
   activeFilterCount,
@@ -213,6 +215,19 @@ const searchSchema = z.object({
  * и день. Не влезло — в шапке календаря появляется «Показать ещё».
  */
 const CALENDAR_LIMIT = 200;
+
+/**
+ * Сколько строк берут графики, пока не выбрали иначе.
+ *
+ * Больше календарной порции: у графика каждая строка — это одно
+ * слагаемое, и чем их меньше, тем чаще картинка описывает начало
+ * списка, а не таблицу. Пятьсот покрывают большинство таблиц целиком
+ * и не превращают открытие экрана в мегабайты.
+ *
+ * Потолок выбора — `MAX_LIMIT` (1000): одной порцией больше не берётся,
+ * дальше сужают отбором. Экран графиков про это говорит прямо.
+ */
+const CHART_SAMPLE = 500;
 
 /** «ГГГГ-ММ-ДД» из адреса → день. Мусор — сегодня, а не пустой экран. */
 function parseDay(value: string | undefined): Date {
@@ -475,6 +490,12 @@ function MenuPage() {
    * выборка, и экран об этом говорит счётчиком.
    */
   const pivotView = supportedView && view?.type === "PIVOT";
+  /*
+   * CHART — те же строки, сведённые в графики. Считается загруженная
+   * выборка, как и у сводной, и по той же причине; отличается только
+   * тем, что раскладку графиков задаёт админ и она живёт в view.
+   */
+  const chartView = supportedView && view?.type === "CHART";
   const pivotSetup: PivotSetup = {
     rowSlugs: (search.pivotRow ?? "").split(",").filter(Boolean),
     colSlug: search.pivotCol ?? "",
@@ -561,6 +582,15 @@ function MenuPage() {
   const rememberedLimit = view ? tableLimits[view.tableSlug] : undefined;
   const limit = boardView
     ? BOARD_LIMIT
+    : /*
+       * У графиков размер порции — это «по скольким строкам считать»,
+       * и человек его выбирает. Запомненный размер страницы таблицы
+       * и `view.defaultLimit` сюда не идут: «сколько строк на странице»
+       * и «сколько строк в расчёте» — разные вопросы, и общая память
+       * связала бы их случайно.
+       */
+      chartView
+    ? search.limit ?? CHART_SAMPLE
     : dateView || pivotView
     ? CALENDAR_LIMIT
     : search.limit ??
@@ -865,13 +895,13 @@ function MenuPage() {
    * сразу, и «страница 2» показала бы десять колонок, в каждой из
    * которых чужая середина списка.
    */
-  /* Сводная считает загруженное, поэтому и грузит прокруткой: страницы
-     здесь означали бы «итог по третьей странице». */
-  const infinite = view?.infiniteScroll === true || boardView || dateView || pivotView;
+  /* Сводная и графики считают загруженное, поэтому и грузят прокруткой:
+     страницы здесь означали бы «итог по третьей странице». */
+  const infinite =
+    view?.infiniteScroll === true || boardView || dateView || pivotView || chartView;
 
   /** Экраны, на которых порядок строк не виден и сортировать нечего. */
-  /** Экраны, на которых порядок строк не виден и сортировать нечего. */
-  const sortless = boardView || dateView || pivotView;
+  const sortless = boardView || dateView || pivotView || chartView;
 
   const {
     page: rows,
@@ -1689,6 +1719,32 @@ function MenuPage() {
                   }
                 : {})}
             />
+          ) : chartView ? (
+            <ChartView
+              columns={columns}
+              relations={schema.relations}
+              rows={rows.rows}
+              language={language}
+              /* Приехало всё, что есть: тогда и счётчик говорит «по всем». */
+              loaded={!hasMore && !loadingMore}
+              /* Сколько строк под этим отбором ВСЕГО — это знает сервер,
+                 и без него полоса покрытия могла бы сказать только
+                 «часть», не назвав, часть чего. */
+              total={rows.count}
+              sample={limit}
+              onSample={(next: number) => setSearch({ limit: next })}
+              charts={view.charts}
+              /*
+               * Раскладку графиков правит тот же, кто правит остальные
+               * настройки view: это его настройка, а не личная. Нет
+               * права — нет и режима правки, кнопки в том числе.
+               */
+              {...(can.settings && rightsOf(view.id).edit
+                ? {
+                    onCharts: (charts: ChartConfig[]) => updateView.mutate({ view, charts }),
+                  }
+                : {})}
+            />
           ) : pivotView ? (
             <PivotView
               columns={columns}
@@ -1697,6 +1753,8 @@ function MenuPage() {
               language={language}
               /* Приехало всё, что есть: тогда и счётчик говорит «по всем». */
               loaded={!hasMore && !loadingMore}
+              /* А если не всё — счётчик обязан назвать, из скольких. */
+              total={rows.count}
               onSetup={(next) =>
                 setSearch({
                   ...(next.rowSlugs === undefined
@@ -1870,8 +1928,13 @@ function MenuPage() {
 
               У доски подвала нет вовсе: страницами её не листают, а
               размер порции у неё свой и не настраивается. Сколько
-              карточек в колонке — написано в её шапке. */}
-          {!rowsError && !boardView && !dateView && !pivotView && (
+              карточек в колонке — написано в её шапке.
+
+              У графиков — по той же причине, что у сводной: страницами
+              их не листают, а размер порции там не «строк на странице»,
+              а «по скольким строкам считать», и стоит он над графиками,
+              рядом с тем, что от него зависит. */}
+          {!rowsError && !boardView && !dateView && !pivotView && !chartView && (
           <GridFooter
             /* Со страницами подвал листает, с прокруткой — считает. */
             {...(infinite ? {} : { page: search.page, onPage: (next: number) => setSearch({ page: next }) })}

@@ -1,9 +1,14 @@
-import type { UIEvent } from "react";
+import type { ReactNode, UIEvent } from "react";
 import { IconCheck, IconChevronDown, IconSearch } from "@tabler/icons-react";
 import { Icon } from "./icon";
 import { Popover, PopoverItem } from "./popover";
 
-export type DropdownItem = { value: string; label: string };
+/**
+ * Значок необязателен и нужен там, где у варианта есть силуэт: форма
+ * графика узнаётся по нему быстрее, чем по названию. Список без значков
+ * от этого не меняется — отступа под пустое место не появляется.
+ */
+export type DropdownItem = { value: string; label: string; icon?: ReactNode };
 
 /**
  * Выпадающий список в нашем оформлении.
@@ -19,10 +24,8 @@ export type DropdownItem = { value: string; label: string };
  * и грузит вызывающий: `shared/` не знает ни про запросы, ни про то,
  * откуда берутся строки.
  *
- * Отличие от `SelectMenu`: тот раскрывается НА МЕСТЕ и живёт внутри
- * панели поля — она сама всплывашка со своим Escape, и второго слоя
- * поверх ей не нужно. Здесь наоборот: место под кнопкой занято таблицей
- * или строкой отбора, и раскрываться список должен слоем поверх.
+ * Выбор одиночный. Множественный — у `SelectMenu`: там флажки и список
+ * не закрывается после каждой строки.
  */
 export function Dropdown({
   value,
@@ -30,6 +33,8 @@ export function Dropdown({
   placeholder = "",
   ariaLabel,
   className = "",
+  size = "md",
+  disabled = false,
   onChange,
   search,
   searchPlaceholder = "",
@@ -46,6 +51,15 @@ export function Dropdown({
   ariaLabel?: string;
   /** Ширина задаётся снаружи: у панели свои размеры. */
   className?: string;
+  /**
+   * Высота кнопки. `sm` — для панели настроек поля и строк отбора, где
+   * поля стоят в столбик по десятку и в полный рост не помещаются.
+   * Отдельным свойством, а не классом снаружи: у конфликтующих утилит
+   * Tailwind побеждает не та, что стоит позже в атрибуте, а та, что
+   * позже в собранном CSS, — и высота получалась бы через раз.
+   */
+  size?: "sm" | "md";
+  disabled?: boolean;
   onChange: (value: string) => void;
   /** Строка поиска. Есть `onSearch` — над списком появляется поле. */
   search?: string;
@@ -81,13 +95,23 @@ export function Dropdown({
         <button
           type="button"
           onClick={toggle}
+          disabled={disabled}
           aria-expanded={open}
           aria-haspopup="menu"
           {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
-          className={`flex h-(--spacing-input) w-full items-center gap-2 rounded-md border bg-surface px-2.5 text-left text-sm transition-colors ${
-            open ? "border-accent" : "border-border-strong hover:border-fg-subtle"
-          } ${className}`}
+          /* Ширины здесь нет намеренно: `w-full` в базовом классе
+             побеждал бы `w-40` снаружи — у Tailwind выигрывает не тот
+             класс, что стоит позже в атрибуте, а тот, что позже в CSS.
+             В колонке кнопка растягивается сама, в строке ширину задаёт
+             flex-1 или явный класс. */
+          className={`flex items-center gap-2 rounded-md border bg-surface text-left transition-colors disabled:opacity-50 ${
+            size === "sm" ? "h-7 px-1.5 text-xs" : "h-(--spacing-input) px-2.5 text-sm"
+          } ${open ? "border-accent" : "border-border-strong hover:border-fg-subtle"} ${className}`}
         >
+          {/* Значок выбранного — на кнопке, а не только в раскрытом
+              списке: иначе он виден ровно в тот момент, когда уже
+              не нужен. */}
+          {chosen?.icon}
           <span className={`flex-1 truncate ${chosen ? "text-fg" : "text-fg-subtle"}`}>
             {chosen?.label ?? placeholder}
           </span>
@@ -105,7 +129,7 @@ export function Dropdown({
               по видимой его части, и уезжать вверх вместе со строками
               ему незачем. */}
           {onSearch && (
-            <label className="mb-1 flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-sm">
+            <label className="mb-1 flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-sm">
               <Icon as={IconSearch} size={14} className="shrink-0 text-fg-subtle" />
               <input
                 autoFocus
@@ -118,13 +142,14 @@ export function Dropdown({
           )}
 
           {/* Список бывает длиннее экрана — прокручиваем его, а не страницу.
-              Popover подкручивает себя в видимую часть, но высоту не
-              ограничивает: это дело содержимого. */}
-          <div className="max-h-64 overflow-y-auto" onScroll={onScroll}>
+              Высоту задаёт Popover по месту на экране; здесь берём остаток
+              после поиска, чтобы тот остался на виду. */}
+          <div className="max-h-64 min-h-0 flex-1 overflow-y-auto" onScroll={onScroll}>
             {items.map((item) => (
               <PopoverItem
                 key={item.value}
                 active={item.value === value}
+                {...(item.icon ? { icon: item.icon } : {})}
                 {...(item.value === value
                   ? { trailing: <Icon as={IconCheck} size={14} className="shrink-0" /> }
                   : {})}

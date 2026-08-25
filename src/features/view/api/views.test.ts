@@ -197,3 +197,40 @@ test("параметры адреса уезжают объектом, а стр
     params: [{ key: "from", value: "admin" }],
   });
 });
+
+/*
+ * Графики проходят полный круг: правка → тело PUT → тот же ответ
+ * с сервера → разбор. Кэш подменяется телом запроса (onMutate), значит
+ * экран читает ровно то, что здесь собрано, — и разойтись эти две
+ * половины не должны.
+ */
+test("графики уезжают в attributes и возвращаются оттуда теми же", () => {
+  const charts = [
+    {
+      id: "c1",
+      kind: "donut" as const,
+      title: "Города",
+      groupSlug: "city",
+      groupBucket: "" as const,
+      splitSlug: "",
+      splitBucket: "" as const,
+      aggregation: "sum" as const,
+      valueSlug: "amount",
+      width: 12,
+      height: 1,
+    },
+  ];
+
+  const body = toUpdateBody({ view: stored, charts });
+
+  // Чужие ключи attributes на месте: график их не вытесняет.
+  expect((body["attributes"] as Record<string, unknown>)["summaries"]).toEqual(["x"]);
+  expect(toView(body).charts).toEqual(charts);
+});
+
+test("последний убранный график — пустой список, а не «не трогали»", () => {
+  const body = toUpdateBody({ view: stored, charts: [] });
+
+  expect((body["attributes"] as Record<string, unknown>)["charts"]).toEqual([]);
+  expect(toView(body).charts).toEqual([]);
+});

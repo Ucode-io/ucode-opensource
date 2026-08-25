@@ -6,7 +6,8 @@ import { toast } from "@/shared/lib/toast";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Icon } from "@/shared/ui/icon";
-import { Field, Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { Tabs } from "@/shared/ui/tabs";
@@ -319,18 +320,12 @@ function UserDialog({
           )}
 
           <Field label={t("settings.role")}>
-            <Select
-              required
+            <Dropdown
               value={draft.roleId}
-              onChange={(event) => put({ roleId: event.target.value })}
-            >
-              <option value="">—</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </Select>
+              placeholder="—"
+              items={roles.map((role) => ({ value: role.id, label: role.name }))}
+              onChange={(roleId) => put({ roleId })}
+            />
           </Field>
         </div>
 
@@ -388,14 +383,12 @@ function InviteDialog({
         </div>
 
         <Field label={t("settings.role")}>
-          <Select value={roleId} onChange={(event) => setRoleId(event.target.value)}>
-            <option value="">—</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </Select>
+          <Dropdown
+            value={roleId}
+            placeholder="—"
+            items={roles.map((role) => ({ value: role.id, label: role.name }))}
+            onChange={setRoleId}
+          />
         </Field>
 
         <Field label={t("users.inviteLink")}>

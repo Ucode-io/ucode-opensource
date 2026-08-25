@@ -9,7 +9,7 @@ import { Tooltip } from "@/shared/ui/tooltip";
 import { boardLanes, boardOrderAt, groupValue, BOARD_ORDER } from "../model/board";
 import { cellKind } from "../model/cell-kind";
 import { isBlank } from "../model/cell-value";
-import { relationSelection } from "../model/relation";
+import { valueLabelOf } from "../model/relation";
 import type { Item } from "../model/types";
 import { Cell } from "./Cell";
 import { ActiveCell } from "./CellEditor";
@@ -135,17 +135,13 @@ export function Board({
         id: option.value,
         label: localized(option.labels, language, option.label || option.value),
       })),
-      labelOf: (row: Item, value: string) => {
-        const slugs = of.relationId ? byId.get(of.relationId)?.viewFields : undefined;
-        return (
-          relationSelection(row, of, slugs, language).find((item) => item.guid === value)?.label ??
-          ""
-        );
-      },
+      // Тот же разворот, что и у графиков: одно значение — одна подпись
+      // во всём приложении, а не две похожие на разных экранах.
+      labelOf: valueLabelOf(of, relations, language),
     });
 
     return make;
-  }, [byId, language]);
+  }, [relations, language]);
 
   const lanes = useMemo(() => {
     const group = groupOf(field);

@@ -4,6 +4,9 @@ export { Board } from "./ui/Board";
 export { useDisabledDays } from "./api/calendar";
 export { CalendarView } from "./ui/Calendar";
 export { PivotView } from "./ui/PivotView";
+export { ChartView } from "./ui/ChartView";
+export { toCharts, toChartsAttribute } from "./model/chart";
+export type { ChartConfig } from "./model/chart";
 export {
   AGGREGATIONS,
   DEFAULT_SORT,

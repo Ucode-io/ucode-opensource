@@ -13,7 +13,8 @@ import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Icon } from "@/shared/ui/icon";
-import { Field, Input, Select } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import {
   API_KEYS_PAGE,
@@ -332,44 +333,30 @@ function ApiKeyDialog({
         </Field>
 
         <Field label={t("settings.clientType")}>
-          <Select
-            required
+          <Dropdown
             value={draft.clientTypeId}
-            onChange={(event) => put({ clientTypeId: event.target.value, roleId: "" })}
-          >
-            <option value="">—</option>
-            {clientTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="—"
+            items={clientTypes.map((type) => ({ value: type.id, label: type.name }))}
+            onChange={(clientTypeId) => put({ clientTypeId, roleId: "" })}
+          />
         </Field>
 
         <Field label={t("settings.role")} hint={t("apiKeys.roleHint")}>
-          <Select
-            required
+          <Dropdown
             value={draft.roleId}
-            onChange={(event) => put({ roleId: event.target.value })}
-          >
-            <option value="">—</option>
-            {typeRoles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="—"
+            items={typeRoles.map((role) => ({ value: role.id, label: role.name }))}
+            onChange={(roleId) => put({ roleId })}
+          />
         </Field>
 
         {!apiKey && (
           <Field label={t("apiKeys.platform")} hint={t("apiKeys.platformHint")}>
-            <Select value={platformId} onChange={(event) => put({ platformId: event.target.value })}>
-              {platforms.map((platform) => (
-                <option key={platform.id} value={platform.id}>
-                  {platform.name}
-                </option>
-              ))}
-            </Select>
+            <Dropdown
+              value={platformId}
+              items={platforms.map((platform) => ({ value: platform.id, label: platform.name }))}
+              onChange={(id) => put({ platformId: id })}
+            />
           </Field>
         )}
 

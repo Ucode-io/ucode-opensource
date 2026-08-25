@@ -1,4 +1,4 @@
-import type { Field, Relation } from "@/features/table";
+import { localized, type Field, type Relation } from "@/features/table";
 import { relationLabel, type ViewField } from "@/shared/lib/relation-label";
 import { relationDataKey, type Item } from "./types";
 
@@ -60,6 +60,47 @@ export function relationSelection(
       label: relationLabel(item, fields, language),
     }))
     .filter((item) => item.guid || item.label);
+}
+
+/**
+ * Как показать ЗНАЧЕНИЕ поля, когда в строке лежит не то, что читают
+ * глазами: вариант списка — своей подписью, связь — подписью связанной
+ * строки.
+ *
+ * Нужна везде, где значение поля становится подписью само по себе,
+ * а не ячейкой: колонки доски, полосы и доли графика. Без неё экран
+ * показывает `3c4f677f-899f-…` вместо «Nma Gap» — то есть ровно то,
+ * чего в ucode быть не должно (CONTEXT, Relation).
+ *
+ * Возвращается функция, а не подпись: чтобы развернуть связь, нужна
+ * ИСХОДНАЯ строка — связанная запись приезжает рядом со ссылкой
+ * (`author_id` → `author_id_data`), а не отдельным запросом.
+ *
+ * Пусто — значит подставить нечего: ни вариантов у поля, ни полей
+ * показа у связи. Тогда зовущий оставляет само значение; выдумывать
+ * `title` или `name` нельзя.
+ */
+export function valueLabelOf(
+  field: Field,
+  relations: Relation[],
+  /** Язык ДАННЫХ: им отбираются и подписи вариантов, и поля показа. */
+  language: string,
+): (row: Item, value: string) => string {
+  const viewFields = field.relationId
+    ? relations.find((relation) => relation.id === field.relationId)?.viewFields
+    : undefined;
+
+  return (row, value) => {
+    if (field.relationId) {
+      return (
+        relationSelection(row, field, viewFields, language).find((item) => item.guid === value)
+          ?.label ?? ""
+      );
+    }
+
+    const option = field.options.get(value);
+    return option ? localized(option.labels, language, option.label || option.value) : "";
+  };
 }
 
 /**
