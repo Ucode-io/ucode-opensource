@@ -9,6 +9,7 @@ import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import { Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
+import { Tabs } from "@/shared/ui/tabs";
 import {
   ACTIVITY_PAGE,
   NO_FILTERS,
@@ -18,6 +19,7 @@ import {
   type ActivityFilters,
 } from "../api/activity";
 import { unwrapEntry } from "../model/activity";
+import { FunctionLogs } from "./FunctionLogs";
 import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
 
 /**
@@ -32,8 +34,35 @@ import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
  * список растёт вместе с ручками бэкенда, и зашитый в код перечень
  * устарел бы молча — так же, как он устарел в старой админке.
  * Сервер и сам сравнивает их через ILIKE.
+ *
+ * Рядом — вкладка выполнения функций. Предмет у неё другой (как
+ * отработал вызов, а не что поменялось в проекте), и общих колонок
+ * с этим списком нет ни одной, кроме даты, — поэтому вкладка,
+ * а не строки вперемешку. См. FunctionLogs.
  */
 export function ActivityLog() {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState("changes");
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-border px-4 py-2">
+        <Tabs
+          tabs={[
+            { id: "changes", label: t("activity.tabChanges") },
+            { id: "functions", label: t("activity.tabFunctions") },
+          ]}
+          activeId={tab}
+          onSelect={setTab}
+        />
+      </div>
+
+      {tab === "changes" ? <ChangesLog /> : <FunctionLogs />}
+    </div>
+  );
+}
+
+function ChangesLog() {
   const { t, i18n } = useTranslation();
 
   const [filters, setFilters] = useState<ActivityFilters>(NO_FILTERS);

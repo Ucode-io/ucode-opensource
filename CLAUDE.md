@@ -8,8 +8,10 @@
 1. [CONTEXT.md](CONTEXT.md) — словарь домена. Обязательно.
 2. [docs/PLAN.md](docs/PLAN.md) — принятые решения и порядок работ;
    продолжения — [docs/PLAN-v2.md](docs/PLAN-v2.md) (закрыт),
-   [docs/PLAN-v3.md](docs/PLAN-v3.md) (текущий),
+   [docs/PLAN-v3.md](docs/PLAN-v3.md) (закрыт),
+   [docs/PLAN-v4.md](docs/PLAN-v4.md) (текущий),
    [docs/PARITY.md](docs/PARITY.md) — чек паритета со старой админкой,
+   пройден целиком,
    [docs/FIELD-AUDIT.md](docs/FIELD-AUDIT.md) — сверка типов полей.
 3. [docs/adr/](docs/adr/) — решения, у которых есть цена.
 
@@ -44,7 +46,10 @@
 
 `/Users/nurmuhammad/Documents/workspace/IT/udevs/ucode/ucode_backend/` —
 `ucode_go_admin_api_gateway`, `ucode_go_object_builder_service`,
-`ucode_go_auth_service`, `ucode_go_company_service`.
+`ucode_go_auth_service`, `ucode_go_company_service`,
+`ucode_go_function_service` (функции и микрофронтенды; появился
+позже остальных — до него их поведение приходилось выводить
+по шлюзу).
 
 Читать — нужно и полезно: там истина о том, что делает ручка, что она
 пишет в базу, какие поля обязательны и почему ответ выглядит именно так.

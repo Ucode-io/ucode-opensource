@@ -7,3 +7,4 @@
  * иначе кнопке и панели пришлось бы знать друг о друге.
  */
 export { CopilotPanel, CopilotButton } from "./ui/CopilotPanel";
+export { CopilotPage } from "./ui/CopilotPage";

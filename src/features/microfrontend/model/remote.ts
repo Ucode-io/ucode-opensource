@@ -44,6 +44,23 @@ export type RemotePageProps = {
 export type RemotePage = ComponentType<RemotePageProps>;
 
 /**
+ * Пропсы ремоута, подменяющего ЭКРАН ВХОДА. Договор другой, и это
+ * не оплошность: там нет ни токена, ни окружения, ни пункта меню —
+ * есть только способ войти.
+ *
+ * Имя `loginAction` — из старой админки
+ * (`layouts/AuthLayout/LoginMicrofrontend.jsx:19`), где в него уезжал
+ * redux-thunk. Написанные под неё ремоуты зовут именно его, поэтому
+ * имя сохранено, а телом стал обычный вызов входа.
+ */
+export type LoginRemoteProps = {
+  loginAction: (credentials: { username: string; password: string }) => Promise<void>;
+  i18n: unknown;
+};
+
+export type LoginRemotePage = ComponentType<LoginRemoteProps>;
+
+/**
  * Полный адрес сборки.
  *
  * В базе лежит голый хост, без схемы: старая админка всюду склеивает
@@ -78,7 +95,10 @@ const registered = new Map<string, string>();
  * версию ремоута продвинули. Иначе каждый заход перезаписывал бы запись
  * рантайма и сбрасывал уже загруженный модуль.
  */
-export async function loadRemotePage(id: string, host: string): Promise<RemotePage> {
+export async function loadRemotePage<P = RemotePageProps>(
+  id: string,
+  host: string,
+): Promise<ComponentType<P>> {
   const name = remoteName(id);
   const entry = entryUrl(host);
 
@@ -98,7 +118,8 @@ export async function loadRemotePage(id: string, host: string): Promise<RemotePa
     registered.set(name, entry);
   }
 
-  const loaded = await loadRemote<RemotePage | { default: RemotePage }>(`${name}/Page`);
+  type Page = ComponentType<P>;
+  const loaded = await loadRemote<Page | { default: Page }>(`${name}/Page`);
   if (!loaded) throw new Error(`microfrontend ${name} has no ./Page`);
 
   // Модуль отдают и объектом с default, и самим компонентом.

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { EMPTY_DRAFT, toDraft } from "../model/field-draft";
 import { toField } from "./normalize";
-import { toCreateBody } from "./fields";
+import { toCreateBody, toUpdateBody } from "./fields";
 
 const AT = { tableSlug: "bookings", language: "en", id: "11111111-2222-3333-4444-555555555555" };
 
@@ -402,4 +402,29 @@ test("длина генерируемого значения отправляе�
     AT,
   );
   expect(increment.attributes).not.toHaveProperty("digit_number");
+});
+
+test("снятое числовое сравнение видимости не остаётся в attributes", () => {
+  /*
+   * Тело правки собирается ПОВЕРХ прежних attributes, поэтому ключ,
+   * который перестали отправлять, из базы не исчезает. У `type` это
+   * стоило поля: снятое «min» оставалось в записи, `isFieldVisible`
+   * уходил в числовую ветку на строковом значении и прятал поле
+   * навсегда — причём в форме условие выглядело обычным равенством.
+   */
+  const field = toField({
+    slug: "price",
+    type: "NUMBER",
+    attributes: { hide_path_field: "count", hide_path: "10", type: "min" },
+  } as Parameters<typeof toField>[0]);
+
+  const kept = toUpdateBody(field, toDraft(field, "en"), "en");
+  expect(kept.attributes).toMatchObject({ type: "min" });
+
+  const cleared = toUpdateBody(field, { ...toDraft(field, "en"), hideCompare: "" }, "en");
+  expect(cleared.attributes).toMatchObject({ type: "" });
+
+  // Условие сняли целиком — уезжают пустыми все три ключа.
+  const none = toUpdateBody(field, { ...toDraft(field, "en"), hideField: "" }, "en");
+  expect(none.attributes).toMatchObject({ hide_path_field: "", hide_path: "", type: "" });
 });

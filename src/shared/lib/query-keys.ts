@@ -129,6 +129,21 @@ export const keys = {
     resource: (projectId: string, envId: string, id: string) =>
       [...keys.settings.resources(projectId, envId), id] as const,
     /**
+     * Дашборды Metabase. Ключ — логин, а не ресурс: список приходит
+     * из самого Metabase, и у другой учётки он другой, даже если строка
+     * ресурса та же. Пароля в ключе нет намеренно: учётку выдаёт бэкенд
+     * (METABASE — readOnly), в форме её не правят, и в паре меняется
+     * всегда логин.
+     */
+    metabaseDashboards: (username: string) =>
+      [...keys.settings.all, "metabase-dashboards", username] as const,
+    /**
+     * Подключённый аккаунт репозитория. Окружение в ключе: интеграция
+     * заводится в паре «проект + окружение», как и ресурсы.
+     */
+    integration: (envId: string, provider: string) =>
+      [...keys.settings.all, "integration", envId, provider] as const,
+    /**
      * Журнал изменений: своя запись у каждого окружения. Отбор входит
      * в ключ целиком — фильтруется на сервере, а не у нас.
      */
@@ -181,6 +196,8 @@ export const keys = {
   docs: {
     all: ["docs"] as const,
     templates: (tableSlug: string) => [...keys.docs.all, tableSlug] as const,
+    /** HTML-шаблоны той же таблицы: другое хранилище и другая ручка. */
+    htmlTemplates: (tableSlug: string) => [...keys.docs.all, "html", tableSlug] as const,
   },
   /**
    * Микрофронтенды: по одному запросу на пункт меню. В ключе окружение —
@@ -189,6 +206,21 @@ export const keys = {
   microfrontends: {
     all: ["microfrontends"] as const,
     byId: (envId: string, id: string) => [...keys.microfrontends.all, envId, id] as const,
+    /**
+     * Версии, снимок версии и «есть ли что публиковать» — всё по номеру
+     * репозитория в GitLab, а не по нашему id: этими ручками заведует
+     * GitLab, и ключ у них там.
+     */
+    commits: (repoId: string) => [...keys.microfrontends.all, "commits", repoId] as const,
+    filesAt: (repoId: string, sha: string) =>
+      [...keys.microfrontends.all, "files-at", repoId, sha] as const,
+    promoteChanges: (repoId: string) =>
+      [...keys.microfrontends.all, "promote-changes", repoId] as const,
+    pipeline: (repoId: string, pipelineId: string) =>
+      [...keys.microfrontends.all, "pipeline", repoId, pipelineId] as const,
+    /** Подмена экрана входа: ключ — поддомен, к нему и привязка. */
+    loginBinding: (subdomain: string) =>
+      [...keys.microfrontends.all, "login", subdomain] as const,
   },
   /**
    * Помощник: список прошлых бесед проекта. Сама переписка в кэше
@@ -202,6 +234,18 @@ export const keys = {
   functions: {
     all: ["functions"] as const,
     list: (envId: string) => [...keys.functions.all, envId] as const,
+    /** Страница раздела функций: у него свой поиск и свои страницы. */
+    page: (envId: string, search: string, page: number) =>
+      [...keys.functions.all, envId, "page", search, page] as const,
+    /**
+     * Исходники функции. Ответ — весь репозиторий разом, поэтому
+     * запрашивается он только у открытой карточки.
+     */
+    codebase: (envId: string, id: string) =>
+      [...keys.functions.all, envId, "codebase", id] as const,
+    /** Журнал выполнения функций: отбор входит в ключ целиком. */
+    logs: (envId: string, filters: Record<string, string | number>) =>
+      [...keys.functions.all, envId, "logs", filters] as const,
   },
   /**
    * В ключ входит и окружение: меню в prod и dev разное, и без него

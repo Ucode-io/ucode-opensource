@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toAction } from "./actions";
+import { isMicrofrontend, toAction } from "./actions";
 
 test("право роли на действие: запрет строгий, разрешение по умолчанию", () => {
   // Запись прав есть и в ней запрет — не показываем.
@@ -16,4 +16,13 @@ test("право роли на действие: запрет строгий, р
    */
   expect(toAction({ id: "a", action_permission: { id: "", permission: false } }).allowed).toBe(true);
   expect(toAction({ id: "a" }).allowed).toBe(true);
+});
+
+test("тип функции решает, звать действие или показывать", () => {
+  // Список отдаёт функцию массивом из-за GROUP BY, но элемент один.
+  expect(isMicrofrontend(toAction({ id: "a", functions: [{ type: "MICRO_FRONTEND" }] }))).toBe(true);
+  expect(isMicrofrontend(toAction({ id: "a", functions: [{ type: "FUNCTION" }] }))).toBe(false);
+
+  // Типа нет — обычное действие: показывать нечего, звать есть что.
+  expect(isMicrofrontend(toAction({ id: "a" }))).toBe(false);
 });

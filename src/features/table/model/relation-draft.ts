@@ -1,3 +1,4 @@
+import type { CascadeStep } from "./cascade";
 /**
  * Черновик связи — то, что человек набрал в панели поля, выбрав тип «Связь».
  *
@@ -30,6 +31,12 @@ export type RelationDraft = {
    * `dynamic_tables`, `object_id_from_jwt` — уезжают обратно как пришли.
    */
   autoFilters: AutoFilterPair[];
+  /**
+   * Каскад: цепочка шагов сужения от дальнего предка к цели связи.
+   * Пусто — каскада нет, связь выбирается одним списком. Формат
+   * и разворот — в model/cascade.
+   */
+  cascade: CascadeStep[];
   /** Подпись колонки на языке ДАННЫХ. */
   label: string;
   /**
@@ -81,6 +88,7 @@ export const RELATION_DIRECTION = "Many2One";
 export const EMPTY_RELATION_DRAFT: RelationDraft = {
   toSlug: "",
   autoFilters: [],
+  cascade: [],
   label: "",
   viewFieldIds: [],
   selfDefault: null,

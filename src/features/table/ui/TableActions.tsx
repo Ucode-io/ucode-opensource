@@ -6,15 +6,18 @@ import {
   IconPlus,
   IconSettings,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { IconPicker } from "@/features/icons";
+import { MicrofrontendPage, useMicrofrontends } from "@/features/microfrontend";
 import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { CommitInput } from "@/shared/ui/commit-input";
 import { DynamicIcon } from "@/shared/ui/dynamic-icon";
 import { Icon } from "@/shared/ui/icon";
 import { Select } from "@/shared/ui/input";
+import { Modal } from "@/shared/ui/modal";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { SelectMenu } from "@/shared/ui/select-menu";
 import { ToolButton } from "@/shared/ui/tool-button";
@@ -27,6 +30,7 @@ import {
   useActions,
   useCreateAction,
   useDeleteAction,
+  isMicrofrontend,
   useRunAction,
   useUpdateAction,
   type Action,
@@ -75,36 +79,80 @@ export function TableActions({
   // Запрос уходит, только когда панель раскрыли: у большинства таблиц
   // действий нет вовсе, а список стоит запроса на каждую загрузку.
   const { actions, error } = useActions(tableSlug, open);
+  /*
+   * Показанный микрофронтенд. Состояние живёт здесь, а не в панели:
+   * панель закрывается вместе со всплывашкой, а окно должно остаться.
+   */
+  const [showing, setShowing] = useState<Action | null>(null);
 
   return (
-    <Popover
-      align="end"
-      trigger={({ open: shown, toggle }) => (
-        <ToolButton
-          icon={IconBolt}
-          label={t("actions.title")}
-          open={shown}
-          on={selected.length > 0 && actions.length > 0}
-          onClick={() => {
-            setOpen(true);
-            toggle();
-          }}
-        />
+    <>
+      <Popover
+        align="end"
+        trigger={({ open: shown, toggle }) => (
+          <ToolButton
+            icon={IconBolt}
+            label={t("actions.title")}
+            open={shown}
+            on={selected.length > 0 && actions.length > 0}
+            onClick={() => {
+              setOpen(true);
+              toggle();
+            }}
+          />
+        )}
+      >
+        {(close) => (
+          <Panel
+            tableSlug={tableSlug}
+            language={language}
+            languages={languages}
+            selected={selected}
+            canEdit={canEdit}
+            actions={actions}
+            error={error}
+            onMicrofrontend={setShowing}
+            close={close}
+          />
+        )}
+      </Popover>
+
+      {showing && (
+        <Modal onClose={() => setShowing(null)}>
+          <div className="flex h-[80vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-modal">
+            <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {localized(showing.labels, language, showing.label) || t("actions.untitled")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowing(null)}
+                aria-label={t("action.close")}
+                className="grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
+              >
+                <Icon as={IconX} size={16} />
+              </button>
+            </div>
+
+            {/*
+             * Строки уезжают ремоуту пропсом `params`. Старая админка
+             * передавала их адресом (`/microfrontend/:id?itemId=…`,
+             * DrawerFormDetailPage.jsx:199) и только одну — открытую
+             * в карточке; здесь их столько, сколько отмечено, и ключ
+             * `itemId` сохранён ради ремоутов, написанных под неё.
+             */}
+            <MicrofrontendPage
+              id={showing.functionId}
+              params={{
+                tableSlug,
+                itemId: selected[0] ?? "",
+                objectIds: selected.join(","),
+              }}
+            />
+          </div>
+        </Modal>
       )}
-    >
-      {(close) => (
-        <Panel
-          tableSlug={tableSlug}
-          language={language}
-          languages={languages}
-          selected={selected}
-          canEdit={canEdit}
-          actions={actions}
-          error={error}
-          close={close}
-        />
-      )}
-    </Popover>
+    </>
   );
 }
 
@@ -119,6 +167,7 @@ function Panel({
   canEdit,
   actions,
   error,
+  onMicrofrontend,
   close,
 }: {
   tableSlug: string;
@@ -129,6 +178,8 @@ function Panel({
   actions: Action[];
   /** Причина отказа словами. Пусто — отказа не было. */
   error: string | null;
+  /** Показать микрофронтенд действия окном. Владелец окна — TableActions. */
+  onMicrofrontend: (action: Action) => void;
   close: () => void;
 }) {
   const { t } = useTranslation();
@@ -188,6 +239,14 @@ function Panel({
                */
               if (!selected.length) {
                 toast.error(t("actions.selectRows"));
+                return;
+              }
+
+              // Микрофронтенд не вызывают — его показывают. Дальше
+              // со строками разбирается он сам.
+              if (isMicrofrontend(action)) {
+                onMicrofrontend(action);
+                close();
                 return;
               }
 
@@ -261,6 +320,15 @@ function ActionForm({
   const [search, setSearch] = useState("");
 
   const { functions, isLoading } = useFunctions();
+  /*
+   * Микрофронтенды в тот же список: `GET /v2/function` их не отдаёт
+   * НИКОГДА — тип отсекается в самом сервисе
+   * (`function_service/api/handlers/function.go:422`, список типов без
+   * MICRO_FRONTEND), — и без второго запроса действие-микрофронтенд
+   * нечем было бы завести. Старая админка делает то же самое
+   * (`ActionSettings.jsx:123–137`).
+   */
+  const microfrontends = useMicrofrontends(true);
   const create = useCreateAction(tableSlug);
   const update = useUpdateAction(tableSlug);
   const remove = useDeleteAction(tableSlug);
@@ -278,9 +346,25 @@ function ActionForm({
     else create.mutate(draft, { onSuccess: onDone });
   };
 
-  const matching = functions.filter((item) =>
-    item.name.toLowerCase().includes(search.trim().toLowerCase()),
-  );
+  const query = search.trim().toLowerCase();
+  /*
+   * Микрофронтенды помечены прямо в подписи: выбор один, а ветки за ним
+   * две — такое действие показывают, а не зовут. Пометка в подписи,
+   * а не значком: значок здесь рисует DynamicIcon, то есть ходит за ним
+   * в Iconify по сети, а это наша собственная разметка, а не имя
+   * с бэкенда.
+   *
+   * Ищется при этом голое имя: иначе слово «микрофронтенд» в поиске
+   * находило бы весь второй список разом.
+   */
+  const matching = [
+    ...microfrontends.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      label: `${item.name} · ${t("actions.microfrontend")}`,
+    })),
+    ...functions.map((item) => ({ id: item.id, name: item.name, label: item.name })),
+  ].filter((item) => item.name.toLowerCase().includes(query));
 
   return (
     <div className="flex max-h-[70vh] w-80 flex-col">
@@ -328,10 +412,10 @@ function ActionForm({
           placeholder={t("button.noFunction")}
           searchPlaceholder={t("actions.searchFunction")}
           emptyText={t("button.noFunctions")}
-          items={matching.map((item) => ({ value: item.id, label: item.name }))}
+          items={matching.map((item) => ({ value: item.id, label: item.label }))}
           selected={new Set(draft.functionId ? [draft.functionId] : [])}
           search={search}
-          loading={isLoading}
+          loading={isLoading || microfrontends.isLoading}
           onSearch={setSearch}
           onLoadMore={() => {}}
           onPick={(functionId) => patch({ functionId })}

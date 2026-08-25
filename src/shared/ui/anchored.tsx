@@ -64,9 +64,17 @@ export function Anchored({
      * Своя прокрутка не в счёт: внутри лежат списки — часы, минуты,
      * варианты выбора, строки связанной таблицы. Закрываться от колеса
      * мыши над собственным списком — значит не давать им прокрутиться.
+     *
+     * Окно, открытое отсюда, — тоже своя прокрутка, хотя в DOM оно
+     * лежит в другом месте: Modal портирует себя в <body>, и `contains`
+     * о нём не знает. Карточка чужой записи из редактора связи иначе
+     * закрывалась вместе со всем редактором от первого же движения
+     * колеса. Метка та же, что у Popover и сайдбара.
      */
     const onScroll = (event: Event) => {
-      if (!box.current?.contains(event.target as Node)) onClose();
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.("[data-modal]")) return;
+      if (!box.current?.contains(target)) onClose();
     };
 
     document.addEventListener("keydown", onKeyDown);

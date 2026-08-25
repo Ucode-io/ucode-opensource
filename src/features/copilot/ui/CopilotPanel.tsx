@@ -189,7 +189,7 @@ export function CopilotButton() {
   );
 }
 
-function HeaderButton({
+export function HeaderButton({
   icon,
   label,
   onClick,
@@ -224,7 +224,7 @@ const SUGGESTIONS: { icon: TablerIcon; title: TranslationKey; prompt: Translatio
   { icon: IconSearch, title: "copilot.hint.schemaTitle", prompt: "copilot.hint.schemaPrompt" },
 ];
 
-function Greeting({ onPick }: { onPick: (prompt: string) => void }) {
+export function Greeting({ onPick }: { onPick: (prompt: string) => void }) {
   const { t } = useTranslation();
 
   return (
@@ -271,7 +271,7 @@ function Greeting({ onPick }: { onPick: (prompt: string) => void }) {
 }
 
 /** Прошлые беседы. Список запрашивается, только когда меню открыто. */
-function History({
+export function History({
   onPick,
   close,
 }: {
@@ -320,7 +320,7 @@ function History({
  * к помощнику бывает и в пять строк, но поле ввода на весь экран —
  * это уже не переписка.
  */
-function Composer({
+export function Composer({
   inputRef,
   value,
   onChange,

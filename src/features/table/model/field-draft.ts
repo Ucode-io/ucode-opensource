@@ -218,7 +218,32 @@ export type FieldDraft = {
    */
   icon: string;
   functionId: string;
+  /**
+   * Условная видимость в карточке: показывать поле, только когда
+   * значение СОСЕДНЕГО поля совпало с заданным. Применяет её
+   * `features/item/model/visibility` — там же разобран формат и
+   * названо то, чем он обманывает.
+   *
+   *   hideField    attributes.hide_path_field — слаг поля, за которым
+   *                следим. Пусто — правила нет
+   *   hideValues   attributes.hide_path — ожидаемое значение. Внутри
+   *                всегда список: у MULTISELECT оно набором, у
+   *                остальных из одного значения
+   *   hideMulti    было ли оно набором. Хранится отдельно, потому что
+   *                набор из одного варианта и одиночное значение
+   *                в attributes выглядят по-разному, а различить их
+   *                при отправке больше нечем
+   *   hideCompare  attributes.type — «min» | «max» у числового поля.
+   *                Пусто — сравнение на равенство
+   */
+  hideField: string;
+  hideValues: string[];
+  hideMulti: boolean;
+  hideCompare: string;
 };
+
+/** Сравнения числового условия видимости. Границы ИСКЛЮЧАЮЩИЕ. */
+export const HIDE_COMPARISONS = ["min", "max"] as const;
 
 /**
  * Типы, у которых значение бывает на нескольких языках. Список не наш:
@@ -257,6 +282,10 @@ export const EMPTY_DRAFT: FieldDraft = {
   labels: {},
   icon: "",
   functionId: "",
+  hideField: "",
+  hideValues: [],
+  hideMulti: false,
+  hideCompare: "",
 };
 
 /**
@@ -318,6 +347,15 @@ export function toDraft(field: Field, language: string): FieldDraft {
     multilanguage: field.raw["enable_multilanguage"] === true,
     icon: textOf(field.attributes["icon"]),
     functionId: textOf(field.attributes["function"]),
+    hideField: textOf(field.attributes["hide_path_field"]),
+    hideValues: hideValuesOf(field.attributes["hide_path"]),
+    hideMulti: Array.isArray(field.attributes["hide_path"]),
+    /*
+     * Числовое сравнение делит ключ `type` с видом агрегата FORMULA,
+     * поэтому берутся ровно две известные строки: у поля-агрегата там
+     * лежит SUMM, и принять его за границу нельзя.
+     */
+    hideCompare: HIDE_COMPARISONS.find((item) => item === field.attributes["type"]) ?? "",
   };
 
   if (optionsShape(field.type) === "groups") {
@@ -336,6 +374,19 @@ export function toDraft(field: Field, language: string): FieldDraft {
 
 function textOf(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Ожидаемое значение условия видимости — всегда списком. В attributes
+ * оно бывает и строкой, и массивом; число сюда попадает от того, кто
+ * записал его числом, — приводим, форма работает со строками.
+ */
+function hideValuesOf(value: unknown): string[] {
+  const list = Array.isArray(value) ? value : [value];
+
+  return list
+    .filter((item) => item !== null && item !== undefined && item !== "")
+    .map((item) => String(item));
 }
 
 /**

@@ -3,8 +3,10 @@ import {
   IconApi,
   IconBuilding,
   IconDatabase,
+  IconFunction,
   IconHistory,
   IconIdBadge2,
+  IconLayoutGrid,
   IconPlug,
   IconRoute,
   IconServer2,
@@ -24,6 +26,8 @@ import { ClientTypeSettings } from "./ClientTypeSettings";
 import { ConnectionSettings } from "./ConnectionSettings";
 import { EndpointSettings } from "./EndpointSettings";
 import { EnvironmentSettings } from "./EnvironmentSettings";
+import { FunctionSettings } from "./FunctionSettings";
+import { MicrofrontendSettings } from "./MicrofrontendSettings";
 import { ProfileSettings } from "./ProfileSettings";
 import { ProjectSettings } from "./ProjectSettings";
 import { RoleSettings } from "./RoleSettings";
@@ -46,8 +50,8 @@ import { ResourceSettings } from "./resources/ResourceSettings";
  * и «API-ключами».
  *
  * Пустых пунктов нет: пункт, который ничего не открывает, — это
- * обещание. Разделы, которых у нас нет намеренно (биллинг, функции,
- * микрофронтенды), перечислены с причинами в docs/PARITY.md.
+ * обещание. Разделы, которых у нас нет намеренно (биллинг), перечислены
+ * с причинами в docs/PARITY.md.
  *
  * Содержимое монтируется только у открытого раздела — значит и запросы
  * уходят только у него. Восемь разделов, грузящихся разом при открытии
@@ -136,6 +140,13 @@ const GROUPS: {
         right: "redirects_button",
         wide: true,
       },
+      { id: "functions", labelKey: "functions.title", icon: IconFunction, wide: true },
+      {
+        id: "microfrontends",
+        labelKey: "microfrontends.title",
+        icon: IconLayoutGrid,
+        wide: true,
+      },
       { id: "connections", labelKey: "connections.title", icon: IconDatabase, wide: true },
       { id: "resources", labelKey: "resources.title", icon: IconPlug, wide: true },
       {
@@ -158,6 +169,8 @@ const CONTENT: Record<string, () => React.JSX.Element> = {
   roles: RoleSettings,
   apiKeys: ApiKeySettings,
   endpoints: EndpointSettings,
+  functions: FunctionSettings,
+  microfrontends: MicrofrontendSettings,
   connections: ConnectionSettings,
   resources: ResourceSettings,
   activity: ActivityLog,

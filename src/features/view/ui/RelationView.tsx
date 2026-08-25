@@ -35,6 +35,7 @@ import {
   type Item,
   type Sort,
 } from "@/features/item";
+import { PrintButton } from "@/features/docs";
 import { useTableSchema, type Field, type Relation } from "@/features/table";
 import type { DataLanguage } from "@/features/workspace";
 import { toast } from "@/shared/lib/toast";
@@ -991,6 +992,9 @@ function RelatedRow({
       sections={layout.sections}
       heading={layout.heading}
       trail={trail}
+      /* Печатная форма связанной записи. Шаблоны спрашиваются по слагу
+         ЧУЖОЙ таблицы — они у неё свои, и кнопки нет, пока их не завели. */
+      actions={<PrintButton tableSlug={tableSlug} row={row} fields={fields} />}
       {...(onEdit ? { onEdit } : {})}
       onClose={onClose}
     />
