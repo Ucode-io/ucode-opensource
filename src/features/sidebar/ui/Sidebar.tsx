@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { IconLayoutSidebarLeftExpand, IconSearch } from "@tabler/icons-react";
+import { IconChevronsRight, IconSearch } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { errorText } from "@/shared/api/client";
 import { Icon } from "@/shared/ui/icon";
@@ -21,6 +21,11 @@ import { WorkspaceHeader } from "./WorkspaceHeader";
  * способами: кнопкой в шапке контента и наведением на левый край,
  * от которого сайдбар всплывает поверх (peek) и уезжает, как только
  * курсор ушёл.
+ *
+ * Панель ОДНА на все три состояния и с экрана не снимается: свёрнутая
+ * уезжает за левый край и ждёт там. Двух копий быть не должно (у них
+ * разошлась бы строка поиска), а снять и вернуть — значит показывать
+ * рывком: у снятого с экрана нечему ехать обратно.
  */
 export function Sidebar() {
   const { sidebarCollapsed } = useUi();
@@ -34,28 +39,26 @@ export function Sidebar() {
     if (!sidebarCollapsed) setPeeking(false);
   }, [sidebarCollapsed]);
 
-  if (!sidebarCollapsed) {
-    return <ExpandedSidebar menus={items} isLoading={isLoading} error={error} />;
-  }
-
   return (
     <>
       {/* Полоса-ловушка у самого края: попасть в неё можно броском мыши
           влево, не целясь в кнопку. */}
-      <div
-        className="fixed inset-y-0 left-0 z-30 w-2"
-        onPointerEnter={() => setPeeking(true)}
-        aria-hidden
-      />
-
-      {peeking && (
-        <ExpandedSidebar
-          menus={items}
-          isLoading={isLoading}
-          error={error}
-          onLeave={stopPeek}
+      {sidebarCollapsed && (
+        <div
+          className="fixed inset-y-0 left-0 z-30 w-2"
+          onPointerEnter={() => setPeeking(true)}
+          aria-hidden
         />
       )}
+
+      <SidebarPanel
+        menus={items}
+        isLoading={isLoading}
+        error={error}
+        collapsed={sidebarCollapsed}
+        peeking={sidebarCollapsed && peeking}
+        onLeave={stopPeek}
+      />
     </>
   );
 }
@@ -65,32 +68,47 @@ export function SidebarToggleButton() {
   const { t } = useTranslation();
   const { sidebarCollapsed, toggleSidebar } = useUi();
 
-  if (!sidebarCollapsed) return null;
-
   return (
     <button
       type="button"
       onClick={toggleSidebar}
       aria-label={t("sidebar.open")}
       title={t("sidebar.open")}
-      className="grid size-7 shrink-0 place-items-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+      /* Закреплённому сайдбару кнопка не нужна, но снимать её с места
+         нельзя: заголовок страницы прыгнул бы влево ровно в тот момент,
+         когда сайдбар плавно выезжает. Поэтому она схлопывается, а
+         отрицательный отступ съедает зазор ряда (gap-2), который у
+         нулевой ширины остался бы лишним. */
+      inert={!sidebarCollapsed}
+      className={`grid h-7 shrink-0 place-items-center overflow-hidden rounded-md text-fg-muted transition-[width,margin,background-color,color] duration-200 ease-out hover:bg-surface-hover hover:text-fg ${
+        sidebarCollapsed ? "w-7" : "-mr-2 w-0"
+      }`}
     >
-      <Icon as={IconLayoutSidebarLeftExpand} size={16} />
+      {/* Стрелки вправо — зеркало «свернуть» в шапке сайдбара
+          (WorkspaceHeader, CollapseButton): направление, а не картинка
+          панели, которой сейчас нет на экране. */}
+      <Icon as={IconChevronsRight} size={16} />
     </button>
   );
 }
 
-function ExpandedSidebar({
+function SidebarPanel({
   menus,
   isLoading,
   error,
+  collapsed,
+  peeking,
   onLeave,
 }: {
   menus: MenuNode[];
   isLoading: boolean;
   error: Error | null;
-  /** Задан только у всплывающего сайдбара: закрыться, когда курсор ушёл. */
-  onLeave?: () => void;
+  /** Убран с экрана: уехал за левый край, места в раскладке не занимает. */
+  collapsed: boolean;
+  /** Свёрнутый, но вызванный наведением: лежит ПОВЕРХ контента. */
+  peeking: boolean;
+  /** Закрыться, когда курсор ушёл. Слушается только у всплывающего. */
+  onLeave: () => void;
 }) {
   const { t } = useTranslation();
   const { sidebarWidth, setSidebarWidth } = useUi();
@@ -111,7 +129,7 @@ function ExpandedSidebar({
    * нет, и меню закрывалось бы прямо под курсором.
    */
   useEffect(() => {
-    if (!onLeave) return;
+    if (!peeking) return;
 
     const onOver = (event: PointerEvent) => {
       const target = event.target;
@@ -130,34 +148,50 @@ function ExpandedSidebar({
 
     document.addEventListener("pointerover", onOver);
     return () => document.removeEventListener("pointerover", onOver);
-  }, [onLeave]);
+  }, [peeking, onLeave]);
 
   return (
     <aside
       ref={aside}
-      style={{ width: sidebarWidth }}
-      className={
-        onLeave
+      /*
+       * Свёрнутый уезжает ОТРИЦАТЕЛЬНЫМ ОТСТУПОМ, а не нулевой шириной:
+       * ширину в это же время пишет ручка размера (см. ResizeHandle),
+       * и переход по ней превратил бы перетаскивание в желе. Отступ
+       * же двигает и панель, и контент за ней — одним свойством.
+       *
+       * Всплывающий сдвигается поверх контента сдвигом (`translate`):
+       * раскладку он не трогает, поэтому таблица под ним не дёргается.
+       * Сумма даёт ровно край экрана: -width + 100% = 0.
+       */
+      style={{ width: sidebarWidth, marginLeft: collapsed ? -sidebarWidth : 0 }}
+      /* Уехавшая панель остаётся в DOM ради обратного хода — но не в
+         порядке обхода с клавиатуры: Tab не должен уводить в невидимое. */
+      inert={collapsed && !peeking}
+      /* Переход по `translate`, а не по `transform`: утилиты сдвига
+         в tailwind 4 пишут отдельное свойство translate. */
+      className={`group/aside relative flex shrink-0 flex-col gap-2 p-2 transition-[margin-left,translate,background-color,box-shadow] duration-200 ease-out ${
+        collapsed
           /*
-           * Выехавший сайдбар — во всю высоту и вплотную к краю, как
-           * и закреплённый: это тот же сайдбар, показанный на время,
-           * а не новый плавающий объект. Отступ сверху и снизу был
-           * третьим ритмом на экране — ни 0 у контента, ни 8px у карточки.
-           * Что он временный, говорят тень и выезд, а не зазор.
+           * Свёрнутый — плавающая поверхность: заливка, тень и скруглённый
+           * правый край. Не только ради вида наведением вызванной панели:
+           * пока она уезжает и приезжает, под ней едет контент, и панель
+           * без своей заливки просвечивала бы насквозь.
            *
            * z-55: выше карточки записи (z-50). Широкая карточка накрывает
            * левый край экрана целиком, и панель, вызванная наведением,
            * уезжала под неё — то есть не появлялась вовсе.
            */
-          ? "group/aside animate-peek fixed inset-y-0 left-0 z-55 flex flex-col gap-2 rounded-r-xl border-r border-border bg-surface p-2 shadow-modal"
-          /* Без своей заливки: сайдбар лежит на фоне приложения и берёт
-             его градиент, а не гасит его плоским bg. */
-          : "group/aside relative flex shrink-0 flex-col gap-2 p-2"
-      }
+          ? `z-55 rounded-r-xl border-r border-border bg-surface shadow-modal ${peeking ? "translate-x-full" : ""}`
+          /* Закреплённый — без своей заливки: он лежит на фоне приложения
+             и берёт его градиент, а не гасит его плоским bg. Контент
+             (`main`, z-10) при этом лежит ВЫШЕ, и раскрытие читается как
+             «контент отъехал и открыл меню», а не как наложение. */
+          : ""
+      }`}
     >
-      {/* У всплывающего ручки нет: тянуть край панели, которая закроется,
+      {/* У свёрнутого ручки нет: тянуть край панели, которая закроется,
           стоит курсору выйти за него, — занятие на любителя. */}
-      {!onLeave && (
+      {!collapsed && (
         <ResizeHandle
           edge="right"
           target={aside}
@@ -169,7 +203,7 @@ function ExpandedSidebar({
         />
       )}
 
-      <WorkspaceHeader floating={Boolean(onLeave)} />
+      <WorkspaceHeader floating={peeking} />
 
       {/* Поле поиска говорит на языке панели, а не формы: та же высота 32,
           тот же радиус и та же пара «заливка при наведении → surface плюс

@@ -83,7 +83,7 @@ export function FilterBar({
   };
 
   return (
-    <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
+    <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5 transition-opacity duration-200 ease-out starting:opacity-0">
       {sorts.length > 0 && (
         <>
           <SortChips columns={columns} language={language} sorts={sorts} onChange={onSorts} />

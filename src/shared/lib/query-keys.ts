@@ -64,12 +64,33 @@ export const keys = {
     /** Типы клиентов проекта: у роли обязательно есть один. */
     clientTypes: (projectId: string) => [...keys.settings.all, "client-types", projectId] as const,
     /**
+     * Один тип целиком — его читает форма правки. Ключ вложен в список
+     * намеренно: правка протухает список, а вместе с ним и карточку.
+     */
+    clientType: (projectId: string, id: string) =>
+      [...keys.settings.clientTypes(projectId), id] as const,
+    /** Таблицы входа проекта — из чего выбирает форма типа клиента. */
+    loginTables: (projectId: string) => [...keys.settings.all, "login-tables", projectId] as const,
+    /**
+     * Таблицы аудитории: что приложение заказчика показывает этому типу
+     * клиента. Не путать с `connections` ниже — там внешние базы.
+     */
+    clientConnections: (projectId: string, clientTypeId: string) =>
+      [...keys.settings.all, "client-connections", projectId, clientTypeId] as const,
+    /**
      * Права роли на пункты меню — по уровню дерева: бэкенд отдаёт их
      * по одному родителю, как и само меню.
      */
     menuPermissionsAll: () => [...keys.settings.all, "menu-permissions"] as const,
     menuPermissions: (projectId: string, roleId: string, parentId: string) =>
       [...keys.settings.menuPermissionsAll(), projectId, roleId, parentId] as const,
+    /**
+     * Свои права роли — по уровню дерева, как и права на меню. В ключе
+     * ещё и тип клиента: право принадлежит аудитории, а не только роли.
+     */
+    customPermissionsAll: () => [...keys.settings.all, "custom-permissions"] as const,
+    customPermissions: (roleId: string, clientTypeId: string, parentId: string) =>
+      [...keys.settings.customPermissionsAll(), roleId, clientTypeId, parentId] as const,
     /** Наборы значков iconify. Общие на всё приложение, а не на проект. */
     iconCollections: () => [...keys.settings.all, "icon-collections"] as const,
     /** Справочник: LANGUAGE, TIMEZONE, CURRENCY. Общий на проект. */
@@ -93,6 +114,20 @@ export const keys = {
       [...keys.settings.apiKeysAll(), projectId, envId, search, page] as const,
     /** Справочник платформ клиента — общий на всё приложение. */
     clientPlatforms: () => [...keys.settings.all, "client-platforms"] as const,
+    /**
+     * Ресурсы проекта: чужие службы, которыми он пользуется. Окружение
+     * в ключе — строка ресурса заводится в ОДНОМ окружении (`project_id`
+     * и `environment_id` в первичном отборе, `resource.go:1624`), и списки
+     * prod и dev делить одну ячейку не должны.
+     */
+    resources: (projectId: string, envId: string) =>
+      [...keys.settings.all, "resources", projectId, envId] as const,
+    /**
+     * Один ресурс целиком: его читает форма правки. Только этот ответ
+     * несёт переменные и настройки системных строк — в списке их нет.
+     */
+    resource: (projectId: string, envId: string, id: string) =>
+      [...keys.settings.resources(projectId, envId), id] as const,
     /**
      * Журнал изменений: своя запись у каждого окружения. Отбор входит
      * в ключ целиком — фильтруется на сервере, а не у нас.

@@ -27,6 +27,7 @@ const field = (slug: string, multilanguage = false): Field => ({
   required: false,
   validation: null,
   editable: true,
+    locked: false,
   attributes: {},
   raw: {},
 });

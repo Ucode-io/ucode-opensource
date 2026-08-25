@@ -60,11 +60,20 @@ const NO_TAB_GROUP: TabGroup = { field: undefined, tabs: [], activeId: "", filte
 
 /** Поле раскладки. Ключ тот же, что и у колонок: у связи это id связи. */
 export function tabGroupField(view: View | undefined, fields: Field[]): Field | undefined {
-  if (!view?.tabGroupId) return undefined;
+  return fieldById(view?.tabGroupId, fields);
+}
 
-  return fields.find(
-    (field) => field.id === view.tabGroupId || field.relationId === view.tabGroupId,
-  );
+/**
+ * Поле дорожек доски (`attributes.sub_group_by_id`). Ищется теми же
+ * двумя ключами: у поля-связи в настройках лежит id связи, а не поля.
+ */
+export function subGroupField(view: View | undefined, fields: Field[]): Field | undefined {
+  return fieldById(view?.subGroupId, fields);
+}
+
+function fieldById(id: string | undefined, fields: Field[]): Field | undefined {
+  if (!id) return undefined;
+  return fields.find((field) => field.id === id || field.relationId === id);
 }
 
 export function useTabGroup({

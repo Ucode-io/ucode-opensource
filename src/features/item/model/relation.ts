@@ -101,6 +101,44 @@ export function autoFilterValues(relation: Relation, row: Item): Record<string, 
   return values;
 }
 
+/** Кто заводит запись. Из сеанса, а не из схемы: это про человека. */
+export type SelfIdentity = {
+  /** Id вошедшего — строка в таблице входа проекта. */
+  userId: string;
+  /** «Своя строка» в чужих таблицах: слаг → guid (см. session.getObjectIds). */
+  objectIds: Record<string, string>;
+};
+
+/**
+ * Значения по умолчанию, которых поле о себе не знает.
+ *
+ * Связь можно пометить «подставлять своего» — тогда у НОВОЙ записи
+ * колонка-ссылка заполняется тем, кто её заводит: «Автор», «Ответственный»,
+ * «Мой филиал». Настройка живёт на связи (`Relation.selfDefault`), а
+ * значение — в сеансе, поэтому собирается это здесь, а не в blankItem:
+ * тот про поля и чист.
+ *
+ * Только исходящие связи: у входящей колонки-ссылки в нашей строке нет
+ * вовсе — идентификатор лежит в чужой.
+ */
+export function selfDefaults(relations: Relation[], me: SelfIdentity): Item {
+  const row: Item = {};
+
+  for (const relation of relations) {
+    if (!relation.selfDefault || relation.direction !== "outgoing") continue;
+    if (!relation.linkField) continue;
+
+    const value =
+      relation.selfDefault === "user" ? me.userId : me.objectIds[relation.toSlug];
+
+    // Нет значения — нет и подстановки: пустая строка в колонке-ссылке
+    // это не «никто», а битый идентификатор.
+    if (value) row[relation.linkField] = value;
+  }
+
+  return row;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -25,7 +25,8 @@ import {
   type ApiKey,
   type ApiKeyDraft,
 } from "../api/api-keys";
-import { useClientTypes, useRoles } from "../api/roles";
+import { useClientTypes } from "../api/client-types";
+import { useRoles } from "../api/roles";
 import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
 
 /**

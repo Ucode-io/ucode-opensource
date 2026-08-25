@@ -100,6 +100,31 @@ export const session = {
     return readClaim(accessToken, "client_type_id");
   },
 
+  /**
+   * «Своя строка» в чужих таблицах: слаг → guid.
+   *
+   * Вход выдаёт список таблиц аудитории и вместе с ним идентификатор
+   * строки, которая и ЕСТЬ вошедший в каждой из них — курьер в таблице
+   * курьеров, клиент в таблице клиентов (`session_service_v2.go:1818`).
+   * Это [[App Table]] из CONTEXT.md, только со стороны сеанса.
+   *
+   * Живёт лишь в токене: в ответе логина мы этот список не сохраняем,
+   * а шлюз читает его оттуда же (`objectRequest.Data["tables"]`).
+   */
+  getObjectIds(): Record<string, string> {
+    const tables = readClaimValue(accessToken, "tables");
+    if (!Array.isArray(tables)) return {};
+
+    const ids: Record<string, string> = {};
+    for (const table of tables) {
+      if (typeof table !== "object" || table === null) continue;
+      const { table_slug: slug, object_id: id } = table as Record<string, unknown>;
+      if (typeof slug === "string" && typeof id === "string" && slug && id) ids[slug] = id;
+    }
+
+    return ids;
+  },
+
   getProfile(): Profile | null {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (!raw) return null;
@@ -200,16 +225,21 @@ export const session = {
 
 /** Читает одно поле из полезной нагрузки JWT. Подпись не проверяется. */
 function readClaim(token: string | null, name: string): string {
-  if (!token) return "";
+  const value = readClaimValue(token, name);
+  return typeof value === "string" ? value : "";
+}
+
+/** То же, но значением любой формы: в токене бывают и списки. */
+function readClaimValue(token: string | null, name: string): unknown {
+  if (!token) return undefined;
 
   try {
     const payload = token.split(".")[1];
-    if (!payload) return "";
+    if (!payload) return undefined;
 
     const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    const value = (JSON.parse(json) as Record<string, unknown>)[name];
-    return typeof value === "string" ? value : "";
+    return (JSON.parse(json) as Record<string, unknown>)[name];
   } catch {
-    return "";
+    return undefined;
   }
 }

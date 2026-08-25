@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
+import { reportError } from "@/shared/lib/toast";
 
 /**
  * Журнал изменений проекта: кто, когда и что поменял.
@@ -82,17 +83,24 @@ export type ActivityEntry = {
   after: string;
 };
 
+/** Отбор так, как его ждёт ручка. Один и тот же у списка и у выгрузки. */
+function toParams(filters: ActivityFilters) {
+  return {
+    action_type: filters.action,
+    collection: filters.table,
+    user_info: filters.user,
+    from_date: filters.from,
+    to_date: filters.to,
+  };
+}
+
 export function useActivity(filters: ActivityFilters, page: number) {
   const envId = useSession().getEnvironmentId() ?? "";
 
   const params = {
     limit: ACTIVITY_PAGE,
     offset: (page - 1) * ACTIVITY_PAGE,
-    action_type: filters.action,
-    collection: filters.table,
-    user_info: filters.user,
-    from_date: filters.from,
-    to_date: filters.to,
+    ...toParams(filters),
   };
 
   const query = useQuery({
@@ -138,6 +146,45 @@ export function useActivityEntry(id: string) {
   });
 
   return { entry: query.data, isLoading: query.isLoading };
+}
+
+/**
+ * Выгрузка журнала в Excel.
+ *
+ * Выгружается то, что отобрано на экране, а не весь журнал: выгрузка
+ * «всего» из экрана с фильтром выглядит как потеря фильтра. Страница
+ * при этом не в счёт — файл делают, чтобы посмотреть шире экрана,
+ * поэтому предел свой и большой; тот же 20 000 стоит и в самой ручке
+ * для mongo-проектов (`version_history.go:445`).
+ *
+ * Бэкенд не отдаёт файл потоком: он кладёт его в хранилище и отвечает
+ * ссылкой без схемы («cdn.host/report_1.xlsx»). Дописываем схему
+ * и скачиваем обычной ссылкой — как выгрузка таблицы.
+ */
+const EXPORT_LIMIT = 20_000;
+
+export function useExportActivity() {
+  const envId = useSession().getEnvironmentId() ?? "";
+
+  return useMutation({
+    mutationFn: async (filters: ActivityFilters) => {
+      const dto = await api.get<{ link?: string }>(`${HISTORY}/${envId}/excel`, {
+        params: { limit: EXPORT_LIMIT, offset: 0, ...toParams(filters) },
+      });
+
+      const link = dto.link ?? "";
+      if (!link) throw new Error("Бэкенд не вернул ссылку на файл");
+
+      return /^https?:\/\//i.test(link) ? link : `https://${link}`;
+    },
+    onError: (error) => reportError(error, "activity.exportFailed"),
+    onSuccess: (link) => {
+      const anchor = document.createElement("a");
+      anchor.href = link;
+      anchor.download = "";
+      anchor.click();
+    },
+  });
 }
 
 function toEntry(dto: EntryDto): ActivityEntry {

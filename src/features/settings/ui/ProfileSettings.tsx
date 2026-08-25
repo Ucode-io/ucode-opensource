@@ -14,7 +14,7 @@ import {
   useUpdateProfile,
   type ProfileDraft,
 } from "../api/profile";
-import { useClientTypes } from "../api/roles";
+import { useClientTypes } from "../api/client-types";
 import { ImagePicker } from "./ImagePicker";
 
 /**

@@ -17,6 +17,7 @@ import {
   IconLayoutList,
   IconLayoutColumns,
   IconLayoutNavbar,
+  IconLayoutRows,
   IconLoader2,
   IconPin,
   IconPinnedOff,
@@ -55,7 +56,7 @@ import { Input } from "@/shared/ui/input";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { ToolButton } from "@/shared/ui/tool-button";
-import { TAB_GROUP_TYPES, tabGroupField } from "../api/tab-group";
+import { TAB_GROUP_TYPES, subGroupField, tabGroupField } from "../api/tab-group";
 import { columnKey, moveBefore } from "../model/columns";
 import { hasUrl, type UrlTemplate } from "../model/url-template";
 import { IMPLEMENTED_VIEW_TYPES, TAB_VIEW_TYPES, VIEW_TYPES, type View } from "../model/types";
@@ -77,9 +78,11 @@ import { viewIcon } from "./view-icon";
  *   view сразу. Строка «Тип» здесь называется типом, а не «Общими»,
  *   чтобы имя не было занято.
  *
- *   Настройки Timeline — этого типа у нас пока нет вовсе. У календаря
- *   настраиваются только поля дат: остальное (шаг сетки, цвет события,
- *   нерабочие дни) бэкенд отдаёт, но не обновляет ни одной ручкой.
+ *   Настройки таймлайна — это те же поля дат, что у календаря
+ *   (старая админка держит для них отдельный экран, TimelineSettings,
+ *   с той же парой полей), поэтому строка одна на оба типа. Остальное
+ *   — шаг сетки, цвет события, нерабочие дни — бэкенд отдаёт, но
+ *   не обновляет ни одной ручкой.
  *
  *   «Строк на странице» — бэкенд не обновляет default_limit этой ручкой
  *   вовсе (view.go, Update: колонки в UPDATE просто нет), а размер
@@ -129,6 +132,8 @@ export type ViewOptionsHandlers = {
   onGroupBy?: (fieldIds: string[]) => void;
   /** Поле раскладки вкладками. Пустая строка — без вкладок. */
   onTabGroup?: (fieldId: string) => void;
+  /** Поле дорожек доски. Пустая строка — доска в одну дорожку. */
+  onSubGroup?: (fieldId: string) => void;
   /**
    * Поля дат календаря. Слаги, а не id: так эту настройку хранит база
    * (колонки `calendar_from_slug` и `calendar_to_slug`).
@@ -230,6 +235,7 @@ type PanelPage =
   | "fixed"
   | "group"
   | "tabGroup"
+  | "subGroup"
   | "calendar"
   | "table"
   | "docs"
@@ -679,6 +685,62 @@ function Panel({
     );
   }
 
+  if (page === "subGroup") {
+    /*
+     * Дорожки доски — второй уровень раскладки: колонки те же, но
+     * повторяются для каждого значения выбранного поля. Годятся те же
+     * пять типов, что и у колонок: по строке дорожек не сделать.
+     *
+     * Поле колонок из списка убрано: доска, разрезанная сама по себе,
+     * даёт одну карточку на клетку и ни одной в остальных.
+     */
+    const groupable = matching(
+      fields.filter(
+        (field) =>
+          TAB_GROUP_TYPES.has(field.type) &&
+          columnKey(field) !== view.tabGroupId,
+      ),
+      query,
+      language,
+    );
+
+    return (
+      <Subpage
+        title={t("view.subGroup")}
+        busy={busy}
+        onBack={back}
+        hint={t("view.subGroupHint")}
+      >
+        <FieldSearch value={query} onChange={setQuery} />
+
+        <List>
+          <PopoverItem
+            active={!view.subGroupId}
+            icon={<Icon as={IconX} size={16} className="shrink-0 text-fg-subtle" />}
+            onClick={() => handlers.onSubGroup?.("")}
+          >
+            {t("view.subGroupNone")}
+          </PopoverItem>
+
+          {groupable.map((field) => (
+            <PopoverItem
+              key={field.id}
+              active={view.subGroupId === field.id || view.subGroupId === field.relationId}
+              icon={<Icon as={fieldIcon(field.type)} size={16} className="shrink-0" />}
+              onClick={() => handlers.onSubGroup?.(columnKey(field))}
+            >
+              {localized(field.labels, language, field.label)}
+            </PopoverItem>
+          ))}
+
+          {!groupable.length && !query && (
+            <p className="px-2 py-1.5 text-2xs text-fg-subtle">{t("view.tabGroupEmpty")}</p>
+          )}
+        </List>
+      </Subpage>
+    );
+  }
+
   if (page === "calendar") {
     /*
      * Поля дат — из ВСЕХ полей таблицы, а не из колонок view: срок
@@ -822,6 +884,8 @@ function Panel({
     .filter((field): field is Field => Boolean(field));
   /** Поле раскладки вкладками — подписью в строке настроек. */
   const tabGrouped = tabGroupField(view, fields);
+  /** Поле дорожек доски — там же. */
+  const subGrouped = subGroupField(view, fields);
   /* Сколько адресов задано: строка настроек молчит, пока их нет. */
   const navigationCount = [hasUrl(view.navigate), hasUrl(view.objectUrl), Boolean(view.pdfUrl)]
     .filter(Boolean).length;
@@ -940,6 +1004,19 @@ function Panel({
           label={t(isBoard ? "view.boardGroup" : "view.tabGroup")}
           value={tabGrouped ? localized(tabGrouped.labels, language, tabGrouped.label) : ""}
           onClick={() => open("tabGroup")}
+        />
+      )}
+
+      {/* Дорожки — только у доски: у таблицы вкладка одна на экран,
+          и второму уровню там негде поместиться. Так же и в старой
+          админке (ViewOptions.jsx:296). Право то же, что и у колонок
+          доски: это одна настройка в двух уровнях. */}
+      {can.settings && can.tabGroup && handlers.onSubGroup && isBoard && (
+        <Row
+          icon={IconLayoutRows}
+          label={t("view.subGroup")}
+          value={subGrouped ? localized(subGrouped.labels, language, subGrouped.label) : ""}
+          onClick={() => open("subGroup")}
         />
       )}
 

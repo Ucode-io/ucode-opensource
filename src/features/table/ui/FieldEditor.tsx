@@ -15,6 +15,7 @@ import { CHIP_COLORS, Chip } from "@/shared/ui/chip";
 import { Icon } from "@/shared/ui/icon";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { SelectMenu } from "@/shared/ui/select-menu";
+import type { TranslationKey } from "@/shared/lib/i18n";
 import { isValidSlug, slugify } from "@/shared/lib/slug";
 import {
   DEFAULT_LENGTH,
@@ -203,6 +204,7 @@ export function FieldEditor({
           autoFilters: toAutoFilters(editingRelation.raw),
           label: localized(field?.labels ?? {}, language, field?.label ?? ""),
           viewFieldIds: editingRelation.viewFieldIds,
+          selfDefault: editingRelation.selfDefault,
         }
       : null,
   );
@@ -815,6 +817,19 @@ function BackButton({ onClick }: { onClick: () => void }) {
  * а хранить другое. Цена — прежние связи строк, и о ней форма
  * предупреждает до нажатия, а не после.
  */
+/**
+ * Чем колонка-ссылка заполняется у новой записи.
+ *
+ * «Своя строка» — это не тот же человек, что «вошедший»: у курьера
+ * есть id пользователя и есть строка в таблице курьеров, и связь
+ * на «Курьера» должна получить вторую, а не первый (см. [[App Table]]).
+ */
+const SELF_DEFAULTS: { value: RelationDraft["selfDefault"]; labelKey: TranslationKey }[] = [
+  { value: null, labelKey: "relationForm.selfNone" },
+  { value: "user", labelKey: "relationForm.selfUser" },
+  { value: "object", labelKey: "relationForm.selfObject" },
+];
+
 function RelationForm({
   draft,
   target,
@@ -979,6 +994,32 @@ function RelationForm({
                 <Icon as={IconPlus} size={12} />
                 {t("relationForm.addAutoFilter")}
               </button>
+            </div>
+
+            {/* Чем колонка заполнена у НОВОЙ записи. Три состояния, а не
+                два флажка: в старой админке их два и поднять можно оба,
+                хотя значение всё равно уедет одно. */}
+            <div className="mt-3 border-t border-border pt-2">
+              <p className="px-1 text-2xs text-fg-muted">{t("relationForm.selfDefault")}</p>
+              <p className="px-1 pb-1 text-2xs text-fg-subtle">
+                {t("relationForm.selfDefaultHint")}
+              </p>
+
+              {SELF_DEFAULTS.map(({ value, labelKey }) => (
+                <label
+                  key={labelKey}
+                  className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-2 text-2xs text-fg transition-colors hover:bg-surface-hover"
+                >
+                  <input
+                    type="radio"
+                    name="self-default"
+                    checked={draft.selfDefault === value}
+                    onChange={() => patch({ selfDefault: value })}
+                    className="accent-accent"
+                  />
+                  {t(labelKey)}
+                </label>
+              ))}
             </div>
           </div>
         )}

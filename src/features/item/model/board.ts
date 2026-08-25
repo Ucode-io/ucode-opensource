@@ -130,6 +130,78 @@ export function boardColumns({
   return columns;
 }
 
+export type BoardLane = {
+  /** Значение поля дорожки. Пусто — дорожка «без значения». */
+  id: string;
+  label: string;
+  /**
+   * Сколько карточек в дорожке. Считается ДО раскладки по колонкам:
+   * у MULTISELECT строка попадает сразу в несколько колонок, и сумма
+   * по ним сказала бы «семь» там, где карточек пять.
+   */
+  size: number;
+  columns: BoardColumn[];
+};
+
+/**
+ * Второй уровень раскладки: те же колонки, разрезанные на дорожки.
+ *
+ * Дорожка отвечает на вопрос «чьё это»: колонки — стадии («в работе»,
+ * «готово»), дорожки — исполнители или проекты. Без второго уровня
+ * доска на сорок карточек читается как список, а не как доска.
+ *
+ * Считается тем же `boardColumns`, только другим полем: правило
+ * «сначала варианты поля, потом встретившиеся значения по алфавиту,
+ * пустая — последней» у строк и у дорожек одно и то же, и второй копии
+ * этого правила быть не должно.
+ *
+ * Поля дорожки нет — одна безымянная дорожка со всеми колонками.
+ * Так у доски без настройки остаётся ровно прежний вид, а у экрана —
+ * одна ветка отрисовки вместо двух.
+ */
+export function boardLanes({
+  rows,
+  lane,
+  laneTabs = [],
+  laneLabelOf,
+  unassigned,
+  ...columns
+}: {
+  rows: Item[];
+  /** Поле дорожек: слаг. Пусто — дорожка одна. */
+  lane: string;
+  laneTabs?: BoardTab[];
+  laneLabelOf?: ((row: Item, value: string) => string) | undefined;
+  tabs: BoardTab[];
+  slug: string;
+  unassigned: string;
+  labelOf?: ((row: Item, value: string) => string) | undefined;
+}): BoardLane[] {
+  if (!lane) {
+    return [
+      {
+        id: NO_GROUP,
+        label: "",
+        size: rows.length,
+        columns: boardColumns({ rows, unassigned, ...columns }),
+      },
+    ];
+  }
+
+  return boardColumns({
+    rows,
+    tabs: laneTabs,
+    slug: lane,
+    unassigned,
+    ...(laneLabelOf ? { labelOf: laneLabelOf } : {}),
+  }).map((group) => ({
+    id: group.id,
+    label: group.label,
+    size: group.rows.length,
+    columns: boardColumns({ rows: group.rows, unassigned, ...columns }),
+  }));
+}
+
 /**
  * Что записать в поле группировки, когда карточку бросили в колонку.
  *
