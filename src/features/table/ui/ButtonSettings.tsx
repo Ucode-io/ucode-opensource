@@ -6,21 +6,28 @@ import type { FieldDraft } from "../model/field-draft";
 import { Labeled } from "./FormulaSettings";
 
 /**
- * Настройки поля-кнопки: иконка и функция, которую зовёт клик.
+ * Функция поля и (у кнопки) её иконка.
  *
- * Значения у такого поля нет вовсе — колонка в базе пустая всегда,
- * — поэтому здесь нет ни умолчания, ни проверки ввода: настраивать
- * нечего, кроме действия.
+ * Полей с функцией два: BUTTON зовёт её кликом, SCAN_BARCODE — когда
+ * сканер дочитал код. Иконка есть только у первого: у сканера в ячейке
+ * рисунок кода, а не значок.
  *
- * Компонент монтируется только у BUTTON: список функций — отдельный
- * запрос, и у остальных полей он уходил бы в никуда на каждое открытие
- * панели.
+ * У кнопки значения нет вовсе — колонка в базе пустая всегда, — поэтому
+ * здесь нет ни умолчания, ни проверки ввода: настраивать нечего, кроме
+ * действия.
+ *
+ * Компонент монтируется только у этих двух типов: список функций —
+ * отдельный запрос, и у остальных полей он уходил бы в никуда на каждое
+ * открытие панели.
  */
 export function ButtonSettings({
   draft,
+  icon = true,
   onChange,
 }: {
   draft: FieldDraft;
+  /** Показывать выбор иконки. У сканера её нет. */
+  icon?: boolean;
   onChange: (next: Partial<FieldDraft>) => void;
 }) {
   const { t } = useTranslation();
@@ -28,11 +35,17 @@ export function ButtonSettings({
 
   return (
     <div className="flex flex-col gap-1.5 px-2 py-1">
-      <Labeled label={t("button.icon")}>
-        {/* Тот же пикер, что у пунктов меню: формат имени общий —
-            «tabler:bolt», ссылка или файл из нашего CDN. */}
-        <IconPicker value={draft.icon} type={draft.type} onChange={(icon) => onChange({ icon })} />
-      </Labeled>
+      {icon && (
+        <Labeled label={t("button.icon")}>
+          {/* Тот же пикер, что у пунктов меню: формат имени общий —
+              «tabler:bolt», ссылка или файл из нашего CDN. */}
+          <IconPicker
+            value={draft.icon}
+            type={draft.type}
+            onChange={(next) => onChange({ icon: next })}
+          />
+        </Labeled>
+      )}
 
       <Labeled label={t("button.function")}>
         <Select

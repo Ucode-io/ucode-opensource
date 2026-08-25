@@ -26,8 +26,8 @@ export type RecordRight = (typeof RECORD_RIGHTS)[number];
  * Права на экран таблицы. Показываются те, что у нас действительно
  * что-то решают: их читает features/auth/model/permissions и по ним
  * прячутся кнопки. Остальные (share_modal, pdf_action, language_btn,
- * add_filter, field_filter, search_button, automation) в ответе есть,
- * уезжают обратно как пришли, но экрана под них нет.
+ * add_filter, automation) в ответе есть, уезжают обратно как пришли,
+ * но экрана под них нет.
  */
 export const SCREEN_RIGHTS = [
   "settings",
@@ -40,9 +40,11 @@ export const SCREEN_RIGHTS = [
 export type ScreenRight = (typeof SCREEN_RIGHTS)[number];
 
 /**
- * Остальные права на экран: они есть в ответе и сохраняются, но наш
- * фронт их пока не читает. Показаны отдельно, а не в матрице: колонок
- * и так одиннадцать, а прав — двадцать пять.
+ * Остальные права на экран. Показаны отдельно, а не в матрице: колонок
+ * и так одиннадцать, а прав — двадцать пять. Часть из них фронт читает
+ * наравне с матрицей (`group`, `tab_group`, `field_filter`,
+ * `search_button`), часть не читает вовсе — они здесь только затем,
+ * чтобы не пропасть при сохранении роли.
  */
 export const OTHER_SCREEN_RIGHTS = [
   "automation",

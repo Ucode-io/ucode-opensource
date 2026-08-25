@@ -292,20 +292,29 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
      * наш экран, но и загрузчик с картой в приложении проекта, а
      * `cast.ToFloat` из строки «» делает ноль — то есть Гвинейский залив
      * вместо «не задано».
+     *
+     * `apiKey` у карты и `format` у снимка не отправляются вовсе:
+     * форма их больше не спрашивает (FIELD-AUDIT, F21 и F25). Стереть
+     * их этим нельзя — тело собирается ПОВЕРХ прежних attributes,
+     * и уже записанное значение остаётся на месте для того, кто его
+     * читает у себя.
      */
     ...(hasMapSettings(draft.type)
-      ? {
-          ...numeric("lat", draft.lat),
-          ...numeric("long", draft.long),
-          apiKey: draft.apiKey.trim(),
-        }
+      ? { ...numeric("lat", draft.lat), ...numeric("long", draft.long) }
       : {}),
-    ...(hasPhotoSettings(draft.type)
-      ? { format: draft.format.trim(), ...numeric("ratio", draft.ratio) }
-      : {}),
+    ...(hasPhotoSettings(draft.type) ? numeric("ratio", draft.ratio) : {}),
     ...(hasTranscode(draft.type) ? { transcode: draft.transcode } : {}),
+    /*
+     * Сканер. `function` здесь по той же причине, что у кнопки: поле
+     * зовёт её, когда код дочитан, — а pressEnter и length говорят,
+     * когда именно (см. features/item, ScannerEditor).
+     */
     ...(hasScannerSettings(draft.type)
-      ? { pressEnter: draft.pressEnter, ...numeric("length", draft.length) }
+      ? {
+          pressEnter: draft.pressEnter,
+          ...numeric("length", draft.length),
+          function: draft.functionId,
+        }
       : {}),
     /*
      * Разрядность последовательности INCREMENT_ID: учитывается в момент,
@@ -424,18 +433,28 @@ export function toCreateBody(
  * (см. CONTEXT, FieldOption).
  *
  * Ключ, по которому значение потом ищется в строке, у них тоже разный:
- * MULTISELECT кладёт в строку `slug`, STATUS — `value`. Поэтому
- * человеческая подпись у первого лежит в `value`, а у второго только
- * в `label_<язык>`.
+ * MULTISELECT кладёт в строку `slug`, STATUS и PICK_LIST — `value`.
+ * Поэтому человеческая подпись у первого лежит в `value`, а у двух
+ * других — в `label` и `label_<язык>`.
  */
 function toOptionAttributes(draft: FieldDraft, language: string): Record<string, unknown> {
   const shape = optionsShape(draft.type);
   if (!shape) return {};
 
   if (shape === "flat") {
+    /*
+     * Список у PICK_LIST и MULTISELECT лежит в одном ключе, а вариант
+     * внутри устроен по-разному: у MULTISELECT сохраняется slug,
+     * у PICK_LIST — value, слага у него нет (`SelectOptionsCreator`
+     * в старой заводит вариант формой «подпись + значение»). Записав
+     * PICK_LIST по-мультиселектовски, мы поменяем значение и подпись
+     * местами, и все уже проставленные строки осиротеют.
+     */
+    const toOption = draft.type === "PICK_LIST" ? toValueOption : toFlatOption;
+
     return {
       has_color: true,
-      options: draft.options.filter(named).map((option) => toFlatOption(option, language)),
+      options: draft.options.filter(named).map((option) => toOption(option, language)),
     };
   }
 
@@ -443,7 +462,7 @@ function toOptionAttributes(draft: FieldDraft, language: string): Record<string,
 
   for (const group of STATUS_GROUPS) {
     attributes[group] = {
-      options: draft.groups[group].filter(named).map((option) => toStatusOption(option, language)),
+      options: draft.groups[group].filter(named).map((option) => toValueOption(option, language)),
     };
   }
 
@@ -471,7 +490,8 @@ function toFlatOption(option: DraftOption, language: string): Record<string, unk
   };
 }
 
-function toStatusOption(option: DraftOption, language: string): Record<string, unknown> {
+/** Вариант, у которого в строку ложится `value`: STATUS и PICK_LIST. */
+function toValueOption(option: DraftOption, language: string): Record<string, unknown> {
   const label = option.label.trim();
 
   return {
@@ -480,6 +500,7 @@ function toStatusOption(option: DraftOption, language: string): Record<string, u
     value: option.value ?? (slugify(label) || label),
     // label у STATUS не читает никто, кроме нас: держим его как запасной
     // вариант подписи, если в проекте появится ещё один язык данных.
+    // У PICK_LIST он же — подпись варианта в старой админке.
     label,
     [`label_${language}`]: label,
     color: CHIP_HEX[option.color],

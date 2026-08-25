@@ -33,5 +33,7 @@ export type Environment = {
   name: string;
   projectId: string;
   color: string;
+  /** Зачем окружение заведено. Показывается в настройках, не в переключателе. */
+  description: string;
   isDefault: boolean;
 };

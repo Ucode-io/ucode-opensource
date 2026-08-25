@@ -13,7 +13,7 @@ test("роли читаются из data.response, а не из корня от
     data: {
       count: 2,
       response: [
-        { guid: "r1", name: " Админ ", is_system: false, status: true },
+        { guid: "r1", name: " Админ ", is_system: false, status: true, client_type_id: "c1" },
         { guid: "r2", name: "", is_system: true },
         // Без guid роль не открыть — такие пропускаем.
         { name: "Без идентификатора" },
@@ -22,8 +22,8 @@ test("роли читаются из data.response, а не из корня от
   };
 
   expect(toRoles(body)).toEqual([
-    { id: "r1", name: "Админ", isSystem: false },
-    { id: "r2", name: "—", isSystem: true },
+    { id: "r1", name: "Админ", isSystem: false, clientTypeId: "c1" },
+    { id: "r2", name: "—", isSystem: true, clientTypeId: "" },
   ]);
 });
 

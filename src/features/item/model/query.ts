@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Field } from "@/features/table";
-import { emptyFilter, filterKind } from "./filter-kind";
+import { emptyFilter, filterKind, type FilterKind } from "./filter-kind";
 
 /**
  * Что показываем: страница, сортировка, фильтры, поиск. Всё это живёт
@@ -26,7 +26,7 @@ export type Sort = {
  *
  *   any        ["todo"]            любое из списка          10 → 2
  *   contains   "asd"               вхождение подстроки      10 → 6
- *   is         {$in: ["asdf"]}     точное совпадение        10 → 5, "asd" → 0
+ *   is         ["asdf"]            точное совпадение        10 → 5, "asd" → 0
  *   equals     true                равенство
  *   between    {$gte, $lte}        диапазон                 10 → 3
  *   after      {$gt}                                        10 → 4
@@ -164,24 +164,32 @@ export function toConditions(filters: Filters): Record<string, unknown> {
  * восстанавливается всё, кроме `contains`: голая строка приходит и от
  * него, и от точного совпадения по числу. Берётся `contains` — он
  * находит надмножество, и человек в чипе видит, что именно ищется.
+ *
+ * Поля нужны из-за списка: он приходит и от «любое из» у набора,
+ * и от «равно» у всего остального (см. toCondition, ветка `is`).
+ * Различает их только тип поля. Не переданы — список читается как
+ * «любое из»: так его писала старая админка.
  */
-export function fromConditions(raw: unknown): Filters {
+export function fromConditions(raw: unknown, fields: Field[] = []): Filters {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
 
+  const kinds = new Map(fields.map((field) => [field.slug, filterKind(field)]));
   const filters: Filters = {};
 
   for (const [slug, value] of Object.entries(raw as Record<string, unknown>)) {
-    const filter = toFilter(value);
+    const filter = toFilter(value, kinds.get(slug));
     if (filter) filters[slug] = filter;
   }
 
   return filters;
 }
 
-function toFilter(value: unknown): Filter | null {
+function toFilter(value: unknown, kind: FilterKind | null | undefined): Filter | null {
   if (Array.isArray(value)) {
     const values = value.map(String).filter(Boolean);
-    return values.length ? { op: "any", values } : null;
+    if (!values.length) return null;
+
+    return { op: kind && kind !== "set" ? "is" : "any", values };
   }
 
   if (typeof value === "boolean") return { op: "equals", values: [String(value)] };
@@ -228,13 +236,22 @@ function toCondition(filter: Filter): unknown {
 
     /*
      * Значений может быть несколько: у текста это одно точное совпадение,
-     * у связи — несколько выбранных строк. Форма условия у обоих одна,
-     * `$in`, и бэкенд отбирает по ней через `= ANY` со сравнением строк
-     * (object_builder.go:1278) — то есть колонка с uuid ему по силам.
+     * у связи — несколько выбранных строк.
+     *
+     * Списком, а НЕ `{$in: [...]}`, хотя условие у бэкенда называется
+     * именно так. `$in` он кладёт в аргументы запроса как есть
+     * (`build_query.go:373`), а после разбора тела это `[]interface{}` —
+     * тип, которого у pgx нет, и весь запрос падает: «cannot use
+     * unregistered type []interface {} as query argument». Голый список
+     * идёт соседней веткой через `pq.Array` (`build_query.go:338`)
+     * и собирается в тот же `= ANY($n)`. См. docs/backend-notes.md,
+     * «Отбор строк».
+     *
+     * Так же отбирала и старая админка: `[${groupTab.value}]` (Grid.jsx).
      */
     case "is": {
       const exact = values.filter(Boolean);
-      return exact.length ? { $in: exact } : undefined;
+      return exact.length ? exact : undefined;
     }
 
     case "equals":

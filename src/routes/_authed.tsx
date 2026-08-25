@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { CopilotPanel } from "@/features/copilot";
 import { useProject } from "@/features/settings";
 import { Sidebar } from "@/features/sidebar";
 import { useUi } from "@/shared/lib/ui-store";
@@ -39,13 +40,14 @@ function AppShell() {
       <Sidebar />
       {/*
         Контент — карточка на фоне приложения: отступ со всех сторон,
-        своя граница и скругление. 12px — самый крупный радиус в системе,
+        скругление и мягкая тень. 12px — самый крупный радиус в системе,
         и он здесь по правилу «чем крупнее поверхность, тем больше радиус»
-        (docs/DESIGN.md). Граница на карточке, а не на сайдбаре: с зазором
-        она читается как край панели, а не как разделитель во всю высоту.
+        (docs/DESIGN.md). Край держит тень, а не граница: фон под карточкой
+        теперь с градиентом, и волосяная линия на нём читалась как шов.
       */}
-      {/* Без сайдбара карточки нет: отступ и скругление слева не от чего
-          отделять, и контент занимает экран целиком. */}
+      {/* Без сайдбара карточки нет: контент занимает экран целиком, и ни
+          скругление, ни тень не к чему прислонить — тень по краю экрана
+          не видна, зато обрезается вместе с ним. */}
       {/*
         overflow-clip, а не hidden. Разница не косметическая: `hidden`
         заводит контейнер прокрутки — без полосы, но прокручиваемый
@@ -55,11 +57,16 @@ function AppShell() {
       */}
       <main
         className={`flex min-w-0 flex-1 flex-col overflow-clip bg-surface ${
-          sidebarCollapsed ? "" : "m-2 rounded-xl border border-border"
+          sidebarCollapsed ? "" : "m-2 rounded-xl shadow-card"
         }`}
       >
         <Outlet />
       </main>
+
+      {/* Помощник отодвигает контент, а не накрывает его: он правит то,
+          что на экране, и таблица должна остаться видна. Смонтирован
+          всегда — закрытая панель не теряет начатый разговор. */}
+      <CopilotPanel />
     </div>
   );
 }

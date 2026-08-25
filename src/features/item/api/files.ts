@@ -26,6 +26,20 @@ export function uploadFolder(attributes: Record<string, unknown>): string {
   return typeof path === "string" && path.trim() ? path.trim() : DEFAULT_FOLDER;
 }
 
+/**
+ * Пропорции кадра (`attributes.ratio`) — число-строка: «1.3» это 4:3.
+ *
+ * Обрезает сам бэкенд, и только если параметр пришёл в запросе:
+ * `cropImageByRatio(img, ratio)` для всего, что не SVG
+ * (`api/handlers/v1/file.go:60`, применение — `:133`). Настройка есть
+ * в панели поля с самого начала, но без этого параметра не делала
+ * ничего.
+ */
+export function uploadRatio(attributes: Record<string, unknown>): string {
+  const ratio = attributes["ratio"];
+  return typeof ratio === "string" && Number(ratio) > 0 ? ratio.trim() : "";
+}
+
 export function fileUrl(link: string): string {
   if (!link) return "";
   // Ответ иногда уже содержит схему — тогда это готовый адрес.
@@ -45,7 +59,16 @@ export function fileUrl(link: string): string {
  */
 export function useUploadFiles() {
   return useMutation({
-    mutationFn: ({ files, folder }: { files: File[]; folder: string }) =>
+    mutationFn: ({
+      files,
+      folder,
+      ratio = "",
+    }: {
+      files: File[];
+      folder: string;
+      /** Пропорции кадра поля. Пусто — бэкенд не обрезает. */
+      ratio?: string;
+    }) =>
       Promise.all(
         files.map((file) => {
           const body = new FormData();
@@ -53,7 +76,7 @@ export function useUploadFiles() {
 
           return api
             .post<UploadedDto>(`/v1/files/folder_upload`, body, {
-              params: { folder_name: folder },
+              params: { folder_name: folder, ...(ratio ? { ratio } : {}) },
               /*
                * Заголовок обязателен: у клиента по умолчанию стоит
                * application/json, а axios на таком заголовке превращает

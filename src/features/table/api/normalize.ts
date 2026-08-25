@@ -146,14 +146,15 @@ export function toOptions(dto: FieldDto): Map<string, FieldOption> {
 
   /*
    * PICK_LIST хранит варианты там же, где MULTISELECT, и отличается
-   * только тем, что выбирают из них один. Старая админка предлагает
-   * этот тип при создании, но экрана для его вариантов у неё нет —
-   * поле выходило пустым списком.
+   * только тем, что выбирают из них один. Ключ у него другой: его
+   * варианты заводит форма из двух полей, подпись и значение
+   * (`SelectOptionsCreator`), слага у них нет вовсе — сохраняемое
+   * лежит в `value`. Тем же запасным ключом читаются старые
+   * MULTISELECT, заведённые до появления слага.
    */
   if (dto.type === "MULTISELECT" || dto.type === "PICK_LIST") {
     for (const raw of asOptions(attributes["options"])) {
-      // Именно slug: по нему значение и лежит в строке.
-      add(options, raw, raw.slug ?? "", null);
+      add(options, raw, raw.slug || raw.value || "", null);
     }
     return options;
   }
@@ -162,7 +163,8 @@ export function toOptions(dto: FieldDto): Map<string, FieldOption> {
     for (const group of STATUS_GROUPS) {
       const bag = attributes[group];
       const list = isRecord(bag) ? asOptions(bag["options"]) : [];
-      for (const raw of list) add(options, raw, raw.value ?? "", group);
+      // Подпись как ключ — на случай варианта, заведённого без value.
+      for (const raw of list) add(options, raw, raw.value || raw.label || "", group);
     }
   }
 
@@ -220,7 +222,9 @@ export function toRelation(dto: RelationDto, tableSlug: string): Relation {
     (field) => !ours?.id || field.table_id !== ours.id,
   );
 
-  const viewFieldSlugs = theirs.map((field) => field.slug ?? "").filter(Boolean);
+  const viewFields = theirs
+    .filter((field) => field.slug)
+    .map((field) => ({ slug: field.slug ?? "", type: field.type ?? "" }));
   const viewFieldIds = theirs.map((field) => field.id ?? "").filter(Boolean);
 
   return {
@@ -244,7 +248,7 @@ export function toRelation(dto: RelationDto, tableSlug: string): Relation {
       dto.relation_field_slug?.trim() ||
       dto.field_from?.trim() ||
       (to?.slug ? `${to.slug}_id` : ""),
-    viewFieldSlugs,
+    viewFields,
     viewFieldIds,
     raw: { ...dto },
   };

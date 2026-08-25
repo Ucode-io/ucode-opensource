@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { fileUrl, uploadFolder } from "./files";
+import { fileUrl, uploadFolder, uploadRatio } from "./files";
 
 test("путь из хранилища превращается в адрес, готовый — остаётся собой", () => {
   // VITE_CDN_URL в тестовом окружении оканчивается слэшем, путь — нет:
@@ -14,4 +14,13 @@ test("папку задаёт поле, пустую подменяем свое
   expect(uploadFolder({ path: "avatars" })).toBe("avatars");
   expect(uploadFolder({ path: "  " })).toBe("media");
   expect(uploadFolder({})).toBe("media");
+});
+
+test("пропорции уезжают, только если они настоящие", () => {
+  // «1.3» — это 4:3: старая админка делит ширину на высоту.
+  expect(uploadRatio({ ratio: "1.3" })).toBe("1.3");
+  // Ноль и мусор бэкенд всё равно отбросит (file.go:66) — не шлём.
+  expect(uploadRatio({ ratio: "0" })).toBe("");
+  expect(uploadRatio({ ratio: "4:3" })).toBe("");
+  expect(uploadRatio({})).toBe("");
 });

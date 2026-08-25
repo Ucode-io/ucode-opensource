@@ -11,7 +11,19 @@ export {
   useStartRecovery,
   useVerifyCode,
 } from "./api/auth";
-export { useTablePermission, useTablePermissions } from "./model/permissions";
+export {
+  useGlobalRight,
+  useIsSuperRole,
+  useTablePermission,
+  useTablePermissions,
+} from "./model/permissions";
+/*
+ * Правила пароля живут здесь, но нужны не только входу: PASSWORD —
+ * обычный тип поля, и строку с паролем заводят в карточке записи.
+ * Проверка у бэкенда одна и та же (`ValidStrongPassword`), поэтому
+ * и на клиенте она должна быть одна.
+ */
+export { PASSWORD_RULES, checkPassword, isPasswordValid } from "./model/validation";
 export type { Permission } from "./model/types";
 export { AuthLayout } from "./ui/AuthLayout";
 export { InviteForm } from "./ui/InviteForm";

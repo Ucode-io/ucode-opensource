@@ -12,6 +12,7 @@ import type { MenuNode } from "./types";
 
 export type MenuActionId =
   | "create-table"
+  | "link-table"
   | "create-folder"
   | "create-link"
   | "create-files"
@@ -34,6 +35,12 @@ export type MenuAction = {
 
 const ALL: readonly MenuAction[] = [
   { id: "create-table", labelKey: "menuAction.createTable", requires: "write" },
+  /*
+   * Пункт на УЖЕ СУЩЕСТВУЮЩУЮ таблицу — старое «Add table»
+   * (TableLinkModal.jsx). Не то же, что «создать таблицу»: таблица
+   * остаётся одна, а открывать её начинают из двух мест.
+   */
+  { id: "link-table", labelKey: "menuAction.linkTable", requires: "write" },
   { id: "create-folder", labelKey: "menuAction.createFolder", requires: "write" },
   { id: "create-link", labelKey: "menuAction.createLink", requires: "write" },
   { id: "create-files", labelKey: "menuAction.createFiles", requires: "write" },
@@ -52,6 +59,7 @@ const ALL: readonly MenuAction[] = [
 /** Создавать что-то внутри можно только у того, что раскрывается. */
 const ONLY_GROUPS = new Set<MenuActionId>([
   "create-table",
+  "link-table",
   "create-folder",
   "create-link",
   "create-files",

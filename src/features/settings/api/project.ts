@@ -38,6 +38,13 @@ export type ProjectOption = { id: string; name: string };
 
 export type ProjectSettings = {
   id: string;
+  /**
+   * Компания проекта. Нужна не этому экрану, а созданию окружения:
+   * `POST /v1/environment` берёт `company_id` из ТЕЛА (из токена он
+   * достаёт только роль и пользователя), а карточка проекта — это
+   * единственное место, где компания уже есть.
+   */
+  companyId: string;
   title: string;
   logo: string;
   /** Языки данных проекта — id из справочника LANGUAGE. */
@@ -208,6 +215,7 @@ export function useLanguageOptions(enabled = true) {
 export function toProjectSettings(dto: ProjectDto): ProjectSettings {
   return {
     id: dto.project_id ?? "",
+    companyId: dto.company_id ?? "",
     title: dto.title?.trim() ?? "",
     logo: dto.logo ?? "",
     languageIds: (dto.language ?? []).map((item) => item.id ?? "").filter(Boolean),

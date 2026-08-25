@@ -15,8 +15,13 @@ export type MenuInput = {
   icon: string;
   type: string;
   parentId: string;
-  /** Только у TABLE: имя таблицы в базе. */
+  /** Только у НОВОЙ таблицы: имя таблицы в базе. */
   slug?: string;
+  /**
+   * Только у пункта на СУЩЕСТВУЮЩУЮ таблицу. Задан — таблица не
+   * создаётся, заводится один пункт меню; см. useCreateMenu.
+   */
+  tableId?: string;
   /**
    * Только у MICROFRONTEND: какое приложение показывать. Задаётся
    * ОДИН РАЗ, при создании: PUT колонку не пишет — см. menuUpdateBody.
@@ -51,10 +56,16 @@ function useMenuMutation<TVars>(run: (vars: TVars, projectId: string) => Promise
  * Настоящая ручка — POST /v1/table: она в одной транзакции заводит саму
  * таблицу, поле guid, пункт меню (menu_id = родитель), layout, view
  * и права всех ролей (object_builder/storage/postgres/table.go).
+ *
+ * Пункт на УЖЕ СУЩЕСТВУЮЩУЮ таблицу — наоборот, только /v3/menus:
+ * таблицу заводить не надо, а слаг для неё бэкенд найдёт сам по table_id
+ * и заодно создаст пункту его собственные view, TABLE и SECTION
+ * (object_builder/storage/postgres/menu.go:113). Шлюз всегда шлёт туда
+ * new_router=true (api/handlers/v3/menu.go:117), так что ветка рабочая.
  */
 export function useCreateMenu() {
   return useMenuMutation<MenuInput>((input, projectId) => {
-    if (input.type === "TABLE") {
+    if (input.type === "TABLE" && !input.tableId) {
       return api.post("/v1/table", {
         label: baseLabel(input.labels),
         slug: input.slug,
@@ -79,6 +90,7 @@ export function useCreateMenu() {
       type: input.type,
       parent_id: input.parentId,
       project_id: projectId,
+      ...(input.tableId ? { table_id: input.tableId } : {}),
       ...(input.microfrontendId ? { microfrontend_id: input.microfrontendId } : {}),
       attributes: { ...labelAttributes(input.labels), ...input.attributes },
     });

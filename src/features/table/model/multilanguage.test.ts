@@ -9,7 +9,7 @@ import {
   localizeSlug,
   stripLanguage,
 } from "./multilanguage";
-import { localized } from "./types";
+import { localized, tabLabel } from "./types";
 import type { Field } from "./types";
 
 const LANGS = ["en", "cyr"];
@@ -180,4 +180,21 @@ test("подпись: локаль интерфейса, потом язык д�
   expect(localized({}, "cyr", "orders")).toBe("orders");
   // Пустая строка — не подпись: у половины полей лежит `label_ru: ""`.
   expect(localized({ ru: "  " }, "cyr", "orders")).toBe("orders");
+});
+
+/*
+ * В карточке порядок обратный: вкладку языка человек нажал только что,
+ * и подпись обязана поехать за ней. Пока этого не было, переключатель
+ * работал через раз — у поля с заполненным `label_ru` (а коды проекта
+ * с ru/en/uz совпадают часто) подпись намертво вставала на локали,
+ * у соседнего без `label_ru` — менялась.
+ */
+test("подпись в карточке: сначала выбранная вкладка", () => {
+  expect(tabLabel({ ru: "Заказы", cyr: "Буюртмалар" }, "cyr", "orders", true)).toBe("Буюртмалар");
+  // Вкладок нет — правило общее, как в таблице.
+  expect(tabLabel({ ru: "Заказы", cyr: "Буюртмалар" }, "cyr", "orders", false)).toBe("Заказы");
+  // На выбранной вкладке подписи нет — выручает локаль интерфейса.
+  expect(tabLabel({ ru: "Заказы" }, "cyr", "orders", true)).toBe("Заказы");
+  expect(tabLabel({ cyr: "  ", ru: "Заказы" }, "cyr", "orders", true)).toBe("Заказы");
+  expect(tabLabel({}, "cyr", "orders", true)).toBe("orders");
 });

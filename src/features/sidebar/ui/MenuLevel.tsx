@@ -74,39 +74,43 @@ function MenuRow({
 
   // Обработчики перетаскивания живут на обёртке, а не на ссылке: внутри
   // строки есть вторая кнопка, и тащить нужно строку целиком.
-  const dragHandlers = {
-    draggable: true,
-    onDragStart: (event: DragEvent<HTMLElement>) => {
-      dnd.start({ node, parentId });
-      event.dataTransfer.effectAllowed = "move";
-      // Без данных Firefox не начинает перетаскивание.
-      event.dataTransfer.setData("text/plain", node.id);
-      // Призрак — сама строка целиком, взятая под курсором.
-      event.dataTransfer.setDragImage(event.currentTarget, 12, 16);
-    },
-    onDragEnd: dnd.end,
-    onDragOver: (event: DragEvent<HTMLElement>) => {
-      // Без preventDefault браузер показывает «сюда нельзя» — а подсветка
-      // не зажигается, и рамка не обещает переноса, которого не будет.
-      if (!dnd.source || dnd.source.node.id === node.id) return;
-      if (path.includes(dnd.source.node.id)) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-      dnd.hover({ id: node.id, position: positionIn(event, expandable) });
-    },
-    onDrop: (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      dnd.drop({
-        target: node,
-        position: positionIn(event, expandable),
-        targetSiblings: siblings,
-        targetParentId: parentId,
-        targetPath: path,
-        ...(open ? { insideSiblings: children.items } : {}),
-      });
-    },
-  };
+  // Без права `menu_drag` их нет вовсе: строка, которая тащится, но
+  // никуда не встаёт, хуже неподвижной.
+  const dragHandlers = !dnd.enabled
+    ? {}
+    : {
+        draggable: true,
+        onDragStart: (event: DragEvent<HTMLElement>) => {
+          dnd.start({ node, parentId });
+          event.dataTransfer.effectAllowed = "move";
+          // Без данных Firefox не начинает перетаскивание.
+          event.dataTransfer.setData("text/plain", node.id);
+          // Призрак — сама строка целиком, взятая под курсором.
+          event.dataTransfer.setDragImage(event.currentTarget, 12, 16);
+        },
+        onDragEnd: dnd.end,
+        onDragOver: (event: DragEvent<HTMLElement>) => {
+          // Без preventDefault браузер показывает «сюда нельзя» — а подсветка
+          // не зажигается, и рамка не обещает переноса, которого не будет.
+          if (!dnd.source || dnd.source.node.id === node.id) return;
+          if (path.includes(dnd.source.node.id)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          dnd.hover({ id: node.id, position: positionIn(event, expandable) });
+        },
+        onDrop: (event: DragEvent<HTMLElement>) => {
+          event.preventDefault();
+          event.stopPropagation();
+          dnd.drop({
+            target: node,
+            position: positionIn(event, expandable),
+            targetSiblings: siblings,
+            targetParentId: parentId,
+            targetPath: path,
+            ...(open ? { insideSiblings: children.items } : {}),
+          });
+        },
+      };
 
   // Отступ вложенности инлайном: Tailwind не собирает классы из строк.
   const style = { paddingLeft: `${8 + depth * 14}px` };
@@ -189,7 +193,7 @@ function MenuRow({
         )}
 
         {navigable}
-        <MenuRowActions node={node} isAdmin={false} />
+        <MenuRowActions node={node} />
       </div>
 
       {expandable && open && (

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/shared/api/client";
 import { keys } from "@/shared/lib/query-keys";
-import { relationLabel } from "@/shared/lib/relation-label";
+import { relationLabel, type ViewField } from "@/shared/lib/relation-label";
 
 /**
  * Строки ЧУЖОЙ таблицы для выбора руками: условие агрегата отбирает
@@ -27,14 +27,14 @@ const LIMIT = 10;
 
 export function useRelationRows({
   tableSlug,
-  viewFieldSlugs,
+  viewFields,
   search,
   limit = LIMIT,
 }: {
   /** Таблица, из которой выбирают. Пусто — запроса нет. */
   tableSlug: string;
   /** Поля показа связи: из них собирается подпись строки. */
-  viewFieldSlugs: string[];
+  viewFields: ViewField[];
   search: string;
   /**
    * Сколько строк спрашивать. По умолчанию десять — столько влезает
@@ -54,7 +54,7 @@ export function useRelationRows({
         data: {
           limit,
           offset: 0,
-          view_fields: viewFieldSlugs,
+          view_fields: viewFields.map((field) => field.slug),
           ...(text ? { search: text } : {}),
         },
       }),
@@ -64,7 +64,7 @@ export function useRelationRows({
     select: (dto): RelationRow[] =>
       (dto.data?.response ?? []).map((row) => ({
         guid: String(row["guid"] ?? ""),
-        label: relationLabel(row, viewFieldSlugs),
+        label: relationLabel(row, viewFields),
       })),
   });
 

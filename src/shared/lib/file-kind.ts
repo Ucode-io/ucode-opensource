@@ -54,15 +54,29 @@ export function fileKind(url: string): FileKind {
   return KINDS[name.slice(dot + 1).toLowerCase()] ?? "other";
 }
 
+/**
+ * Приставка, которой бэкенд разводит одноимённые файлы:
+ * `<uuid>_<исходное имя>` (`api/handlers/v1/file.go:114`). В колонке
+ * шириной 180px без неё видно имя, а с ней — uuid и многоточие.
+ *
+ * Режем по uuid, а не по первому подчёркиванию: подчёркиваний в имени
+ * файла сколько угодно, и старая админка на них теряет начало имени
+ * (`HFMultiFile/MultiFileUpload.jsx:78` — `split("_").slice(1)`).
+ */
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i;
+
 /** Имя файла из ссылки. Параметры запроса в имени не нужны. */
 export function fileName(url: string): string {
   const path = url.split(/[?#]/)[0] ?? url;
   const last = path.split("/").filter(Boolean).pop() ?? url;
 
+  let name = last;
   try {
-    return decodeURIComponent(last);
+    name = decodeURIComponent(last);
   } catch {
     // Битая последовательность %XX — показываем как есть.
-    return last;
   }
+
+  // Одна приставка и ничего кроме неё — показывать нечего: остаётся uuid.
+  return name.replace(UUID_PREFIX, "") || name;
 }

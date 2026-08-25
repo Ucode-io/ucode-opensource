@@ -14,6 +14,7 @@ export type EnvironmentDto = {
   name?: string;
   project_id?: string;
   display_color?: string;
+  description?: string;
   default?: boolean;
 };
 export type EnvironmentsDto = { environments?: EnvironmentDto[]; count?: number };

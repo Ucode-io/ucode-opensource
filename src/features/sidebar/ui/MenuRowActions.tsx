@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconDots } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useIsSuperRole } from "@/features/auth";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { TemplateCreateDialog } from "@/features/templates";
@@ -20,7 +21,8 @@ import {
 
 type Dialog =
   | { kind: "edit" }
-  | { kind: "create"; type: CreatableType }
+  /** existing — пункт заводят на уже существующую таблицу, а не на новую. */
+  | { kind: "create"; type: CreatableType; existing?: boolean }
   | { kind: "delete" }
   | { kind: "template" }
   | null;
@@ -29,9 +31,16 @@ type Dialog =
  * Кнопка «⋮» на строке меню. Набор пунктов собирается из реестра действий
  * и прав самого пункта — ветвлений по типу здесь нет.
  */
-export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boolean }) {
+export function MenuRowActions({ node }: { node: MenuNode }) {
   const { t } = useTranslation();
   const [dialog, setDialog] = useState<Dialog>(null);
+  /*
+   * Роль спрашиваем здесь, а не принимаем сверху: «сделать шаблоном»
+   * видит только суперадмин, и пока это был проброшенный флаг, строка
+   * меню передавала в него голое false — действие не показывалось
+   * никому и никогда.
+   */
+  const isAdmin = useIsSuperRole();
 
   const create = useCreateMenu();
   const update = useUpdateMenu();
@@ -48,6 +57,7 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
     if (id === "edit") setDialog({ kind: "edit" });
     if (id === "create-folder") setDialog({ kind: "create", type: "FOLDER" });
     if (id === "create-table") setDialog({ kind: "create", type: "TABLE" });
+    if (id === "link-table") setDialog({ kind: "create", type: "TABLE", existing: true });
     if (id === "create-link") setDialog({ kind: "create", type: "LINK" });
     if (id === "create-files") setDialog({ kind: "create", type: "MINIO_FOLDER" });
     if (id === "create-microfrontend") setDialog({ kind: "create", type: "MICROFRONTEND" });
@@ -73,7 +83,10 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
           icon: value.icon,
           type: dialog.type,
           parentId: node.id,
-          ...(dialog.type === "TABLE" ? { slug: value.slug } : {}),
+          // Слаг — только у НОВОЙ таблицы; у существующей вместо него
+          // её идентификатор, и создаётся один пункт меню, без таблицы.
+          ...(dialog.type === "TABLE" && !dialog.existing ? { slug: value.slug } : {}),
+          ...(dialog.existing ? { tableId: value.tableId } : {}),
           ...(dialog.type === "MICROFRONTEND"
             ? { microfrontendId: value.microfrontendId }
             : {}),
@@ -139,10 +152,11 @@ export function MenuRowActions({ node, isAdmin }: { node: MenuNode; isAdmin: boo
 
       {dialog?.kind === "create" && (
         <MenuFormDialog
-          title={t(CREATE_TITLES[dialog.type])}
+          title={t(dialog.existing ? "menuForm.linkTable" : CREATE_TITLES[dialog.type])}
           initial={EMPTY_MENU_FORM}
           type={dialog.type}
-          needsSlug={dialog.type === "TABLE"}
+          needsSlug={dialog.type === "TABLE" && !dialog.existing}
+          needsTable={Boolean(dialog.existing)}
           needsRemote={dialog.type === "MICROFRONTEND"}
           busy={create.isPending}
           onSubmit={submitForm}

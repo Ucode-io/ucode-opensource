@@ -22,6 +22,7 @@ import {
   IconPalette,
   IconPaperclip,
   IconPhone,
+  IconHeading,
   IconPhoto,
   IconPolygon,
   IconQrcode,
@@ -42,6 +43,9 @@ import { cellKind, type CellKind } from "../model/cell-kind";
  */
 const BY_KIND: Record<CellKind, TablerIcon> = {
   text: IconAbc,
+  // Подпись-разделитель (TEXT), а не текст записи: значок тот же,
+  // что у выбора заголовка карточки.
+  label: IconHeading,
   longtext: IconAlignLeft,
   number: IconHash,
   boolean: IconCheckbox,
@@ -62,6 +66,7 @@ const BY_KIND: Record<CellKind, TablerIcon> = {
   formula: IconMath,
   qr: IconQrcode,
   barcode: IconBarcode,
+  scanner: IconBarcode,
   password: IconLock,
   link: IconWorld,
   button: IconBolt,

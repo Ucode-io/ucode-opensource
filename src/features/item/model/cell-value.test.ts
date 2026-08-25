@@ -3,12 +3,28 @@ import type { Field } from "@/features/table";
 import {
   blankItem,
   fromDateInput,
+  plainText,
   sameValue,
   toDateInput,
   toDateValue,
   toList,
   toNumber,
 } from "./cell-value";
+
+test("разметка из редактора старой админки показывается текстом", () => {
+  expect(plainText("<p>Текст</p>")).toBe("Текст");
+  expect(plainText("<p>Первый</p><p>Второй</p>")).toBe("Первый\nВторой");
+  expect(plainText('<p>Цена &lt; 100 &amp; скидка<br>сегодня</p>')).toBe(
+    "Цена < 100 & скидка\nсегодня",
+  );
+});
+
+test("угловые скобки без разметки остаются на месте", () => {
+  // Здесь старая админка врёт: её regexp съедает «< 3 >».
+  expect(plainText("2 < 3 > 1")).toBe("2 < 3 > 1");
+  expect(plainText("a<b")).toBe("a<b");
+  expect(plainText("")).toBe("");
+});
 
 test("календарная дата не зависит от часового пояса", () => {
   // Ровно эта строка, прочитанная как момент времени, к западу от Гринвича

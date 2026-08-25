@@ -11,6 +11,8 @@ import type { Item } from "./types";
  *   attributes.validation          регулярное выражение
  *   attributes.validation_message  что показать, когда не совпало
  *
+ * Плюс проверка, зашитая в тип, — см. BUILT_IN ниже.
+ *
  * Проверять на клиенте нужно не вместо бэкенда, а раньше него: колонка
  * с NOT NULL ответит 500 с текстом драйвера, а регулярное выражение
  * бэкенд не проверяет вовсе — оно существует только ради этой проверки.
@@ -25,9 +27,26 @@ export type CellError = {
   message: string;
 };
 
+/**
+ * Проверки, зашитые в тип, — когда своей регулярки у поля нет.
+ *
+ * Выражение то же, что в старой админке (`rules.pattern` у EMAIL,
+ * `FormElementGenerator.jsx:690`): нестрогое, без якорей и без разбора
+ * RFC. Строже писать нельзя — под этим выражением уже заведены живые
+ * данные, и поле, которое вчера сохранялось, сегодня перестало бы.
+ *
+ * Настройка админа главнее: он писал её про конкретное поле, вместе
+ * с сообщением на языке проекта.
+ */
+const BUILT_IN: Record<string, RegExp> = {
+  EMAIL: /\S+@\S+\.\S+/,
+};
+
 export function cellError(field: Field, value: unknown): CellError | null {
   if (isBlank(value)) return field.required ? { kind: "required", message: "" } : null;
-  if (!field.validation) return null;
+
+  const pattern = field.validation?.pattern ?? BUILT_IN[field.type];
+  if (!pattern) return null;
 
   /*
    * Регулярное выражение имеет смысл только для того, что человек
@@ -39,9 +58,9 @@ export function cellError(field: Field, value: unknown): CellError | null {
 
   // Совпадение частичное, без якорей, — как в старой админке (rules.pattern
   // у react-hook-form). Выражения в живых проектах написаны под неё.
-  return field.validation.pattern.test(String(value))
+  return pattern.test(String(value))
     ? null
-    : { kind: "pattern", message: field.validation.message };
+    : { kind: "pattern", message: field.validation?.message ?? "" };
 }
 
 /**

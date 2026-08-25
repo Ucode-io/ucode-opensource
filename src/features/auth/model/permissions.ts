@@ -37,7 +37,47 @@ const ALL: Permission = {
   addField: true,
   group: true,
   tabGroup: true,
+  searchButton: true,
+  fieldFilter: true,
 };
+
+/**
+ * Роль, которой права не проверяют. Нужна не только таблицам: часть
+ * действий (шаблон из папки) в старой админке видела только она.
+ */
+export function useIsSuperRole(): boolean {
+  return useSession().getProfile()?.role === SUPER_ROLE;
+}
+
+/**
+ * Разрешает ли роль глобальное право.
+ *
+ * Значения не все булевы: рядом с флагами лежит `id` роли, поэтому
+ * сравниваем строго с `true`, а не приводим к булеву.
+ *
+ * Записи нет вовсе (`null`) — разрешаем: это «права не приехали», а не
+ * «нельзя», та же причина, что у ALL выше. Запись есть, а поля в ней
+ * нет — запрещаем: `false` до нас просто не доезжает, поля в ответе
+ * с omitempty (см. api/dto).
+ */
+export function allowsGlobalRight(
+  rights: Record<string, unknown> | null,
+  right: string,
+): boolean {
+  return rights ? rights[right] === true : true;
+}
+
+/**
+ * Глобальное право роли — кнопка приложения, а не таблица. Имена
+ * перечислены в `features/settings/model/permissions` (GLOBAL_RIGHTS);
+ * сайдбару из них нужны `menu_button` и `menu_drag`.
+ */
+export function useGlobalRight(right: string): boolean {
+  const store = useSession();
+  if (store.getProfile()?.role === SUPER_ROLE) return true;
+
+  return allowsGlobalRight(store.getGlobalRights(), right);
+}
 
 export function storePermissions(permissions: Permission[]) {
   const map = Object.fromEntries(

@@ -5,6 +5,9 @@
  */
 
 import i18n from "@/shared/lib/i18n";
+import type { ViewField } from "@/shared/lib/relation-label";
+
+export type { ViewField };
 
 /**
  * Типы полей, которые отдаёт бэкенд (field.proto, enum FieldType).
@@ -38,9 +41,39 @@ export type Labels = Record<string, string>;
  * Третья ступень нужна отдельно: базовой подписи может не быть вовсе
  * (у вариантов STATUS её нет) — тогда показываем сохранённое значение,
  * а не пустоту.
+ *
+ * Исключение ровно одно — карточка записи с вкладками языка: см.
+ * tabLabel. В таблице, фильтрах и сортировке вкладок нет, и там
+ * правило именно это.
  */
 export function localized(labels: Labels, language: string, fallback: string): string {
   return labels[i18n.language]?.trim() || labels[language]?.trim() || fallback;
+}
+
+/**
+ * Подпись поля в КАРТОЧКЕ, где язык выбирают вкладкой.
+ *
+ * Вкладку человек только что нажал — подпись обязана поехать за ней,
+ * поэтому выбранный язык идёт первым. Дальше всё как в localized:
+ * подписи на выбранном языке может не быть вовсе.
+ *
+ * Так же разведено и в старой админке: карточка читает
+ * `label_${activeLang ?? i18n.language}` (DrawerFormDetailPage.jsx:165),
+ * а таблица, фильтры, сортировка и настройки колонок — всегда
+ * `label_${i18n.language}`.
+ *
+ * `tabbed` — есть ли вкладки на экране вообще. Без мультиязычных полей
+ * их не рисуют, и тогда «выбранный язык» — не выбор человека, а значение
+ * из общего хранилища: идти за ним значило бы переименовывать подписи
+ * без единого элемента управления рядом.
+ */
+export function tabLabel(
+  labels: Labels,
+  language: string,
+  fallback: string,
+  tabbed: boolean,
+): string {
+  return (tabbed && labels[language]?.trim()) || localized(labels, language, fallback);
 }
 
 /** Группы вариантов STATUS. Бэкенд хранит их тремя отдельными списками. */
@@ -76,6 +109,11 @@ export type FieldOption = {
  * чей тип ложится в VARCHAR (helper.FIELD_TYPES в object_builder).
  * NUMBER и DATE в этот список не входят — регулярное выражение
  * по числовой колонке ронять запрос будет молча, пустым результатом.
+ *
+ * Это «VARCHAR минус то, по чему искать бессмысленно», а не весь
+ * VARCHAR: PHOTO, FILE, VIDEO — адреса файлов, COLOR и ICON — коды
+ * из палитры и справочника, PASSWORD — хэш. Искать по ним нечего,
+ * и в старой версии их в поиске тоже нет.
  */
 export const SEARCH_TYPES = new Set([
   "SINGLE_LINE",
@@ -85,9 +123,11 @@ export const SEARCH_TYPES = new Set([
   "INTERNATION_PHONE",
   "PICK_LIST",
   "UUID",
+  "RANDOM_UUID",
   "INCREMENT_ID",
   "RANDOM_NUMBERS",
   "CODABAR",
+  "TIME",
   "FORMULA_FRONTEND",
   "MAP",
   "JSON",
@@ -235,7 +275,12 @@ export type Relation = {
    */
   linkField: string;
   /**
-   * Какие поля показывать вместо uuid. Слаги полей целевой таблицы.
+   * Какие поля показывать вместо uuid — слаг и тип поля целевой таблицы.
+   *
+   * Тип нужен подписи: связанная строка приезжает сырой, и дата в ней
+   * выглядит как «2026-01-06T00:00:00Z», пока её не отформатируют
+   * (см. shared/lib/relation-label). Слаг без типа означал бы, что
+   * форматировать нечем.
    *
    * Может быть пустым или указывать на поля исходной таблицы — так
    * выглядит ненастроенная связь. Тогда показать нечего, и ячейка
@@ -243,7 +288,7 @@ export type Relation = {
    * это ровно тот `a || b || c.d`, из-за которого в старом ucode
    * одно и то же значение читалось четырьмя разными способами.
    */
-  viewFieldSlugs: string[];
+  viewFields: ViewField[];
   /**
    * Те же поля показа, но идентификаторами: PUT /v2/relations ждёт
    * `view_fields` списком id, а ячейка читает значения по слагам.

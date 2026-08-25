@@ -1,4 +1,5 @@
 import { describe, expect, it, test } from "vitest";
+import type { Field } from "@/features/table";
 import {
   activeFilterCount,
   formatSorts,
@@ -11,6 +12,14 @@ import {
   toRequestBody,
   type Filters,
 } from "./query";
+
+/** Поле — ровно то, что нужно fromConditions: слаг, тип и варианты. */
+const field = (slug: string, type: string, options: string[] = ["todo", "done"]) =>
+  ({
+    slug,
+    type,
+    options: new Map(options.map((value) => [value, { value }])),
+  }) as unknown as Field;
 
 test("страница превращается в offset", () => {
   expect(toRequestBody({ limit: 25, page: 1 })).toMatchObject({ limit: 25, offset: 0 });
@@ -88,7 +97,7 @@ test("каждое условие превращается в свою форм�
 
   expect(body["status"]).toEqual(["todo", "done"]);
   expect(body["title"]).toBe("текст");
-  expect(body["code"]).toEqual({ $in: ["ABC"] });
+  expect(body["code"]).toEqual(["ABC"]);
   expect(body["active"]).toBe(false);
   expect(body["created"]).toEqual({ $gte: "2025-11-01", $lte: "2025-11-30" });
   expect(body["seen"]).toEqual({ $gt: "2025-11-05" });
@@ -102,7 +111,24 @@ test("«содержит» и «равно» дают разные запрос�
   const is = toRequestBody({ limit: 1, page: 1, filters: { t: { op: "is", values: ["asd"] } } });
 
   expect(contains["t"]).toBe("asd");
-  expect(is["t"]).toEqual({ $in: ["asd"] });
+  expect(is["t"]).toEqual(["asd"]);
+});
+
+/*
+ * `$in` в теле запроса роняет весь get-list: бэкенд отдаёт его значение
+ * в pgx нераспакованным списком (`build_query.go:373`), и тот отвечает
+ * «cannot use unregistered type []interface {}». Условие то же самое
+ * уезжает голым списком — см. docs/backend-notes.md, «Отбор строк».
+ */
+test("«равно» уходит списком, а не оператором $in", () => {
+  const body = toRequestBody({
+    limit: 1,
+    page: 1,
+    filters: { author_id: { op: "is", values: ["guid-1", "guid-2"] } },
+  });
+
+  expect(body["author_id"]).toEqual(["guid-1", "guid-2"]);
+  expect(JSON.stringify(body)).not.toContain("$in");
 });
 
 test("односторонний диапазон уходит одной границей", () => {
@@ -227,20 +253,43 @@ describe("отбор по умолчанию: карта условий ↔ фи
     closed: { op: "before", values: ["2025-01-01"] },
   };
 
+  /*
+   * Список на проводе значит и «любое из» у набора, и «равно» у всего
+   * остального. Различает их только тип поля — поэтому круг замыкается
+   * лишь со схемой; без неё список читается как «любое из».
+   */
+  const fields = [
+    field("status", "STATUS"),
+    field("title", "SINGLE_LINE"),
+    field("code", "SINGLE_LINE"),
+    field("paid", "BOOLEAN"),
+    field("created", "DATE"),
+    field("updated", "DATE"),
+    field("closed", "DATE"),
+    field("author_id", "LOOKUP"),
+  ];
+
   it("переживает круг «сохранили — прочитали»", () => {
-    expect(fromConditions(toConditions(filters))).toEqual(filters);
+    expect(fromConditions(toConditions(filters), fields)).toEqual(filters);
   });
 
   /*
-   * Отбор по связи — те же `is` и `$in`, только значений несколько:
+   * Отбор по связи — то же условие «равно», только значений несколько:
    * guid'ы выбранных строк. Потерять хвост списка значит показать
    * строки не по тому условию, которое человек видит на чипе.
    */
   it("несколько значений условия «равно» переживают круг целиком", () => {
     const relation: Filters = { author_id: { op: "is", values: ["guid-1", "guid-2"] } };
 
-    expect(toConditions(relation)).toEqual({ author_id: { $in: ["guid-1", "guid-2"] } });
-    expect(fromConditions(toConditions(relation))).toEqual(relation);
+    expect(toConditions(relation)).toEqual({ author_id: ["guid-1", "guid-2"] });
+    expect(fromConditions(toConditions(relation), fields)).toEqual(relation);
+  });
+
+  /* Настройки старой админки и наши прежние: оператор ещё читается. */
+  it("сохранённый $in читается как «равно»", () => {
+    expect(fromConditions({ code: { $in: ["A-1"] } }, fields)).toEqual({
+      code: { op: "is", values: ["A-1"] },
+    });
   });
 
   it("незаполненный фильтр в настройку не попадает", () => {

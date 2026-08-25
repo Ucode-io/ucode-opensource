@@ -36,6 +36,8 @@ test("сессия собирается из вложенных полей от�
         addField: true,
         group: true,
         tabGroup: true,
+        searchButton: true,
+        fieldFilter: true,
       },
     ],
   });

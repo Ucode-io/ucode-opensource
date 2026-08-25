@@ -14,7 +14,7 @@ function relationWith(autoFilters: unknown): Relation {
     fieldFrom: "cities_id",
     direction: "outgoing",
     linkField: "cities_id",
-    viewFieldSlugs: ["name"],
+    viewFields: [{ slug: "name", type: "SINGLE_LINE" }],
     viewFieldIds: [],
     raw: { auto_filters: autoFilters },
   };

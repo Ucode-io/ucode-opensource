@@ -50,6 +50,26 @@ test("варианты мультиселекта: в строку ляжет sl
   expect(attributes.has_color).toBe(true);
 });
 
+test("PICK_LIST из старой админки переживает сохранение без потери значений", () => {
+  // Вариант там заводится формой «подпись + значение», слага нет.
+  // Записав его по-мультиселектовски, мы бы поменяли значение и подпись
+  // местами, и строки со значением "new" осиротели бы.
+  const field = toField({
+    slug: "pick",
+    type: "PICK_LIST",
+    attributes: { options: [{ label: "Новый", value: "new", color: "#4E6D76" }] },
+  } as Parameters<typeof toField>[0]);
+
+  const body = toCreateBody({ ...toDraft(field, "en"), label: "Стадия" }, AT);
+  const attributes = body.attributes as { options: Record<string, unknown>[] };
+
+  expect(attributes.options[0]).toMatchObject({ value: "new", label: "Новый" });
+  expect(attributes.options[0]).not.toHaveProperty("slug");
+
+  const again = toField({ slug: "pick", type: "PICK_LIST", attributes: body.attributes as Record<string, unknown> });
+  expect([...again.options.keys()]).toEqual(["new"]);
+});
+
 test("варианты статуса разложены по стадиям", () => {
   const body = toCreateBody(
     {
@@ -318,21 +338,25 @@ test("настройки типа уходят числами и только с
       type: "MAP",
       lat: "41,311",
       long: "69.240",
-      apiKey: " key-1 ",
     },
     AT,
   );
 
   // Запятая — то, как координату набирают руками; уехать она обязана
   // числом: cast.ToFloat из строки даёт ноль, то есть другую точку.
-  expect(map.attributes).toMatchObject({ lat: 41.311, long: 69.24, apiKey: "key-1" });
+  expect(map.attributes).toMatchObject({ lat: 41.311, long: 69.24 });
+  // Ключ карт не спрашивается и не отправляется: карту рисуем своим
+  // (FIELD-AUDIT, F25).
+  expect(map.attributes).not.toHaveProperty("apiKey");
 
   const photo = toCreateBody(
-    { ...EMPTY_DRAFT, label: "Фото", slug: "foto", type: "PHOTO", format: "webp", ratio: "1.3" },
+    { ...EMPTY_DRAFT, label: "Фото", slug: "foto", type: "PHOTO", ratio: "1.3" },
     AT,
   );
 
-  expect(photo.attributes).toMatchObject({ format: "webp", ratio: 1.3 });
+  expect(photo.attributes).toMatchObject({ ratio: 1.3 });
+  // «Формат снимка» не читает никто — форма его больше не спрашивает (F21).
+  expect(photo.attributes).not.toHaveProperty("format");
   // Чужому типу настройки не отправляются вовсе — иначе у поля,
   // сменившего тип, в attributes остался бы мёртвый ключ.
   expect(photo.attributes).not.toHaveProperty("lat");

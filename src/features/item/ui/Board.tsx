@@ -124,7 +124,7 @@ export function Board({
 
     /* Подпись колонки по связи: связанная запись приезжает рядом
        со ссылкой, и подписывается теми же полями показа, что и ячейка. */
-    const slugs = field.relationId ? byId.get(field.relationId)?.viewFieldSlugs : undefined;
+    const slugs = field.relationId ? byId.get(field.relationId)?.viewFields : undefined;
 
     return boardColumns({
       rows,
@@ -132,7 +132,8 @@ export function Board({
       slug: field.slug,
       unassigned: t("board.unassigned"),
       labelOf: (row, value) =>
-        relationSelection(row, field, slugs).find((item) => item.guid === value)?.label ?? "",
+        relationSelection(row, field, slugs, language).find((item) => item.guid === value)?.label ??
+        "",
     });
   }, [rows, field, byId, language, t]);
 

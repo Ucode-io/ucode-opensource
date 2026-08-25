@@ -72,6 +72,13 @@ function storeTokens(dto: LoginResponseDto, projectId: string, companyName = "")
    * после первого же обновления токена.
    */
   if (dto.permissions?.length) storePermissions(dto.permissions.map(toPermission));
+
+  /*
+   * Глобальные права роли — тем же ответом. Пустой объект записываем
+   * тоже: у роли, которой всё запрещено, в ответе останется один `id`,
+   * и пропустить его значило бы оставить старые права от прошлой роли.
+   */
+  if (dto.global_permission) session.setGlobalRights(dto.global_permission);
 }
 
 async function login(credentials: Credentials): Promise<LoginResult> {

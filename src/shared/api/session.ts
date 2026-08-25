@@ -13,6 +13,7 @@ const PROJECT_KEY = "ucode.project";
 const PROFILE_KEY = "ucode.profile";
 const USER_KEY = "ucode.user";
 const PERMISSIONS_KEY = "ucode.permissions";
+const GLOBAL_KEY = "ucode.global";
 
 /** Что показывать в шапке сайдбара. Не секрет — только подписи. */
 export type Profile = {
@@ -130,6 +131,29 @@ export const session = {
     notify();
   },
 
+  /**
+   * Глобальные права роли — не про таблицы, а про кнопки приложения
+   * (`menu_button`, `menu_drag`, …). Приезжают тем же ответом логина.
+   *
+   * `null` — записи не было вовсе. Это «не знаем», а не «нельзя»:
+   * поля в ответе с `omitempty`, и отличить `false` от отсутствия можно
+   * только по наличию самого объекта.
+   */
+  getGlobalRights(): Record<string, unknown> | null {
+    const raw = localStorage.getItem(GLOBAL_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  },
+
+  setGlobalRights(rights: Record<string, unknown>) {
+    localStorage.setItem(GLOBAL_KEY, JSON.stringify(rights));
+    notify();
+  },
+
   /** Есть чем восстановиться после перезагрузки. */
   isAuthenticated: () => accessToken !== null || localStorage.getItem(REFRESH_KEY) !== null,
 
@@ -164,6 +188,7 @@ export const session = {
     localStorage.removeItem(PROFILE_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(PERMISSIONS_KEY);
+    localStorage.removeItem(GLOBAL_KEY);
     notify();
   },
 

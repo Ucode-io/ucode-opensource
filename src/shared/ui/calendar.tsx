@@ -26,6 +26,18 @@ const dayButton =
 const navButton =
   "grid size-7 place-items-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg disabled:pointer-events-none disabled:opacity-30";
 
+/*
+ * Границы списка годов. Без них выбор месяца и года сводится к одному
+ * текущему году, а дата рождения из пустой ячейки набиралась стрелкой
+ * «предыдущий месяц» — четыреста щелчков.
+ *
+ * Сто назад — это дата рождения, десять вперёд — срок и план. Уже
+ * записанное значение раздвигает границы: дата из архива не должна
+ * стать недостижимой.
+ */
+const YEARS_BACK = 100;
+const YEARS_AHEAD = 10;
+
 export function Calendar({
   value,
   onSelect,
@@ -36,6 +48,9 @@ export function Calendar({
   /** Язык интерфейса: ru, en, uz. */
   locale: string;
 }) {
+  const now = new Date().getFullYear();
+  const year = value?.getFullYear() ?? now;
+
   return (
     <DayPicker
       mode="single"
@@ -43,6 +58,9 @@ export function Calendar({
       // Открываемся на месяце значения, а не на текущем: иначе правка
       // прошлогодней даты начинается с прокрутки на двенадцать месяцев.
       {...(value ? { defaultMonth: value } : {})}
+      captionLayout="dropdown"
+      startMonth={new Date(Math.min(now - YEARS_BACK, year), 0)}
+      endMonth={new Date(Math.max(now + YEARS_AHEAD, year), 11)}
       onSelect={(date) => date && onSelect(date)}
       locale={LOCALES[locale as keyof typeof LOCALES]}
       showOutsideDays
@@ -59,7 +77,14 @@ export function Calendar({
         months: "flex flex-col",
         month: "space-y-1",
         month_caption: "flex h-8 items-center px-1 text-sm font-medium",
-        caption_label: "capitalize",
+        caption_label: "flex items-center gap-0.5 capitalize",
+        dropdowns: "flex items-center gap-1",
+        dropdown_root: "relative flex items-center rounded-md px-1 hover:bg-surface-hover",
+        /* Родной <select> лежит поверх и прозрачен: список раскрывает
+           система — он длиной в сто лет и прокручивается как надо, —
+           а видно нашу подпись со стрелкой (см. компонент Dropdown
+           библиотеки: select и caption_label лежат в одном span). */
+        dropdown: "absolute inset-0 cursor-pointer opacity-0",
         nav: "absolute right-0 top-0 flex items-center gap-0.5",
         button_previous: navButton,
         button_next: navButton,

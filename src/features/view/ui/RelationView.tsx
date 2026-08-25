@@ -73,8 +73,8 @@ export type TabSettings = {
   onQuickFilters: (fields: Field[]) => void;
   /** Область видимости вкладки: карта «слаг → условие», как в get-list. */
   onDefaultFilters: (conditions: Record<string, unknown>) => void;
-  /** Убрать вкладку из карточки. */
-  onRemove: () => void;
+  /** Убрать вкладку из карточки. Нет — права на удаление у роли нет. */
+  onRemove?: (() => void) | undefined;
 };
 
 /**
@@ -294,7 +294,10 @@ export function RelationView({
    * значение фильтра: он домешивается сверху и перекрывает условие
    * человека по тому же полю. Так же он работает у таблицы.
    */
-  const scope = useMemo(() => fromConditions(tab.view.defaultFilters), [tab.view.defaultFilters]);
+  const scope = useMemo(
+    () => fromConditions(tab.view.defaultFilters, schema.fields),
+    [tab.view.defaultFilters, schema.fields],
+  );
 
   const seeded = useMemo(
     () => seedFilters(tab.view.quickFilterIds, schema.fields),
@@ -329,6 +332,22 @@ export function RelationView({
       [link]: { op: "contains" as const, values: [value] },
     }),
     [chips, scope, dated, dateFrom, range, link, value],
+  );
+
+  /*
+   * Поля, по которым свой фильтр всё равно перекрыт: область видимости
+   * вкладки, видимый диапазон дат и связь с открытой записью. Чип по ним
+   * соврал бы — он показывал бы условие, которого в запросе нет. То же
+   * самое делает таблица (lockedSlugs в routes/_authed.m.$menuId).
+   */
+  const lockedSlugs = useMemo(
+    () =>
+      new Set([
+        ...Object.keys(scope),
+        ...(dated && dateFrom ? [dateFrom.slug] : []),
+        link,
+      ]),
+    [scope, dated, dateFrom, link],
   );
 
   /** Закреплённые колонки вкладки — в тех же ключах, что и у таблицы. */
@@ -503,10 +522,15 @@ export function RelationView({
           filterCount={activeFilterCount(chips)}
           onToggleFilters={() => setFiltersOpen((value) => !value)}
           search={search}
-          onSearch={(next) => {
-            setSearch(next);
-            setPage(1);
-          }}
+          /* Право на поиск — по ЧУЖОЙ таблице: вкладка ищет в ней. */
+          {...(can.searchButton
+            ? {
+                onSearch: (next: string) => {
+                  setSearch(next);
+                  setPage(1);
+                },
+              }
+            : {})}
         />
 
         {settings && (
@@ -543,7 +567,7 @@ export function RelationView({
                   filters,
                   search,
                 }),
-              onDelete: settings.onRemove,
+              ...(settings.onRemove ? { onDelete: settings.onRemove } : {}),
             }}
           />
         )}
@@ -556,6 +580,7 @@ export function RelationView({
           language={language}
           filters={chips}
           sorts={sorts}
+          locked={lockedSlugs}
           onFilters={(next) => {
             setOwn(next);
             setPage(1);

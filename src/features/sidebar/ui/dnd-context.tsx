@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, type DragEvent, type ReactNode } from "react";
+import { useGlobalRight } from "@/features/auth";
 import { useReorderMenus } from "../api/menus";
 import {
   planMove,
@@ -10,6 +11,12 @@ import {
 type DropTarget = { id: string; position: DropPosition };
 
 type Dnd = {
+  /**
+   * Разрешено ли роли менять порядок пунктов — глобальное право
+   * `menu_drag`. Спрошено один раз здесь: строк на экране десятки,
+   * а ответ у них общий.
+   */
+  enabled: boolean;
   source: DragSource | null;
   target: DropTarget | null;
   start: (source: DragSource) => void;
@@ -31,6 +38,10 @@ export function MenuDndProvider({ children }: { children: ReactNode }) {
   const [source, setSource] = useState<DragSource | null>(null);
   const [target, setTarget] = useState<DropTarget | null>(null);
   const reorder = useReorderMenus();
+  // Порядок пунктов роли меняют не все: в старой админке это глобальное
+  // право `menu_drag` (LayoutSidebar/index.jsx:163), и переключатель для
+  // него есть в настройках роли.
+  const canDrag = useGlobalRight("menu_drag");
 
   const end = () => {
     setSource(null);
@@ -38,6 +49,7 @@ export function MenuDndProvider({ children }: { children: ReactNode }) {
   };
 
   const value: Dnd = {
+    enabled: canDrag,
     source,
     target,
     start: setSource,

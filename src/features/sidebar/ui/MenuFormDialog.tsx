@@ -3,6 +3,8 @@ import { IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { IconPicker } from "@/features/icons";
 import { useMicrofrontends } from "@/features/microfrontend";
+import { localized, useTables } from "@/features/table";
+import { SelectMenu } from "@/shared/ui/select-menu";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
@@ -32,6 +34,11 @@ export type MenuFormValue = {
   embed: boolean;
   /** Какое чужое приложение показывает пункт — только у MICROFRONTEND. */
   microfrontendId: string;
+  /**
+   * УЖЕ СУЩЕСТВУЮЩАЯ таблица, на которую заводят пункт. Пусто — таблица
+   * создаётся заново, вместе с пунктом (см. useCreateMenu).
+   */
+  tableId: string;
   /** Настройки запуска ремоута: пары «ключ — значение», порядок их. */
   params: { key: string; value: string }[];
 };
@@ -57,6 +64,7 @@ export const EMPTY_MENU_FORM: MenuFormValue = {
   folder: "",
   embed: false,
   microfrontendId: "",
+  tableId: "",
   params: [],
 };
 
@@ -85,6 +93,7 @@ export function MenuFormDialog({
   type,
   needsSlug = false,
   needsRemote = false,
+  needsTable = false,
   busy,
   onSubmit,
   onClose,
@@ -96,6 +105,8 @@ export function MenuFormDialog({
   needsSlug?: boolean;
   /** Только при создании микрофронтенда: выбрать, какое приложение. */
   needsRemote?: boolean;
+  /** Пункт заводят на СУЩЕСТВУЮЩУЮ таблицу: выбрать, на какую. */
+  needsTable?: boolean;
   busy: boolean;
   onSubmit: (value: MenuFormValue) => void;
   onClose: () => void;
@@ -134,6 +145,7 @@ export function MenuFormDialog({
   const hrefValid = !isLink || isHttpUrl(value.href);
   const slugValid = !needsSlug || SLUG.test(value.slug.trim());
   const remoteValid = !picksRemote || Boolean(value.microfrontendId);
+  const tableValid = !needsTable || Boolean(value.tableId);
   // Хотя бы одно имя: пункт без единой подписи в сайдбаре — пустая строка.
   const named = Object.values(value.labels).some((label) => label.trim());
 
@@ -145,7 +157,7 @@ export function MenuFormDialog({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (named && hrefValid && slugValid && folderValid && remoteValid) {
+    if (named && hrefValid && slugValid && folderValid && remoteValid && tableValid) {
       onSubmit({
         ...value,
         href: value.href.trim(),
@@ -196,6 +208,24 @@ export function MenuFormDialog({
             }
           />
         </div>
+
+        {needsTable && (
+          <TableField
+            value={value.tableId}
+            onPick={(tableId, labels) =>
+              setValue((v) => ({
+                ...v,
+                tableId,
+                // Имя пункта по умолчанию — имя таблицы. Набранное руками
+                // не трогаем: пункт на ту же таблицу заводят как раз затем,
+                // чтобы назвать его иначе.
+                labels: Object.values(v.labels).some((label) => label.trim())
+                  ? v.labels
+                  : labels,
+              }))
+            }
+          />
+        )}
 
         {needsSlug && (
           <Field
@@ -284,13 +314,74 @@ export function MenuFormDialog({
           </Button>
           <Button
             type="submit"
-            disabled={busy || !named || !hrefValid || !slugValid || !remoteValid}
+            disabled={busy || !named || !hrefValid || !slugValid || !remoteValid || !tableValid}
           >
             {t("action.save")}
           </Button>
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * Выбор УЖЕ СУЩЕСТВУЮЩЕЙ таблицы проекта.
+ *
+ * Так в старой админке работало «Add table» (TableLinkModal.jsx): пункт
+ * меню заводят на таблицу, которая уже есть, — например, чтобы одна
+ * таблица открывалась из двух папок под разными именами и с разными
+ * настройками показа. Своих view у нового пункта нет: бэкенд создаёт
+ * ему пару TABLE + SECTION (object_builder/storage/postgres/menu.go:113).
+ *
+ * Список общий с настройкой связей — `useTables`: та же ручка, тот же
+ * поиск на сервере и та же догрузка по страницам.
+ */
+function TableField({
+  value,
+  onPick,
+}: {
+  value: string;
+  onPick: (tableId: string, labels: Record<string, string>) => void;
+}) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const { current: language } = useDataLanguages();
+  const tables = useTables(search);
+
+  // Без обёртки Field: подпись SelectMenu рисует сам, и вторая была бы
+  // повтором того же слова над тем же полем.
+  return (
+    <SelectMenu
+      label={t("menuForm.table")}
+      placeholder={t("menuForm.tablePick")}
+      searchPlaceholder={t("menuForm.tableSearch")}
+      emptyText={t("menuForm.tableEmpty")}
+      items={tables.items.map((table) => ({
+        value: table.id,
+        label: localized(table.labels, language, table.label),
+        icon: table.icon,
+      }))}
+      selected={new Set(value ? [value] : [])}
+      search={search}
+      loading={tables.isLoading}
+      hasMore={tables.hasMore}
+      onSearch={setSearch}
+      onLoadMore={tables.loadMore}
+      onPick={(tableId) => {
+        const table = tables.items.find((item) => item.id === tableId);
+        if (!table) return;
+        /*
+         * Имя таблицы по языкам данных. Пусто — берём базовое имя
+         * на текущем языке: иначе выбор таблицы, названной одной
+         * колонкой `label`, не подставил бы в форму ничего.
+         */
+        const labels = Object.keys(table.labels).length
+          ? { ...table.labels }
+          : { [language]: table.label };
+
+        onPick(tableId, labels);
+      }}
+    />
   );
 }
 

@@ -6,7 +6,6 @@ import {
   hasPhotoSettings,
   hasScannerSettings,
   hasTranscode,
-  PHOTO_FORMATS,
   PHOTO_RATIOS,
   type FieldDraft,
 } from "../model/field-draft";
@@ -14,7 +13,7 @@ import { Labeled } from "./FormulaSettings";
 
 /**
  * Настройки, которые есть у одного типа и бессмысленны у остальных:
- * точка на карте, формат снимка, перекодирование видео, поведение
+ * точка на карте, пропорции снимка, перекодирование видео, поведение
  * сканера.
  *
  * Собраны в одном месте по той же причине, по какой в старой админке
@@ -22,12 +21,16 @@ import { Labeled } from "./FormulaSettings";
  * а частность типа, и в общем списке она сбивала бы с толку у всех
  * остальных.
  *
- * Читают их не только мы. `lat`/`long`/`apiKey` берёт карта, которую
- * проект рисует у себя, `format`/`ratio` — загрузчик изображений,
- * `pressEnter`/`length` — экран склада со сканером. Своей карты
- * и своего сканера у нас нет: мы эти настройки храним и показываем,
- * а не исполняем. Единственное, что делает с ними наш экран, —
- * открывает пустую ячейку карты на заданной точке.
+ * Каждая из них кем-то исполняется: `lat`/`long` открывают пустую
+ * ячейку карты на заданной точке, `ratio` уезжает с загрузкой снимка
+ * и обрезает его (`file.go:133`), `pressEnter`/`length` говорят полю
+ * сканера, когда код дочитан. Спрашивать настройку, которую не читает
+ * никто, здесь больше не надо — так ушли «формат снимка» и «ключ карт»
+ * (docs/FIELD-AUDIT.md, F21 и F25): наш ключ зашит в `shared/lib/
+ * yandex-maps`, а формат бэкенд не читает вовсе и кодирует снимок
+ * обратно в том, в котором тот пришёл. Уже записанные значения обоих
+ * ключей остаются в attributes нетронутыми: тело правки собирается
+ * поверх прежних (api/fields, toUpdateBody).
  */
 export function TypeSettings({
   draft,
@@ -62,16 +65,6 @@ export function TypeSettings({
             />
           </Labeled>
         </div>
-
-        <Labeled label={t("fieldForm.mapCenterHint")}>
-          <Input
-            value={draft.apiKey}
-            placeholder={t("fieldForm.apiKey")}
-            aria-label={t("fieldForm.apiKey")}
-            onChange={(event) => onChange({ apiKey: event.target.value })}
-            className="h-7 px-1.5 font-mono text-2xs"
-          />
-        </Labeled>
       </div>
     );
   }
@@ -79,21 +72,6 @@ export function TypeSettings({
   if (hasPhotoSettings(draft.type)) {
     return (
       <div className="flex flex-col gap-1.5 px-2 py-1">
-        <Labeled label={t("fieldForm.photoFormat")}>
-          <Select
-            value={draft.format}
-            onChange={(event) => onChange({ format: event.target.value })}
-            className="h-7 px-1.5 text-xs"
-          >
-            <option value="">—</option>
-            {PHOTO_FORMATS.map((format) => (
-              <option key={format} value={format}>
-                {format.toUpperCase()}
-              </option>
-            ))}
-          </Select>
-        </Labeled>
-
         <Labeled label={t("fieldForm.photoRatio")}>
           <Select
             value={draft.ratio}

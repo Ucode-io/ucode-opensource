@@ -46,6 +46,10 @@ export type Permission = {
   group: boolean;
   /** Группировка вкладками. */
   tabGroup: boolean;
+  /** Поиск по таблице. */
+  searchButton: boolean;
+  /** Отбор по колонке из её меню. Подшапка с чипами правом не закрыта. */
+  fieldFilter: boolean;
 };
 
 export type Credentials = {

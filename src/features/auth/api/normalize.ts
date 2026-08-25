@@ -35,6 +35,8 @@ export function toPermission(dto: PermissionDto): Permission {
     addField: allowed(dto.add_field),
     group: allowed(dto.group),
     tabGroup: allowed(dto.tab_group),
+    searchButton: allowed(dto.search_button),
+    fieldFilter: allowed(dto.field_filter),
   };
 }
 

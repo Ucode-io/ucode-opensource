@@ -7,7 +7,8 @@ import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
 import { menuUpdateBody } from "./mutations";
 import { SYSTEM_MENUS, isSystemMenu } from "../model/system-menus";
-import type { MenuNode } from "../model/types";
+import type { MenuMatch } from "../model/search";
+import { kindOf, type MenuNode } from "../model/types";
 import type { MenuDto, MenusResponseDto } from "./dto";
 import { toMenuNode } from "./normalize";
 
@@ -89,6 +90,109 @@ export function toNodes(menus: MenuDto[], languages: string | string[]): MenuNod
     // Системные пункты (Настройки, Файлы, Пользователи) живут на своих
     // экранах, а не в дереве меню.
     .filter((node) => !isSystemMenu(node.id));
+}
+
+/**
+ * Докуда обход дерева идёт вглубь.
+ *
+ * ponytail: восемь уровней — это заведомо больше любого живого меню
+ * (в старой админке дерево рисовали до четырёх). Ограничение здесь
+ * не ради скорости, а ради конечности: `parent_id` в базе никем
+ * не проверяется, и пара пунктов, ставших родителями друг друга,
+ * увела бы обход в бесконечность.
+ */
+const MAX_DEPTH = 8;
+
+/**
+ * Всё дерево меню — для поиска.
+ *
+ * Поиском занимается клиент, потому что ручка его не умеет: `search`
+ * шлюз принимает и передаёт дальше (api/handlers/v3/menu.go:249), но
+ * в SQL это слово не доезжает — в `WHERE` его нет вовсе
+ * (object_builder/storage/postgres/menu.go:692). Запрос с ним возвращает
+ * тот же самый уровень целиком. См. docs/backend-notes.md, «Меню».
+ *
+ * Поэтому дерево читается уровнями вширь: один запрос на папку, все
+ * папки одного уровня разом. Ходим только когда в строке поиска
+ * что-то есть, и один раз: набранное в ключ кэша не входит, отбор
+ * идёт по уже прочитанному.
+ */
+export function useMenuTree(enabled: boolean) {
+  const languages = useLabelLanguages();
+  const session = useSession();
+  const projectId = session.getProjectId() ?? "";
+  const envId = session.getEnvironmentId() ?? "";
+
+  const query = useQuery({
+    queryKey: keys.menus.tree(projectId, envId),
+    queryFn: crawlMenus,
+    enabled: enabled && Boolean(projectId),
+    staleTime: 5 * 60_000,
+    // Уровни лежат в кэше сырыми: подписи зависят от языка, а само
+    // дерево — нет, и смена языка не должна перечитывать его заново.
+    select: useCallback((levels: Levels) => flatten(levels, languages), [languages]),
+  });
+
+  return { items: query.data ?? [], isLoading: query.isLoading, error: query.error };
+}
+
+/** Уровни дерева: id родителя → его дети, как их отдал бэкенд. */
+type Levels = Record<string, MenuDto[]>;
+
+async function crawlMenus(): Promise<Levels> {
+  const levels: Levels = {};
+  let parents: string[] = [ROOT_MENU_ID];
+  // Папка, которую уже спрашивали, второй раз не спрашивается — иначе
+  // цикл в parent_id развернулся бы в бесконечный обход.
+  const asked = new Set<string>(parents);
+
+  for (let depth = 0; depth <= MAX_DEPTH && parents.length; depth += 1) {
+    const answers = await Promise.all(
+      parents.map((parentId) =>
+        api.get<MenusResponseDto>("/v3/menus", { params: { parent_id: parentId } }),
+      ),
+    );
+
+    const next: string[] = [];
+
+    answers.forEach((answer, index) => {
+      const parentId = parents[index]!;
+      const menus = answer.menus ?? [];
+      levels[parentId] = menus;
+
+      for (const dto of menus) {
+        // Внутрь заглядываем только у того, что раскрывается: у пункта
+        // файлов лежат файлы, а не пункты меню.
+        if (!dto.id || kindOf(dto.type ?? "") !== "group" || asked.has(dto.id)) continue;
+        asked.add(dto.id);
+        next.push(dto.id);
+      }
+    });
+
+    parents = next;
+  }
+
+  return levels;
+}
+
+/** Уровни → плоский список пунктов, у каждого дорога от корня. */
+function flatten(levels: Levels, languages: string[]): MenuMatch[] {
+  const items: MenuMatch[] = [];
+
+  const walk = (parentId: string, trail: MenuMatch["trail"], depth: number) => {
+    if (depth > MAX_DEPTH) return;
+
+    for (const node of toNodes(levels[parentId] ?? [], languages)) {
+      items.push({ node, trail });
+      if (node.kind === "group") {
+        walk(node.id, [...trail, { id: node.id, label: node.label }], depth + 1);
+      }
+    }
+  };
+
+  walk(ROOT_MENU_ID, [], 0);
+
+  return items;
 }
 
 /** Один пункт по id — для экрана. Дерево загружено не целиком, искать в нём нечего. */

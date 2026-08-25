@@ -38,6 +38,29 @@ test("MULTISELECT: ключ поиска — slug, а не value", () => {
   expect(localized(option!.labels, "en", option!.label)).toBe("Second");
 });
 
+test("PICK_LIST: слага у варианта нет — ключ берётся из value", () => {
+  const field = toField({
+    id: "1",
+    slug: "pick",
+    type: "PICK_LIST",
+    // Форма старой админки: цвет, подпись, значение. Слага она не пишет.
+    attributes: { options: [{ label: "Новый", value: "new", color: "#4E6D76" }] },
+  });
+
+  expect([...field.options.keys()]).toEqual(["new"]);
+  expect(field.options.get("new")?.label).toBe("Новый");
+});
+
+test("MULTISELECT старого образца — вариант без слага не теряется", () => {
+  const field = toField({
+    id: "1",
+    type: "MULTISELECT",
+    attributes: { options: [{ value: "red" }, { slug: "blue", value: "Синий" }] },
+  });
+
+  expect([...field.options.keys()]).toEqual(["red", "blue"]);
+});
+
 test("STATUS: варианты собираются из трёх списков по стадиям", () => {
   const field = toField({
     id: "1",
@@ -139,7 +162,7 @@ test("view_fields ненастроенной связи отбрасываютс
     "example_hey",
   );
 
-  expect(relation.viewFieldSlugs).toEqual(["title"]);
+  expect(relation.viewFields).toEqual([{ slug: "title", type: "" }]);
   expect(relation.toSlug).toBe("listings");
 });
 
@@ -164,7 +187,7 @@ test("связь читается с той стороны, с которой н
   const relation = toRelation(dto, "listings");
 
   expect(relation.toSlug).toBe("example_hey");
-  expect(relation.viewFieldSlugs).toEqual(["name"]);
+  expect(relation.viewFields).toEqual([{ slug: "name", type: "" }]);
 });
 
 test("колонка-связь отдаётся только той таблице, в которой она лежит", () => {

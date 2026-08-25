@@ -134,23 +134,25 @@ export type FieldDraft = {
    */
   defaultValue: string;
   /**
-   * Карта и область: точка, с которой открывается пустая ячейка,
-   * и ключ карт проекта.
+   * Карта и область: точка, с которой открывается пустая ячейка.
    *
-   * `lat`/`long` — то же имя, что в старой админке: пара координат,
-   * а не адрес. Ключ (`apiKey`) она спрашивает у MAP и POLYGON, хотя
-   * рисует карту чужой библиотекой; мы его храним, но своей карты
-   * у нас нет — см. TypeSettings.
+   * То же имя, что в старой админке: пара координат, а не адрес.
+   * Ключ карт (`apiKey`) она спрашивает у каждого поля MAP отдельно —
+   * мы не спрашиваем: карту рисуем сами и своим ключом
+   * (`shared/lib/yandex-maps`), а чужой лежал бы в форме без читателя
+   * (docs/FIELD-AUDIT.md, F25).
    */
   lat: string;
   long: string;
-  apiKey: string;
   /**
-   * PHOTO: в чём хранить (`format`) и в каких пропорциях обрезать
-   * (`ratio`). Пропорция лежит ЧИСЛОМ-строкой — «1.3» это 4:3:
-   * так её записывает старая админка, деля одно на другое.
+   * PHOTO: в каких пропорциях обрезать снимок при загрузке. Лежит
+   * ЧИСЛОМ-строкой — «1.3» это 4:3: так её записывает старая админка,
+   * деля одно на другое, и так её читает бэкенд (`file.go:66`).
+   *
+   * Соседний `format` (png/webp) не спрашиваем: его не читает ни ручка
+   * загрузки, ни кто-либо ещё — снимок кодируется обратно в том
+   * формате, в котором пришёл (F21).
    */
-  format: string;
   ratio: string;
   /** VIDEO: перекодировать загруженное на сервере. */
   transcode: boolean;
@@ -244,8 +246,6 @@ export const EMPTY_DRAFT: FieldDraft = {
   defaultValue: "",
   lat: "",
   long: "",
-  apiKey: "",
-  format: "",
   ratio: "",
   transcode: false,
   pressEnter: false,
@@ -301,8 +301,6 @@ export function toDraft(field: Field, language: string): FieldDraft {
       textOf(field.attributes["defaultValue"]) || textOf(field.attributes["default_values"]),
     lat: numericOf(field.attributes["lat"]),
     long: numericOf(field.attributes["long"]),
-    apiKey: textOf(field.attributes["apiKey"]),
-    format: textOf(field.attributes["format"]),
     ratio: numericOf(field.attributes["ratio"]),
     transcode: field.attributes["transcode"] === true,
     pressEnter: field.attributes["pressEnter"] === true,
@@ -500,7 +498,8 @@ export function hasPrefix(type: string): boolean {
 const DEFAULT_VALUE_TYPES = new Set([
   "SINGLE_LINE",
   "MULTI_LINE",
-  "TEXT",
+  // TEXT здесь нет: у него показывается подпись поля, а не значение
+  // записи (FIELD-AUDIT, F3), и подставлять в такую колонку нечего.
   "EMAIL",
   "PHONE",
   "INTERNATION_PHONE",
@@ -514,6 +513,7 @@ const DEFAULT_VALUE_TYPES = new Set([
   "SWITCH",
   "DATE",
   "DATE_TIME",
+  "DATE_TIME_WITHOUT_TIME_ZONE",
   "TIME",
   // Значение варианта, а не подпись: в строке лежит slug.
   "STATUS",
@@ -586,9 +586,6 @@ export const PHOTO_RATIOS = [
   { value: "0.7", label: "2:3" },
 ] as const;
 
-/** Форматы хранения фотографии. Ровно те, что понимает загрузчик. */
-export const PHOTO_FORMATS = ["png", "webp"] as const;
-
 /**
  * Типы, которые можно завести из таблицы.
  *
@@ -636,9 +633,24 @@ export const FIELD_TYPE_GROUPS: FieldTypeGroup[] = [
     types: [
       { type: "SINGLE_LINE", label: "Single line" },
       { type: "MULTI_LINE", label: "Multi line" },
-      { type: "TEXT", label: "Text" },
+      /*
+       * Не поле ввода, а подпись-разделитель: показывается название,
+       * одинаковое во всех строках (FIELD-AUDIT, F3). В старой админке
+       * он так и называется «Text» и лежит среди «Special»; у нас
+       * подписан честнее — рядом с «Single line» слово «Text» читалось
+       * бы как третий вид текстового поля.
+       */
+      { type: "TEXT", label: "Heading" },
       { type: "EMAIL", label: "Email" },
-      { type: "PHONE", label: "Phone" },
+      /*
+       * PHONE здесь нет намеренно. В справочнике старой админки он
+       * закомментирован (`fieldTypes.js:317`) — завести его нельзя
+       * с тех пор, как появился INTERNATION_PHONE, и живёт он только
+       * у старых полей. Читаются и правятся они по-прежнему: из списка
+       * убран только СПОСОБ ЗАВЕСТИ НОВОЕ. Заводить поле без маски
+       * и без выбора страны, когда рядом лежит тип с ними, — плодить
+       * то, что потом придётся переносить.
+       */
       { type: "INTERNATION_PHONE", label: "International phone" },
       { type: "LINK", label: "Link" },
       { type: "PASSWORD", label: "Password" },

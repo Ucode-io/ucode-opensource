@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
+import { IconLayoutSidebarLeftExpand, IconSearch } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
 import { errorText } from "@/shared/api/client";
 import { Icon } from "@/shared/ui/icon";
 import { ResizeHandle } from "@/shared/ui/resize-handle";
 import { SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, useUi } from "@/shared/lib/ui-store";
-import { ROOT_MENU_ID, useMenuChildren } from "../api/menus";
+import { ROOT_MENU_ID, useMenuChildren, useMenuTree } from "../api/menus";
+import { matchMenus, type MenuMatch } from "../model/search";
 import type { MenuNode } from "../model/types";
 import { AddMenuButton } from "./AddMenuButton";
 import { MenuDndProvider } from "./dnd-context";
+import { MenuIcon } from "./MenuIcon";
 import { MenuLevel } from "./MenuLevel";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
@@ -92,6 +95,14 @@ function ExpandedSidebar({
   const { t } = useTranslation();
   const { sidebarWidth, setSidebarWidth } = useUi();
   const aside = useRef<HTMLElement>(null);
+  /*
+   * Поиск идёт по ВСЕМУ дереву, а не по загруженным уровням: пункт,
+   * который ищут, обычно лежит в неоткрытой папке — иначе его было бы
+   * видно и так. Дерево ради этого дочитывается целиком, но только
+   * когда в строке что-то есть (см. useMenuTree).
+   */
+  const [query, setQuery] = useState("");
+  const searching = query.trim().length > 0;
 
   /*
    * Уход курсора ловится на документе, а не через onPointerLeave:
@@ -139,7 +150,9 @@ function ExpandedSidebar({
            * уезжала под неё — то есть не появлялась вовсе.
            */
           ? "group/aside animate-peek fixed inset-y-0 left-0 z-55 flex flex-col gap-2 rounded-r-xl border-r border-border bg-surface p-2 shadow-modal"
-          : "group/aside relative flex shrink-0 flex-col gap-2 bg-bg p-2"
+          /* Без своей заливки: сайдбар лежит на фоне приложения и берёт
+             его градиент, а не гасит его плоским bg. */
+          : "group/aside relative flex shrink-0 flex-col gap-2 p-2"
       }
     >
       {/* У всплывающего ручки нет: тянуть край панели, которая закроется,
@@ -158,24 +171,146 @@ function ExpandedSidebar({
 
       <WorkspaceHeader floating={Boolean(onLeave)} />
 
+      {/* Поле поиска говорит на языке панели, а не формы: та же высота 32,
+          тот же радиус и та же пара «заливка при наведении → surface плюс
+          тень в фокусе», что у строк меню. Рамка формы была здесь
+          единственной, и поле читалось как выбранный пункт.
+
+          type="search" — ради встроенного крестика: очистка строки уже
+          есть в браузере, своя кнопка была бы второй такой же. */}
+      <label className="flex h-8 items-center gap-2 rounded-md bg-surface/60 px-2 text-sm transition-colors focus-within:bg-surface focus-within:shadow-raised">
+        <Icon as={IconSearch} size={16} className="text-fg-subtle" />
+        <input
+          type="search"
+          value={query}
+          placeholder={t("sidebar.search")}
+          aria-label={t("sidebar.search")}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => event.key === "Escape" && setQuery("")}
+          className="min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-fg-subtle"
+        />
+      </label>
+
       <div className="flex items-center justify-between px-2 pt-1">
         <span className="text-2xs font-medium tracking-wide text-fg-subtle uppercase">
-          {t("sidebar.menu")}
+          {t(searching ? "sidebar.searchResults" : "sidebar.menu")}
         </span>
         <AddMenuButton parentId={ROOT_MENU_ID} />
       </div>
 
       <nav className="flex-1 overflow-y-auto" aria-label={t("sidebar.menu")}>
-        {isLoading && <Skeleton />}
-        {error && <LoadError error={error} />}
-        {!isLoading && !error && menus.length === 0 && (
-          <p className="px-2 py-1 text-xs text-fg-subtle">{t("sidebar.empty")}</p>
+        {searching ? (
+          <SearchResults query={query} onPicked={() => setQuery("")} />
+        ) : (
+          <>
+            {isLoading && <Skeleton />}
+            {error && <LoadError error={error} />}
+            {!isLoading && !error && menus.length === 0 && (
+              <p className="px-2 py-1 text-xs text-fg-subtle">{t("sidebar.empty")}</p>
+            )}
+            <MenuDndProvider>
+              <MenuLevel items={menus} path={[ROOT_MENU_ID]} />
+            </MenuDndProvider>
+          </>
         )}
-        <MenuDndProvider>
-          <MenuLevel items={menus} path={[ROOT_MENU_ID]} />
-        </MenuDndProvider>
       </nav>
     </aside>
+  );
+}
+
+/**
+ * Найденное — плоским списком, а не подсвеченным деревом: в дереве
+ * совпадение всё равно пришлось бы показывать вместе с родителями,
+ * то есть тем же списком, только с отступами.
+ *
+ * Под именем — дорога до пункта: две «Заявки» из разных папок иначе
+ * неразличимы.
+ */
+function SearchResults({ query, onPicked }: { query: string; onPicked: () => void }) {
+  const { t } = useTranslation();
+  const { items, isLoading, error } = useMenuTree(true);
+  const matches = useMemo(() => matchMenus(items, query), [items, query]);
+
+  if (isLoading) return <Skeleton />;
+  if (error) return <LoadError error={error} />;
+
+  if (matches.length === 0) {
+    return <p className="px-2 py-1 text-xs text-fg-subtle">{t("sidebar.searchEmpty")}</p>;
+  }
+
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {matches.map((match) => (
+        <li key={match.node.id}>
+          <SearchRow match={match} onPicked={onPicked} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SearchRow({ match, onPicked }: { match: MenuMatch; onPicked: () => void }) {
+  const { node, trail } = match;
+  const expandMenus = useUi((state) => state.expandMenus);
+
+  const row =
+    "flex h-10 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-fg-muted transition-colors hover:bg-surface-hover";
+
+  const inner = (
+    <>
+      <span className="grid size-4 shrink-0 place-items-center">
+        <MenuIcon name={node.icon} type={node.type} />
+      </span>
+
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className="truncate">{node.label}</span>
+        {trail.length > 0 && (
+          <span className="truncate text-2xs text-fg-subtle">
+            {trail.map((step) => step.label).join(" / ")}
+          </span>
+        )}
+      </span>
+    </>
+  );
+
+  /*
+   * Дорога до найденного раскрывается в дереве — и у папки, и у экрана.
+   * Иначе поиск, закрывшись, оставляет человека там же, где он был:
+   * пункт снова спрятан в неоткрытой папке.
+   */
+  const reveal = (ids: string[]) => {
+    expandMenus(ids);
+    onPicked();
+  };
+
+  const path = trail.map((step) => step.id);
+
+  // У папки своего экрана нет: щелчок раскрывает её в дереве.
+  if (node.kind === "group") {
+    return (
+      <button type="button" className={row} onClick={() => reveal([...path, node.id])}>
+        {inner}
+      </button>
+    );
+  }
+
+  if (node.kind === "link" && node.href) {
+    return (
+      <a href={node.href} target="_blank" rel="noreferrer" className={row} onClick={onPicked}>
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      to="/m/$menuId"
+      params={{ menuId: node.id }}
+      className={row}
+      onClick={() => reveal(path)}
+    >
+      {inner}
+    </Link>
   );
 }
 

@@ -101,7 +101,7 @@ export function useTabGroup({
    */
   const { rows, isLoading } = useRelationRows({
     tableSlug: enabled ? (relation?.toSlug ?? "") : "",
-    viewFieldSlugs: relation?.viewFieldSlugs ?? [],
+    viewFields: relation?.viewFields ?? [],
     search: "",
     limit: TAB_LIMIT,
   });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useGlobalRight } from "@/features/auth";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { TemplateDialog } from "@/features/templates";
@@ -17,24 +18,37 @@ import {
 /** Кнопка «+» в шапке сайдбара: создаёт пункт на верхнем уровне. */
 export function AddMenuButton({ parentId }: { parentId: string }) {
   const { t } = useTranslation();
-  const [type, setType] = useState<CreatableType | null>(null);
+  /*
+   * Заводить пункты верхнего уровня разрешает глобальное право роли —
+   * `menu_button` (LayoutSidebar/index.jsx:612). Внутри папки решает
+   * право на саму папку (`can.write`), а у корня своей строки нет,
+   * и спросить о нём больше некого.
+   */
+  const canCreate = useGlobalRight("menu_button");
+  /** Что заводим. `existing` — пункт на уже существующую таблицу. */
+  const [form, setForm] = useState<{ type: CreatableType; existing?: boolean } | null>(null);
   /** Открыт выбор шаблона: готовый набор таблиц разворачивается целиком. */
   const [templates, setTemplates] = useState(false);
   const create = useCreateMenu();
 
+  if (!canCreate) return null;
+
   const submit = (value: MenuFormValue) => {
-    if (!type) return;
+    if (!form) return;
+    const { type, existing } = form;
+
     create.mutate(
       {
         labels: value.labels,
         icon: value.icon,
         type,
         parentId,
-        ...(type === "TABLE" ? { slug: value.slug } : {}),
+        ...(type === "TABLE" && !existing ? { slug: value.slug } : {}),
+        ...(existing ? { tableId: value.tableId } : {}),
         ...(type === "MICROFRONTEND" ? { microfrontendId: value.microfrontendId } : {}),
         attributes: menuAttributes(type, value),
       },
-      { onSuccess: () => setType(null) },
+      { onSuccess: () => setForm(null) },
     );
   };
 
@@ -60,7 +74,7 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
             <PopoverItem
               onClick={() => {
                 close();
-                setType("TABLE");
+                setForm({ type: "TABLE" });
               }}
             >
               {t("menuAction.createTable")}
@@ -68,7 +82,15 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
             <PopoverItem
               onClick={() => {
                 close();
-                setType("FOLDER");
+                setForm({ type: "TABLE", existing: true });
+              }}
+            >
+              {t("menuAction.linkTable")}
+            </PopoverItem>
+            <PopoverItem
+              onClick={() => {
+                close();
+                setForm({ type: "FOLDER" });
               }}
             >
               {t("menuAction.createFolder")}
@@ -76,7 +98,7 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
             <PopoverItem
               onClick={() => {
                 close();
-                setType("MINIO_FOLDER");
+                setForm({ type: "MINIO_FOLDER" });
               }}
             >
               {t("menuAction.createFiles")}
@@ -84,7 +106,7 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
             <PopoverItem
               onClick={() => {
                 close();
-                setType("LINK");
+                setForm({ type: "LINK" });
               }}
             >
               {t("menuAction.createLink")}
@@ -92,7 +114,7 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
             <PopoverItem
               onClick={() => {
                 close();
-                setType("MICROFRONTEND");
+                setForm({ type: "MICROFRONTEND" });
               }}
             >
               {t("menuAction.createMicrofrontend")}
@@ -111,16 +133,17 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
 
       {templates && <TemplateDialog onClose={() => setTemplates(false)} />}
 
-      {type && (
+      {form && (
         <MenuFormDialog
-          title={t(CREATE_TITLES[type])}
+          title={t(form.existing ? "menuForm.linkTable" : CREATE_TITLES[form.type])}
           initial={EMPTY_MENU_FORM}
-          type={type}
-          needsSlug={type === "TABLE"}
-          needsRemote={type === "MICROFRONTEND"}
+          type={form.type}
+          needsSlug={form.type === "TABLE" && !form.existing}
+          needsTable={Boolean(form.existing)}
+          needsRemote={form.type === "MICROFRONTEND"}
           busy={create.isPending}
           onSubmit={submit}
-          onClose={() => setType(null)}
+          onClose={() => setForm(null)}
         />
       )}
     </>

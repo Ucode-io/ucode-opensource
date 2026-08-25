@@ -60,6 +60,7 @@ import {
   type Sort,
 } from "@/features/item";
 import { useTablePermissions } from "@/features/auth";
+import { CopilotButton } from "@/features/copilot";
 import { FileBrowser } from "@/features/files";
 import { MicrofrontendPage } from "@/features/microfrontend";
 import { EmbeddedPage, SidebarToggleButton, showsTable, useMenu } from "@/features/sidebar";
@@ -258,6 +259,14 @@ function MenuPage() {
   const can = permissionOf(view?.tableSlug);
 
   /*
+   * Строка поиска, приведённая к правам. Роли без права на поиск он
+   * не просто не показывается — он и не действует: адрес с `?search=`
+   * пересылают ссылкой, и она урезала бы список без единого следа
+   * на экране, потому что поля, в котором это видно, у такой роли нет.
+   */
+  const searchText = can.searchButton ? (search.search ?? "") : "";
+
+  /*
    * Права роли на view: какие показывать вкладкой, какие давать править
    * и удалять. Приходят отдельной ручкой — ни в списке view, ни в схеме
    * их нет (см. api/table-details).
@@ -363,9 +372,15 @@ function MenuPage() {
         // `relation.permission.view_permission`, которого бэкенд
         // не отдаёт вообще (layout.go, GetRelation — этого поля нет
         // в запросе), и потому не показывала ни одной.
-        (tab) => permissionOf(tab.tableSlug).read,
+        //
+        // И по правам на сам view — тем же, что и вкладки экрана:
+        // вкладка карточки это тоже view, и `table_slug` у него ЭТОЙ
+        // таблицы (POST /v2/views/{slug} — см. api/views), поэтому
+        // права на неё уже есть в том же ответе.
+        (tab) =>
+          permissionOf(tab.tableSlug).read && (viewRights.get(tab.id) ?? ALL_VIEW_RIGHTS).view,
       ),
-    [views, schema.relations, language, permissionOf],
+    [views, schema.relations, language, permissionOf, viewRights],
   );
 
   /** Связи, которые ещё можно показать вкладкой. */
@@ -621,8 +636,8 @@ function MenuPage() {
    * фильтр, once осевший в localStorage, отменял его навсегда.
    */
   const defaultFilters = useMemo(
-    () => fromConditions(view?.defaultFilters),
-    [view?.defaultFilters],
+    () => fromConditions(view?.defaultFilters, tableFields),
+    [view?.defaultFilters, tableFields],
   );
 
   /** Отбор, которым управляет человек: он в адресе, он же в подшапке.
@@ -859,7 +874,7 @@ function MenuPage() {
       infinite,
       sorts: querySorts,
       filters: effectiveFilters,
-      search: search.search,
+      search: searchText,
     },
   );
 
@@ -873,7 +888,7 @@ function MenuPage() {
     tableSlug: timelineView && can.read && calendarFrom ? (view?.tableSlug ?? "") : "",
     fromSlug: calendarFrom?.slug ?? "",
     filters: scopeFilters,
-    search: search.search ?? "",
+    search: searchText,
   });
 
   /*
@@ -930,8 +945,13 @@ function MenuPage() {
    * Отбор по умолчанию снять нечем, и раскрывать ради него пустую
    * подшапку незачем; но значок «список неполный» гореть обязан —
    * иначе урезанная выборка ничем на экране не отмечена.
+   *
+   * Диапазон дат в счёт не идёт: на календаре и таймлайне он и ЕСТЬ
+   * экран — он нарисован сеткой и переключается стрелками. Гори значок
+   * по нему, он горел бы на календаре всегда и означал бы «отобрано»
+   * там, где никто ничего не отбирал.
    */
-  const activeFilters = activeFilterCount(effectiveFilters);
+  const activeFilters = activeFilterCount(scopeFilters);
   const filtersVisible =
     search.filtersOpen ?? (activeFilterCount(filters) > 0 || sorts.length > 0);
 
@@ -1003,7 +1023,7 @@ function MenuPage() {
    * строка, уехавшая на другую страницу, осталась бы отмеченной невидимо
    * — и удалилась бы вместе с теми, что человек видит.
    */
-  const rowSetKey = `${view?.id}|${search.page}|${limit}|${search.sort}|${search.search}|${JSON.stringify(effectiveFilters)}`;
+  const rowSetKey = `${view?.id}|${search.page}|${limit}|${search.sort}|${searchText}|${JSON.stringify(effectiveFilters)}`;
   useEffect(() => setSelected(new Set()), [rowSetKey]);
 
   /**
@@ -1067,6 +1087,12 @@ function MenuPage() {
         {isFetching && !rowsLoading && (
           <span className="text-xs text-fg-subtle">{t("common.loading")}</span>
         )}
+
+        {/* Помощник — справа в шапке, как и в старой админке. Сама панель
+            живёт в оболочке приложения: она шире одной страницы. */}
+        <div className="ml-auto">
+          <CopilotButton />
+        </div>
       </header>
 
       {/* Полоса вкладок живёт и при открытом view неподдержанного типа:
@@ -1132,8 +1158,16 @@ function MenuPage() {
                   // Закрытие не стирает сами фильтры: спрятать строку и снять
                   // отбор — разные намерения.
                   onToggleFilters={() => setSearch({ filtersOpen: !filtersVisible }, true)}
-                  search={search.search ?? ""}
-                  onSearch={(next) => setSearch({ search: next || undefined, page: 1 }, true)}
+                  search={searchText}
+                  /* Поиск — отдельное право роли (`search_button`), и его
+                     отсутствие убирает поле, а не только кнопку: см.
+                     searchText выше. */
+                  {...(can.searchButton
+                    ? {
+                        onSearch: (next: string) =>
+                          setSearch({ search: next || undefined, page: 1 }, true),
+                      }
+                    : {})}
                 />
               )}
 
@@ -1233,7 +1267,7 @@ function MenuPage() {
                     exportExcel.mutate({
                       fieldIds: columns.map((field) => field.id),
                       filters: effectiveFilters,
-                      search: search.search ?? "",
+                      search: searchText,
                     }),
                   // Удаляется любой view, включая последний: так же ведёт
                   // себя старая админка. Пункт меню без view не тупик —
@@ -1738,12 +1772,19 @@ function MenuPage() {
                 : {})}
               onOpenRow={openRow}
               onAddField={(anchor) => setFieldPanel({ field: null, anchor })}
+              /* Отбор из меню колонки — своё право роли (`field_filter`),
+                 отдельное от подшапки с чипами: так же делит их старая
+                 админка (views/modules/Table/…/Th.jsx:71). */
               columnActions={{
                 ...columnActions,
-                filter: (field) => {
-                  const kind = filterKind(field);
-                  if (kind) applyFilters({ ...filters, [field.slug]: emptyFilter(kind) });
-                },
+                ...(can.fieldFilter
+                  ? {
+                      filter: (field: Field) => {
+                        const kind = filterKind(field);
+                        if (kind) applyFilters({ ...filters, [field.slug]: emptyFilter(kind) });
+                      },
+                    }
+                  : {}),
               }}
             />
           )}
@@ -1803,7 +1844,9 @@ function MenuPage() {
             <>
               {/* Печатная форма записи: шаблон .docx таблицы, заполненный
                   значениями открытой строки. Шаблонов нет — кнопки нет. */}
-              {drawerRow && <PrintButton tableSlug={view.tableSlug} row={drawerRow} />}
+              {drawerRow && (
+                <PrintButton tableSlug={view.tableSlug} row={drawerRow} fields={tableFields} />
+              )}
 
               <TableActions
                 tableSlug={view.tableSlug}
@@ -1876,8 +1919,12 @@ function MenuPage() {
                 ]}
                 saving={updateView.isPending}
                 /* Настройки вкладки — те же, что у таблицы, и уезжают
-                   тем же PUT view: у вкладки своя строка в базе. */
-                {...(can.settings
+                   тем же PUT view: у вкладки своя строка в базе.
+
+                   Право нужно и на сам view, как у вкладок экрана:
+                   вкладка карточки — такой же view, и права на неё
+                   лежат в том же ответе (см. relationTabs). */
+                {...(can.settings && rightsOf(relationTab.id).edit
                   ? {
                       settings: {
                         onRename: (name: string, nameLanguage: string) =>
@@ -1906,10 +1953,16 @@ function MenuPage() {
                           updateView.mutate({ view: relationTab.view, quickFilters }),
                         onDefaultFilters: (defaultFilters: Record<string, unknown>) =>
                           updateView.mutate({ view: relationTab.view, defaultFilters }),
-                        onRemove: () => {
-                          deleteView.mutate(relationTab.view);
-                          setSearch({ tab: undefined });
-                        },
+                        // Право на удаление — своё, отдельное от права
+                        // на правку: так же и у вкладок экрана.
+                        ...(rightsOf(relationTab.id).delete
+                          ? {
+                              onRemove: () => {
+                                deleteView.mutate(relationTab.view);
+                                setSearch({ tab: undefined });
+                              },
+                            }
+                          : {}),
                       },
                     }
                   : {})}

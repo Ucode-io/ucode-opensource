@@ -170,3 +170,29 @@ test("правка полей дат не трогает остальные на
   // бы прежнее значение из raw.
   expect(toUpdateBody({ view: stored, dateTo: "" })["calendar_to_slug"]).toBe("");
 });
+
+/*
+ * Адреса «Переходов». Параметр без ключа отбрасывается — в строке
+ * запроса он превратился бы в «=», — и это то самое место, из-за
+ * которого пустая строка параметра не может жить в настройке: правка
+ * кладётся в кэш этим же телом (useUpdateView, onMutate), и строка,
+ * добавленная кнопкой, исчезала бы в том же кадре. Держит её форма
+ * (см. UrlSetting в ViewOptions).
+ */
+test("параметры адреса уезжают объектом, а строка без ключа отбрасывается", () => {
+  const body = toUpdateBody({
+    view: stored,
+    objectUrl: {
+      url: " https://crm.example/new ",
+      params: [
+        { key: " from ", value: " admin " },
+        { key: "", value: "потерянное" },
+      ],
+    },
+  });
+
+  expect((body["attributes"] as Record<string, unknown>)["url_object"]).toEqual({
+    url: "https://crm.example/new",
+    params: [{ key: "from", value: "admin" }],
+  });
+});

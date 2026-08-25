@@ -75,6 +75,43 @@ export const keys = {
     /** Справочник: LANGUAGE, TIMEZONE, CURRENCY. Общий на проект. */
     options: (projectId: string, type: string) =>
       [...keys.settings.all, "options", projectId, type] as const,
+    /**
+     * Люди проекта. Список приходит по ОДНОМУ типу клиента — так его
+     * отдаёт ручка, — поэтому тип в ключе. Поиск и страница тоже:
+     * это и есть запрос, а не отбор в памяти.
+     */
+    usersAll: () => [...keys.settings.all, "users"] as const,
+    users: (projectId: string, clientTypeId: string, search: string, page: number) =>
+      [...keys.settings.usersAll(), projectId, clientTypeId, search, page] as const,
+    /**
+     * API-ключи. Ключ выдаётся в ОДНОМ окружении (`environment_id`
+     * берётся из заголовка запроса), поэтому окружение в ключе кэша:
+     * иначе список prod и dev делил бы одну ячейку.
+     */
+    apiKeysAll: () => [...keys.settings.all, "api-keys"] as const,
+    apiKeys: (projectId: string, envId: string, search: string, page: number) =>
+      [...keys.settings.apiKeysAll(), projectId, envId, search, page] as const,
+    /** Справочник платформ клиента — общий на всё приложение. */
+    clientPlatforms: () => [...keys.settings.all, "client-platforms"] as const,
+    /**
+     * Журнал изменений: своя запись у каждого окружения. Отбор входит
+     * в ключ целиком — фильтруется на сервере, а не у нас.
+     */
+    activityAll: () => [...keys.settings.all, "activity"] as const,
+    activity: (envId: string, filters: Record<string, string | number>) =>
+      [...keys.settings.activityAll(), envId, filters] as const,
+    activityEntry: (envId: string, id: string) =>
+      [...keys.settings.activityAll(), envId, "entry", id] as const,
+    /** Свои эндпоинты (`/x-api/...`): список на проект и окружение. */
+    endpoints: (projectId: string, envId: string) =>
+      [...keys.settings.all, "endpoints", projectId, envId] as const,
+    /**
+     * Внешние базы: подключения проекта и таблицы одного подключения.
+     * Окружение в ключе — подключение заводится в его ресурсе.
+     */
+    connections: (envId: string) => [...keys.settings.all, "connections", envId] as const,
+    connectionTables: (envId: string, connectionId: string) =>
+      [...keys.settings.connections(envId), connectionId] as const,
   },
   icons: {
     all: ["icons"] as const,
@@ -118,6 +155,14 @@ export const keys = {
     all: ["microfrontends"] as const,
     byId: (envId: string, id: string) => [...keys.microfrontends.all, envId, id] as const,
   },
+  /**
+   * Помощник: список прошлых бесед проекта. Сама переписка в кэше
+   * не живёт — она пишется потоком и хранится в состоянии панели.
+   */
+  copilot: {
+    all: ["copilot"] as const,
+    chats: (projectId: string) => [...keys.copilot.all, "chats", projectId] as const,
+  },
   /** Функции проекта: их зовут поля-кнопки. Список один на окружение. */
   functions: {
     all: ["functions"] as const,
@@ -135,6 +180,12 @@ export const keys = {
       [...keys.menus.all, projectId, envId, "children", parentId] as const,
     detail: (projectId: string, envId: string, menuId: string) =>
       [...keys.menus.all, projectId, envId, "detail", menuId] as const,
+    /**
+     * Всё дерево целиком — его собирает поиск, обходя уровни. Набранного
+     * в ключе нет: дерево читается один раз, а отбор идёт по нему в памяти.
+     */
+    tree: (projectId: string, envId: string) =>
+      [...keys.menus.all, projectId, envId, "tree"] as const,
   },
   views: {
     all: ["views"] as const,

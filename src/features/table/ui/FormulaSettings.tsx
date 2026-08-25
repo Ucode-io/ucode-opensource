@@ -528,7 +528,7 @@ function RelationPicker({
 
   const { rows } = useRelationRows({
     tableSlug: relation.toSlug,
-    viewFieldSlugs: relation.viewFieldSlugs,
+    viewFields: relation.viewFields,
     search,
   });
 

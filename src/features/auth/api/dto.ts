@@ -33,6 +33,8 @@ export type PermissionDto = {
   add_field?: string;
   group?: string;
   tab_group?: string;
+  search_button?: string;
+  field_filter?: string;
 };
 
 export type UserDto = {
@@ -51,6 +53,15 @@ export type LoginResponseDto = {
   role?: { id?: string; name?: string };
   client_type?: { id?: string };
   permissions?: PermissionDto[];
+  /**
+   * Глобальные права роли: кнопки приложения, а не таблицы. Флаги
+   * БУЛЕВЫ (своя таблица `global_permission`, своя форма в настройках
+   * ролей), но рядом с ними лежит строковый `id` — отсюда `unknown`.
+   * `false` в ответ не попадает вовсе — поля с omitempty
+   * (session_service.pb.go, message GlobalPermission). Поэтому «нет
+   * поля» здесь значит «выключено», а «нет объекта» — «мы не знаем».
+   */
+  global_permission?: Record<string, unknown>;
 };
 
 export type ProjectDataDto = {

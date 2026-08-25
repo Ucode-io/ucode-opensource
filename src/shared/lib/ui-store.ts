@@ -58,9 +58,28 @@ type UiState = {
    * таблицей, и выбор обязан пережить переход между ними.
    */
   dataLanguage: string;
+  /**
+   * Панель помощника: открыта и какой ширины.
+   *
+   * Здесь, а не в самой панели, ровно по той же причине, что и сайдбар:
+   * кнопка стоит в шапке страницы, а панель живёт в оболочке приложения,
+   * и общее у них только это состояние. Переживает перезагрузку: панель
+   * — часть рабочего места, а не всплывающее окно.
+   */
+  copilotOpen: boolean;
+  copilotWidth: number;
   setTheme: (theme: Theme) => void;
   toggleSidebar: () => void;
+  toggleCopilot: () => void;
+  closeCopilot: () => void;
+  setCopilotWidth: (width: number) => void;
   toggleMenu: (id: string) => void;
+  /**
+   * Раскрыть сразу несколько папок — дорогу до найденного поиском.
+   * Раскрытые не трогает: щелчок по результату не должен закрывать
+   * то, что человек открыл сам.
+   */
+  expandMenus: (ids: string[]) => void;
   /** Забыть раскрытие удалённого пункта: его id больше ничему не отвечает. */
   forgetMenu: (id: string) => void;
   setDataLanguage: (code: string) => void;
@@ -92,10 +111,21 @@ export const DRAWER_MIN_WIDTH = 400;
 export const DRAWER_MAX_WIDTH = 1200;
 export const DRAWER_DEFAULT_WIDTH = 520;
 
+/**
+ * Панель помощника. Уже 320px переписка становится колонкой в пять слов,
+ * шире 720 — таблица за ней перестаёт быть таблицей.
+ */
+export const COPILOT_MIN_WIDTH = 320;
+export const COPILOT_MAX_WIDTH = 720;
+export const COPILOT_DEFAULT_WIDTH = 420;
+
 export const clampSidebarWidth = (width: number) =>
   clamp(width, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
 
 export const clampDrawerWidth = (width: number) => clamp(width, DRAWER_MIN_WIDTH, DRAWER_MAX_WIDTH);
+
+export const clampCopilotWidth = (width: number) =>
+  clamp(width, COPILOT_MIN_WIDTH, COPILOT_MAX_WIDTH);
 
 const clamp = (value: number, min: number, max: number) =>
   Math.round(Math.min(max, Math.max(min, value)));
@@ -119,9 +149,14 @@ export const useUi = create<UiState>()(
       columnWidths: {},
       expandedMenus: [],
       dataLanguage: "",
+      copilotOpen: false,
+      copilotWidth: COPILOT_DEFAULT_WIDTH,
       setTheme: (theme) => set({ theme }),
       setDataLanguage: (dataLanguage) => set({ dataLanguage }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      toggleCopilot: () => set((s) => ({ copilotOpen: !s.copilotOpen })),
+      closeCopilot: () => set({ copilotOpen: false }),
+      setCopilotWidth: (width) => set({ copilotWidth: clampCopilotWidth(width) }),
       forgetMenu: (id) =>
         set((s) => ({ expandedMenus: s.expandedMenus.filter((item) => item !== id) })),
       toggleMenu: (id) =>
@@ -130,6 +165,8 @@ export const useUi = create<UiState>()(
             ? s.expandedMenus.filter((item) => item !== id)
             : [...s.expandedMenus, id],
         })),
+      expandMenus: (ids) =>
+        set((s) => ({ expandedMenus: [...new Set([...s.expandedMenus, ...ids])] })),
       setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
       setDrawerWidth: (width) => set({ drawerWidth: clampDrawerWidth(width) }),
       setDrawerMode: (drawerMode) => set({ drawerMode }),

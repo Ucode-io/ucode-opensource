@@ -1,5 +1,5 @@
 import type { Field, Relation } from "@/features/table";
-import { relationLabel } from "@/shared/lib/relation-label";
+import { relationLabel, type ViewField } from "@/shared/lib/relation-label";
 import { relationDataKey, type Item } from "./types";
 
 // Подпись связанной строки общая с настройками агрегата — см. shared/lib.
@@ -43,9 +43,11 @@ export type RelationEdit = {
 export function relationSelection(
   row: Item,
   field: Field,
-  slugs: string[] | undefined,
+  fields: ViewField[] | undefined,
+  /** Язык ДАННЫХ: им отбирается колонка мультиязычного поля показа. */
+  language = "",
 ): { guid: string; label: string }[] {
-  if (!slugs?.length) return [];
+  if (!fields?.length) return [];
 
   const related = row[relationDataKey(field.slug)];
 
@@ -53,7 +55,10 @@ export function relationSelection(
   // где строк несколько, бэкенд отдаёт массив.
   return (Array.isArray(related) ? related : [related])
     .filter(isRecord)
-    .map((item) => ({ guid: String(item["guid"] ?? ""), label: relationLabel(item, slugs) }))
+    .map((item) => ({
+      guid: String(item["guid"] ?? ""),
+      label: relationLabel(item, fields, language),
+    }))
     .filter((item) => item.guid || item.label);
 }
 

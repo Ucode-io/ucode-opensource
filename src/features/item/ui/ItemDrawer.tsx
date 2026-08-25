@@ -30,20 +30,25 @@ import {
   collapseLanguages,
   hasMultilanguage,
   localized,
+  tabLabel,
   baseSlug,
   stripLanguage,
   type Field,
   type Relation,
 } from "@/features/table";
 import type { DataLanguage } from "@/features/workspace";
+import { PASSWORD_RULES, checkPassword, isPasswordValid } from "@/features/auth";
 import {
   DRAWER_MAX_WIDTH,
   DRAWER_MIN_WIDTH,
   useUi,
   type DrawerMode,
 } from "@/shared/lib/ui-store";
+import { Button } from "@/shared/ui/button";
 import { CommitInput } from "@/shared/ui/commit-input";
 import { Icon } from "@/shared/ui/icon";
+import { Modal } from "@/shared/ui/modal";
+import { PasswordInput } from "@/shared/ui/password-input";
 import { Tooltip } from "@/shared/ui/tooltip";
 import { LanguageTabs } from "@/shared/ui/language-tabs";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
@@ -248,6 +253,8 @@ export function ItemDrawer({
   const { t } = useTranslation();
   /** Какое поле правится. Одно на drawer — как и в таблице. */
   const [active, setActive] = useState<{ slug: string; anchor: DOMRect } | null>(null);
+  /** Поле PASSWORD, которому задают значение: у него отдельное окно. */
+  const [secret, setSecret] = useState<Field | null>(null);
   const { drawerMode, setDrawerMode, drawerWidth, setDrawerWidth, sidebarCollapsed } = useUi();
   const panel = useRef<HTMLElement>(null);
   const side = drawerMode === "side";
@@ -365,6 +372,17 @@ export function ItemDrawer({
     // Флажок переключается на месте — как в таблице.
     if (row && guid && onEdit && editorKind(field) === "boolean") {
       onEdit(guid, field.slug, !row[field.slug]);
+      return;
+    }
+
+    /*
+     * Пароль задаётся отдельным окном с подтверждением, а не всплывашкой
+     * над ячейкой: правка PASSWORD в строке таблицы закрыта сознательно
+     * (см. cell-kind, EDITABLE), но задать его надо где-то — иначе
+     * пользователя с паролем не завести вовсе.
+     */
+    if (guid && onEdit && cellKind(field.type) === "password") {
+      setSecret(field);
       return;
     }
 
@@ -596,6 +614,7 @@ export function ItemDrawer({
               candidates={rest}
               language={language}
               codes={codes}
+              multilingual={multilingual}
               placeholder={titlePlaceholder ?? t("drawer.noHeading")}
               onPick={onHeading}
               onOpen={open}
@@ -700,7 +719,7 @@ export function ItemDrawer({
                         кнопкой «en» — это то же слово дважды. */}
                     <FieldLabel
                       label={stripLanguage(
-                        localized(field.labels, language, field.label),
+                        tabLabel(field.labels, language, field.label, multilingual),
                         multilingual ? language : "",
                       )}
                       field={field}
@@ -722,7 +741,14 @@ export function ItemDrawer({
                      * захочет. Открывать здесь всё равно нечего: BUTTON
                      * — это действие, а не значение.
                      */}
-                    {cellKind(field.type) === "button" ? (
+                    {/*
+                     * TEXT — подпись-разделитель, а не значение
+                     * (FIELD-AUDIT, F3): в карточке она уже нарисована
+                     * слева, и печатать её второй раз в колонке значения
+                     * незачем. В таблице подпись как раз и есть всё
+                     * содержимое такой ячейки.
+                     */}
+                    {cellKind(field.type) === "label" ? null : cellKind(field.type) === "button" ? (
                       <div className="flex min-h-8 min-w-0 flex-1 items-center px-1.5 py-1 text-sm">
                         <Cell
                           field={field}
@@ -804,8 +830,113 @@ export function ItemDrawer({
             onClose={() => setActive(null)}
           />
         )}
+
+        {secret && guid && (
+          <PasswordDialog
+            label={stripLanguage(
+              tabLabel(secret.labels, language, secret.label, multilingual),
+              multilingual ? language : "",
+            )}
+            onSave={(value) => onEdit?.(guid, secret.slug, value)}
+            onClose={() => setSecret(null)}
+          />
+        )}
       </aside>
     </>
+  );
+}
+
+/**
+ * «Задать пароль» — единственный путь записать PASSWORD.
+ *
+ * Правка в ячейке для него закрыта сознательно (`cell-kind`, `EDITABLE`):
+ * сброс пароля вслепую из строки таблицы — не то действие, которое
+ * делают одним щелчком. Но и не задать его было нельзя нигде, при том
+ * что таблице входа бэкенд заводит колонку `password` сам.
+ *
+ * Пароль уезжает открытым текстом обычной правкой строки — хэширует его
+ * бэкенд (`storage/postgres/items.go:668` при вставке, `:1669` при
+ * правке). Правила — те же, что у входа в саму админку
+ * (`pkg/util/validation.go`, `ValidStrongPassword`), поэтому и список
+ * правил взят из features/auth, а не написан заново.
+ *
+ * Прежнее значение не показывается и не спрашивается: в колонке лежит
+ * хэш, а «текущий пароль» админ строки не знает — он его назначает.
+ */
+function PasswordDialog({
+  label,
+  onSave,
+  onClose,
+}: {
+  label: string;
+  onSave: (value: string) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [value, setValue] = useState("");
+  const [repeat, setRepeat] = useState("");
+
+  const rules = checkPassword(value);
+  const matches = value === repeat;
+  const valid = isPasswordValid(value) && matches;
+
+  return (
+    <Modal onClose={onClose}>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!valid) return;
+
+          onSave(value);
+          onClose();
+        }}
+        className="flex w-full max-w-sm flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-modal"
+      >
+        <h2 className="text-base font-semibold">{t("cell.setPassword")}</h2>
+        <p className="text-sm text-fg-muted">{label}</p>
+
+        <PasswordInput
+          autoFocus
+          autoComplete="new-password"
+          placeholder={t("settings.newPassword")}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+
+        <PasswordInput
+          autoComplete="new-password"
+          placeholder={t("settings.repeatPassword")}
+          value={repeat}
+          onChange={(event) => setRepeat(event.target.value)}
+        />
+
+        {repeat && !matches && <p className="text-xs text-danger">{t("settings.passwordMismatch")}</p>}
+
+        {value && (
+          <ul className="flex flex-col gap-1">
+            {PASSWORD_RULES.map((rule) => (
+              <li
+                key={rule.key}
+                className={`text-xs ${rules[rule.key] ? "text-success" : "text-fg-subtle"}`}
+              >
+                {t(`auth.rule.${rule.key}`)}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="mt-1 flex justify-end gap-2">
+          {/* Именно type="button": в форме кнопка без типа — это submit,
+              и «отмена» сохраняла бы пароль. */}
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t("action.cancel")}
+          </Button>
+          <Button type="submit" disabled={!valid}>
+            {t("action.save")}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -867,6 +998,7 @@ function Heading({
   candidates,
   language,
   codes,
+  multilingual,
   placeholder,
   children,
   onPick,
@@ -877,6 +1009,8 @@ function Heading({
   /** Язык ДАННЫХ: и подписи полей, и выбранный языковой вариант. */
   language: string;
   codes: string[];
+  /** Вкладки языка на экране есть — подписи идут за ними (см. tabLabel). */
+  multilingual: boolean;
   /** Что показать вместо значения. У новой записи это её имя. */
   placeholder: string;
   children: ReactNode;
@@ -930,8 +1064,8 @@ function Heading({
                 }}
               >
                 {stripLanguage(
-                  localized(item.labels, language, item.label),
-                  codes.length ? language : "",
+                  tabLabel(item.labels, language, item.label, multilingual),
+                  multilingual ? language : "",
                 )}
               </PopoverItem>
             ))}
@@ -969,10 +1103,15 @@ function Heading({
 }
 
 /**
- * Типы, которыми бывает заголовок карточки. Тот же набор, что и в старой
- * админке: заголовок — это название строки, а не её дата или галочка.
+ * Типы, которыми бывает заголовок карточки. Почти тот же набор, что
+ * и в старой админке: заголовок — это название строки, а не её дата
+ * или галочка.
+ *
+ * TEXT из набора убран: у него показывается подпись поля, одинаковая
+ * во всех строках (FIELD-AUDIT, F3), — заголовком это сделало бы все
+ * карточки таблицы одноимёнными.
  */
-const HEADING_TYPES = new Set(["SINGLE_LINE", "MULTI_LINE", "TEXT", "INCREMENT_ID"]);
+const HEADING_TYPES = new Set(["SINGLE_LINE", "MULTI_LINE", "INCREMENT_ID"]);
 
 /**
  * Поля, разложенные по секциям раскладки.

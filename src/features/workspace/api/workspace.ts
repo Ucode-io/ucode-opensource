@@ -122,6 +122,7 @@ export function useEnvironments(projectId: string, enabled = true) {
           name: dto.name || "—",
           projectId: dto.project_id ?? projectId,
           color: dto.display_color ?? "",
+          description: dto.description?.trim() ?? "",
           isDefault: dto.default ?? false,
         })),
   });

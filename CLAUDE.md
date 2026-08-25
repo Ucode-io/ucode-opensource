@@ -9,7 +9,8 @@
 2. [docs/PLAN.md](docs/PLAN.md) — принятые решения и порядок работ;
    продолжения — [docs/PLAN-v2.md](docs/PLAN-v2.md) (закрыт),
    [docs/PLAN-v3.md](docs/PLAN-v3.md) (текущий),
-   [docs/PARITY.md](docs/PARITY.md) — чек паритета со старой админкой.
+   [docs/PARITY.md](docs/PARITY.md) — чек паритета со старой админкой,
+   [docs/FIELD-AUDIT.md](docs/FIELD-AUDIT.md) — сверка типов полей.
 3. [docs/adr/](docs/adr/) — решения, у которых есть цена.
 
 ## Старый репозиторий

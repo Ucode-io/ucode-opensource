@@ -16,6 +16,11 @@ import type { Field } from "@/features/table";
  */
 export type CellKind =
   | "text"
+  /**
+   * Подпись-разделитель, а не значение: печатается название поля,
+   * одинаковое во всех строках. Так устроен TEXT — см. BY_TYPE.
+   */
+  | "label"
   /** Адрес: то же поле ввода, но по значению можно перейти. */
   | "link"
   | "longtext"
@@ -50,6 +55,7 @@ export type CellKind =
   | "qr"
   /** Штрихкод: то же самое полосами. */
   | "barcode"
+  | "scanner"
   | "password";
 
 const BY_TYPE: Record<string, CellKind> = {
@@ -62,6 +68,15 @@ const BY_TYPE: Record<string, CellKind> = {
   RANDOM_UUID: "text",
   PRIMARY_KEY: "text",
   INCREMENT_ID: "text",
+  /*
+   * Не число, хотя называется numbers: колонка VARCHAR, а значение
+   * собирается как «приставка + дефис + цифры» — причём дефис
+   * приклеивается и без приставки (`pkg/helper/generator.go:21`,
+   * без проверки на пустоту). Числом такое печатается как «-4821»:
+   * моноширинные цифры с ведущим минусом, вид отрицательной величины.
+   * Устроен он как INCREMENT_ID и показывается так же.
+   */
+  RANDOM_NUMBERS: "text",
   // Строка, собранная бэкендом по шаблону из других полей записи.
   MANUAL_STRING: "text",
   /*
@@ -71,8 +86,17 @@ const BY_TYPE: Record<string, CellKind> = {
    */
   PICK_LIST: "status",
 
+  /*
+   * TEXT — не текст записи, а подпись-разделитель. Старая админка
+   * печатает у него `field.label`: в таблице одинаково во всех строках
+   * (`Grid/FieldRelationGenerator/HFTextComponent.jsx:20`), в форме —
+   * жирным заголовком. Колонка при этом заводится настоящая (VARCHAR
+   * умолчанием `GetDataType`), но пишет и читает её только админка,
+   * а показывает — как название (docs/FIELD-AUDIT.md, F3).
+   */
+  TEXT: "label",
+
   MULTI_LINE: "longtext",
-  TEXT: "longtext",
   CODE: "longtext",
   PROGRAMMING_LANGUAGE: "longtext",
 
@@ -80,9 +104,10 @@ const BY_TYPE: Record<string, CellKind> = {
   FLOAT: "number",
   FLOAT_NOLIMIT: "number",
   INCREMENT_NUMBER: "number",
-  RANDOM_NUMBERS: "number",
-  // FORMULA считает бэкенд — в строке уже лежит число. FORMULA_FRONTEND
-  // не считает никто, пока его не покажут: см. ui/FormulaCell.
+  // Оба считает бэкенд, в строке уже лежит число: FORMULA — агрегат по
+  // связанным строкам, FORMULA_FRONTEND — выражение по своим полям,
+  // пересчитывается на вставке и правке. Своё вычисление осталось
+  // только для строк, которых пересчёт не касался: см. ui/FormulaCell.
   FORMULA: "number",
   FORMULA_FRONTEND: "formula",
 
@@ -122,11 +147,13 @@ const BY_TYPE: Record<string, CellKind> = {
   BARCODE: "barcode",
   CODABAR: "barcode",
   /*
-   * SCAN_BARCODE — поле под сканер: в старой админке это ввод, который
-   * дёргает функцию OpenFaaS, а не рисунок. Функций в v1 нет, а в колонке
-   * лежит тот же код товара — показываем его штрихкодом, как остальные.
+   * SCAN_BARCODE — поле под сканер: в колонке тот же код товара,
+   * поэтому показываем его штрихкодом, как остальные, а вот правка
+   * у него своя. Сканер «набирает» код в поле ввода, и по готовности
+   * поле зовёт функцию — когда именно, задают attributes.pressEnter
+   * и attributes.length (см. ui/CellEditor, ScannerEditor).
    */
-  SCAN_BARCODE: "barcode",
+  SCAN_BARCODE: "scanner",
 
   PASSWORD: "password",
 };
@@ -178,9 +205,10 @@ const COMPUTED = new Set([
 /**
  * Что правится прямо в таблице.
  *
- * Всё, кроме пароля. PASSWORD не правится сознательно: сброс пароля
- * вслепую из строки таблицы — не то действие, которое делают одним
- * кликом.
+ * Всё, кроме пароля и подписи. PASSWORD не правится сознательно: сброс
+ * пароля вслепую из строки таблицы — не то действие, которое делают
+ * одним кликом (задают его в карточке). У `label` править нечего вовсе:
+ * это название поля, а не значение записи.
  */
 const EDITABLE: ReadonlySet<CellKind> = new Set<CellKind>([
   "text",
@@ -206,6 +234,7 @@ const EDITABLE: ReadonlySet<CellKind> = new Set<CellKind>([
   // руками или присылает сканер.
   "qr",
   "barcode",
+  "scanner",
 ]);
 
 /**

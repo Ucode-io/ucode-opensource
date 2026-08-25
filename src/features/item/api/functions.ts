@@ -48,3 +48,35 @@ export function useInvokeFunction(tableSlug: string) {
     },
   });
 }
+
+/**
+ * Вызов функции из поля-сканера (тип SCAN_BARCODE).
+ *
+ * Та же ручка, но тело другое, и это не наша вольность: функции склада
+ * написаны под него. Код уезжает дважды — вторым элементом `object_ids`
+ * и в `attributes.barcode` (`FormElements/InventoryBarcode.jsx:46`),
+ * потому что читают его по-разному.
+ *
+ * `form_input=true` в строке запроса старая шлёт, а бэкенд не читает:
+ * `grep -rn form_input` по шлюзу не находит ничего. Не отправляем — тот
+ * же случай, что `use_no_limit` у кнопки.
+ */
+export function useScanBarcode(tableSlug: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ functionId, rowGuid, code }: { functionId: string; rowGuid: string; code: string }) =>
+      api.post<unknown>("/v1/invoke_function", {
+        function_id: functionId,
+        table_slug: tableSlug,
+        object_ids: [rowGuid, code],
+        attributes: { barcode: code },
+      }),
+
+    onError: (error) => reportError(error, "button.failed"),
+    onSuccess: () => {
+      toast.success(i18n.t("button.done"));
+      void queryClient.invalidateQueries({ queryKey: keys.items.table(tableSlug) });
+    },
+  });
+}

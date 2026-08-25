@@ -1,76 +1,18 @@
 import type { Field } from "@/features/table";
-import { cellKind, type CellKind } from "./cell-kind";
+import { toDateValue, type DateKind } from "@/shared/lib/date-value";
+import { cellKind } from "./cell-kind";
 import type { Item } from "./types";
 
 /**
  * Значение ячейки: чтение из строки и запись обратно.
  *
- * Здесь живут все преобразования дат, и это не мелочь. В ucode три
- * временных типа с разным смыслом:
- *
- *   DATE                          календарная дата, колонка DATE
- *   DATE_TIME                     момент времени, колонка TIMESTAMPTZ
- *   DATE_TIME_WITHOUT_TIME_ZONE   настенные часы, колонка TIMESTAMP
- *
- * Только средний из них — момент. Два других часового пояса не имеют,
- * и прогонять их через `new Date(value)` нельзя: строка «2026-01-06»
- * разбирается как полночь UTC, а в Нью-Йорке это ещё 5 января. День
- * съезжает у половины планеты и только на части значений — такую ошибку
- * ищут неделями.
+ * Разбор дат живёт этажом ниже — `shared/lib/date-value`: ту же дату
+ * показывает подпись связанной строки, а она общая для двух фич.
+ * Здесь остаётся то, что относится к ПРАВКЕ: значение для поля ввода
+ * и обратно в то, что примет бэкенд.
  */
 
-export type DateKind = Extract<CellKind, "date" | "datetime" | "datetime_naive">;
-
-/** Дата без пояса: разбираем как текст, а не как момент времени. */
-const NAIVE = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/;
-
-/**
- * Тот же смысл, но задом наперёд: «24.12.2025 08:49».
- *
- * Это не причуда данных, а формат ответа. DATE_TIME_WITHOUT_TIME_ZONE
- * бэкенд отдаёт именно так (items.go: `Format(config.TimeLayoutItems)`),
- * хотя в колонке лежит обычный timestamp. Разобрать его как момент
- * времени невозможно: `new Date("24.12.2025 08:49")` — Invalid Date,
- * и без этой ветки поле показывалось бы сырой строкой.
- */
-const DOTTED = /^(\d{2})\.(\d{2})\.(\d{4})(?:[T ](\d{2}):(\d{2}))?/;
-
-export type DateValue = {
-  date: Date;
-  /**
-   * Печатать в UTC. У значения без пояса части даты положены в Date
-   * как UTC — так же их и надо читать обратно, иначе сдвиг вернётся.
-   */
-  naive: boolean;
-};
-
-export function toDateValue(value: unknown, kind: DateKind): DateValue | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-
-  if (kind === "datetime") {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : { date, naive: false };
-  }
-
-  const iso = NAIVE.exec(value);
-  const dotted = iso ? null : DOTTED.exec(value);
-
-  // Не наш вид строки — пробуем разобрать как момент. Показать значение
-  // приблизительно лучше, чем не показать вовсе.
-  if (!iso && !dotted) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : { date, naive: false };
-  }
-
-  const [year, month, day, hour = "00", minute = "00"] = iso
-    ? iso.slice(1)
-    : [dotted![3], dotted![2], dotted![1], dotted![4], dotted![5]];
-
-  return {
-    date: new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute))),
-    naive: true,
-  };
-}
+export { toDateValue, type DateKind, type DateValue } from "@/shared/lib/date-value";
 
 /** Значение для <input type="date"> и <input type="datetime-local">. */
 export function toDateInput(value: unknown, kind: DateKind): string {
@@ -132,6 +74,44 @@ export function toNumber(text: string): number | null {
 
   const value = Number(trimmed);
   return Number.isFinite(value) ? value : null;
+}
+
+/*
+ * Разметка → текст, для MULTI_LINE.
+ *
+ * В ucode это поле заполняется редактором ReactQuill, и в колонку
+ * уезжает HTML («<p>Текст</p>»). Показать его тегами — значит показать
+ * не то, что человек написал; старая админка поэтому и печатала
+ * `stripHtmlTags(value)`.
+ *
+ * Условие входа — ЗАКРЫВАЮЩИЙ или самозакрытый тег. Старая снимает
+ * `<…>` безусловно и на «2 < 3 > 1» съедает середину строки; такое
+ * значение здесь остаётся как есть.
+ *
+ * Разбор строкой, а не DOMParser: то же самое в пять строк, и его
+ * можно проверить тестом, не поднимая DOM ради одной функции.
+ * Сущностей ровно те шесть, что пишет редактор.
+ */
+const MARKUP = /<\/[a-z][^>]*>|<[a-z][^>]*\/>/i;
+
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+export function plainText(value: string): string {
+  if (!MARKUP.test(value)) return value;
+
+  return value
+    // Абзац и перенос — это перенос строки, а не склейка слов.
+    .replace(/<\/(p|div|li|h[1-6]|tr)\s*>|<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&([a-z]+);/gi, (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole)
+    .trim();
 }
 
 /** Значение, которого нет. Пустая строка и пустой список — тоже. */

@@ -10,7 +10,9 @@ import { openPreview } from "@/shared/ui/file-preview";
 import { Icon } from "@/shared/ui/icon";
 import { cellKind, editorKind } from "../model/cell-kind";
 import { mapLink, parseCoords } from "../model/coords";
-import { isBlank, toDateValue, toList, type DateKind } from "../model/cell-value";
+import { formatDate, type DateKind } from "@/shared/lib/date-value";
+import { formatNumber } from "@/shared/lib/number-value";
+import { isBlank, plainText, toList } from "../model/cell-value";
 import { relationSelection } from "../model/relation";
 import type { Item } from "../model/types";
 import { ButtonCell } from "./ButtonCell";
@@ -70,11 +72,33 @@ export function Cell({
     case "password":
       return isBlank(value) ? <Empty /> : <span className="tracking-widest">••••••</span>;
 
+    /*
+     * TEXT: печатается НАЗВАНИЕ поля, а не значение строки — так же,
+     * как в старой админке (HFTextComponent). Это разделитель формы,
+     * а не данные: значение в колонке есть, но смысла у него нет,
+     * и показывать его вместо подписи значило бы показать прочерк там,
+     * ради чего поле и заводили (FIELD-AUDIT, F3).
+     */
+    case "label":
+      return (
+        <span className={`text-fg-muted ${line}`}>
+          {localized(field.labels, language, field.label)}
+        </span>
+      );
+
     case "link":
       return <LinkCell value={value} line={line} />;
 
     case "relation":
-      return <RelationCell field={field} row={row} relations={relations} line={line} />;
+      return (
+        <RelationCell
+          field={field}
+          row={row}
+          relations={relations}
+          language={language}
+          line={line}
+        />
+      );
 
     case "status":
       return <TagsCell field={field} value={value} language={language} dot wrap={wrap} />;
@@ -98,11 +122,17 @@ export function Cell({
         <span className="tabular-nums">{String(value).slice(0, 5)}</span>
       );
 
+    /*
+     * Разряды разделяются: «1 234 567» читается с одного взгляда
+     * (см. shared/lib/number-value). Разделитель — по языку интерфейса,
+     * значение в колонке при этом не меняется, и правится оно
+     * по-прежнему без пробелов.
+     */
     case "number":
       return isBlank(value) ? (
         <Empty />
       ) : (
-        <span className={`tabular-nums ${line}`}>{String(value)}</span>
+        <span className={`tabular-nums ${line}`}>{formatNumber(value, locale)}</span>
       );
 
     case "boolean":
@@ -158,13 +188,23 @@ export function Cell({
       return isBlank(value) ? <Empty /> : <PolygonCell value={value} wrap={wrap} />;
 
     /*
-     * Формула считается здесь и сейчас: в колонке FORMULA_FRONTEND
-     * ничего не лежит, её значение существует только на экране.
-     * Формулы нет — показываем то, что всё-таки лежит в строке.
+     * Показываем сохранённое, а не свой пересчёт. FORMULA_FRONTEND
+     * считает и бэкенд — на вставке и правке строки, своим JS-движком,
+     * и результат кладёт в колонку (formula_service.go:107, запись
+     * :133). По этой колонке идут фильтр, поиск и сортировка, так что
+     * пересчитанное на экране число спорило бы с отбором.
+     *
+     * Пусто — строку с этой формулой ещё не сохраняли (поле завели
+     * позже строк): тогда считаем на месте, чтобы колонка не стояла
+     * пустой до первой правки. Движки разные — у нас excel-подобный,
+     * у бэкенда JS, — и число может разойтись; это записано в
+     * docs/FIELD-AUDIT.md, F22.
      */
     case "formula": {
       const formula = field.attributes["formula"];
-      if (typeof formula !== "string" || !formula.trim()) return <TextCell value={value} line={line} />;
+      if (!isBlank(value) || typeof formula !== "string" || !formula.trim()) {
+        return <TextCell value={value} line={line} />;
+      }
 
       return <FormulaCell formula={formula} row={row} locale={locale} line={line} />;
     }
@@ -177,6 +217,7 @@ export function Cell({
       );
 
     case "barcode":
+    case "scanner":
       return isBlank(value) ? (
         <Empty />
       ) : (
@@ -192,25 +233,56 @@ export function Cell({
         </span>
       );
 
+    /*
+     * Разметку снимаем только у MULTI_LINE: это единственный из
+     * длинных типов, который в ucode заполняется редактором. У CODE
+     * и PROGRAMMING_LANGUAGE угловые скобки — сам текст, и снять их
+     * значило бы стереть половину значения.
+     */
     case "longtext":
-      return <LongTextCell value={value} line={line} />;
+      return <LongTextCell value={value} line={line} rich={field.type === "MULTI_LINE"} />;
 
     default:
-      return <TextCell value={value} line={line} />;
+      return <TextCell value={phone(field.type, value)} line={line} />;
   }
+}
+
+/**
+ * Международный номер показывается с «+», даже если в колонке его нет.
+ *
+ * Формат хранения — E.164, но старые значения писались и без плюса,
+ * и старая админка подставляла его при показе:
+ * `value?.includes("+") ? value : "+" + value` (`HFInternationPhone.jsx:50`).
+ * Без этого один и тот же номер в двух строках выглядит как два разных
+ * формата.
+ *
+ * Правится и сохраняется значение как есть: дописывать плюс в колонку
+ * — это правка чужих данных мимо человека.
+ */
+function phone(type: string, value: unknown): unknown {
+  if (type !== "INTERNATION_PHONE" || typeof value !== "string") return value;
+
+  const number = value.trim();
+  return number && !number.startsWith("+") ? `+${number}` : value;
 }
 
 /**
  * Многострочный текст: рядом со значением — «скопировать», как в старой
  * админке (MultiLineCellFormElement). Значение длинное, и выделять его
  * мышью в обрезанной ячейке — мучение.
+ *
+ * В буфер уходит то же, что видно: разметка в буфере — мусор, и старая
+ * админка тоже копирует текст (`parseHTMLToText`). Правится значение
+ * по-прежнему как есть: редактора форматирования у нас нет, и подменять
+ * сохранённый HTML его же текстом значило бы потерять форматирование
+ * при первом же открытии ячейки.
  */
-function LongTextCell({ value, line }: { value: unknown; line: string }) {
+function LongTextCell({ value, line, rich }: { value: unknown; line: string; rich: boolean }) {
   const { t } = useTranslation();
 
   if (isBlank(value) || typeof value === "object") return <TextCell value={value} line={line} />;
 
-  const text = String(value);
+  const text = rich ? plainText(String(value)) : String(value);
 
   return (
     <span className="flex h-full min-w-0 flex-1 items-center gap-1">
@@ -399,16 +471,19 @@ function RelationCell({
   field,
   row,
   relations,
+  language,
   line,
 }: {
   field: Field;
   row: Item;
   relations: Map<string, Relation>;
+  /** Язык ДАННЫХ: мультиязычное поле показа берётся на нём одном. */
+  language: string;
   line: string;
 }) {
   const { t } = useTranslation();
-  const slugs = field.relationId ? relations.get(field.relationId)?.viewFieldSlugs : undefined;
-  const parts = relationSelection(row, field, slugs)
+  const slugs = field.relationId ? relations.get(field.relationId)?.viewFields : undefined;
+  const parts = relationSelection(row, field, slugs, language)
     .map((item) => item.label)
     .filter(Boolean);
 
@@ -431,45 +506,16 @@ function RelationCell({
   return <Empty />;
 }
 
-/**
- * Даты форматируются по языку интерфейса. Форматтер кэшируется: Intl
- * стоит дорого, а в таблице ячейки считаются сотнями.
- *
- * Пояс — часть ключа: значение без пояса печатается в UTC, иначе браузер
- * пересчитает его в местное время и сдвинет то, что сдвигать нельзя.
- */
-const formatters = new Map<string, Intl.DateTimeFormat>();
-
-function formatter(locale: string, withTime: boolean, utc: boolean): Intl.DateTimeFormat {
-  const key = `${locale}:${withTime}:${utc}`;
-  let cached = formatters.get(key);
-
-  if (!cached) {
-    cached = new Intl.DateTimeFormat(locale, {
-      dateStyle: "medium",
-      ...(withTime ? { timeStyle: "short" as const } : {}),
-      ...(utc ? { timeZone: "UTC" } : {}),
-    });
-    formatters.set(key, cached);
-  }
-
-  return cached;
-}
-
 function DateCell({ value, kind, locale }: { value: unknown; kind: DateKind; locale: string }) {
   if (isBlank(value)) return <Empty />;
 
-  const parsed = toDateValue(value, kind);
+  const text = formatDate(value, kind, locale);
 
   // Бэкенд отдаёт даты в нескольких форматах, и не все разбираются.
   // Нечитаемую дату показываем как есть, а не как «Invalid Date».
-  if (!parsed) return <span className="truncate">{String(value)}</span>;
+  if (!text) return <span className="truncate">{String(value)}</span>;
 
-  return (
-    <span className="truncate tabular-nums whitespace-nowrap">
-      {formatter(locale, kind !== "date", parsed.naive).format(parsed.date)}
-    </span>
-  );
+  return <span className="truncate tabular-nums whitespace-nowrap">{text}</span>;
 }
 
 /** До трёх картинок и счётчик: строка высотой 36px больше не вмещает. */

@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { IconFileTypeDocx, IconLoader2, IconPrinter } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import type { Field } from "@/features/table";
 import { Anchored } from "@/shared/ui/anchored";
 import { Icon } from "@/shared/ui/icon";
 import { useDocTemplates, usePrintItem } from "../api/templates";
@@ -18,14 +19,25 @@ import { useDocTemplates, usePrintItem } from "../api/templates";
 export function PrintButton({
   tableSlug,
   row,
+  fields,
 }: {
   tableSlug: string;
   /** Строка целиком: что не прислали, того в документе не будет. */
   row: Record<string, unknown>;
+  /**
+   * Поля таблицы. Нужны ровно для одного: отличить связь Many2One
+   * от обычного поля, в слаге которого есть «_id» — на втором печать
+   * падает целиком (см. model/print-data).
+   */
+  fields: Field[];
 }) {
   const { t } = useTranslation();
   const { templates } = useDocTemplates(tableSlug);
   const print = usePrintItem(tableSlug);
+  const lookups = useMemo(
+    () => new Set(fields.filter((field) => field.type === "LOOKUP").map((field) => field.slug)),
+    [fields],
+  );
   const button = useRef<HTMLButtonElement>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
 
@@ -40,7 +52,7 @@ export function PrintButton({
         type="button"
         disabled={print.isPending}
         onClick={() => {
-          if (only) return void print.mutate({ template: only, row });
+          if (only) return void print.mutate({ template: only, row, lookups });
           setAnchor(button.current?.getBoundingClientRect() ?? null);
         }}
         aria-label={t("docs.print")}
@@ -62,7 +74,7 @@ export function PrintButton({
                 key={template.id}
                 type="button"
                 onClick={() => {
-                  print.mutate({ template, row });
+                  print.mutate({ template, row, lookups });
                   setAnchor(null);
                 }}
                 className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-fg transition-colors hover:bg-surface-hover"

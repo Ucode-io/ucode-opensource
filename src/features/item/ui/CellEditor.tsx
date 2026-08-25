@@ -24,10 +24,12 @@ import { openPreview } from "@/shared/ui/file-preview";
 import { Icon } from "@/shared/ui/icon";
 import { fileName } from "@/shared/lib/file-kind";
 import { toast } from "@/shared/lib/toast";
-import { useUploadFiles, uploadFolder } from "../api/files";
+import { useUploadFiles, uploadFolder, uploadRatio } from "../api/files";
+import { useScanBarcode } from "../api/functions";
 import { useCreateItem, useLinkRelation, useRelationItems } from "../api/relations";
 import { editorKind, isMultiValue } from "../model/cell-kind";
 import { formatCoords, mapLink, parseCoords } from "../model/coords";
+import { parsePolygon } from "../model/polygon";
 import {
   fromDateInput,
   fromTimeInput,
@@ -47,6 +49,7 @@ import { Cell, optionColor, optionLabel } from "./Cell";
 import { CodeCell } from "./CodeCell";
 import { MapPicker } from "./MapPicker";
 import { PolygonCell } from "./PolygonCell";
+import { PolygonPicker } from "./PolygonPicker";
 
 /**
  * Раскрытая ячейка: редактор или просто значение целиком.
@@ -195,6 +198,7 @@ export function ActiveCell({
         rowGuid={guid}
         tableSlug={tableSlug}
         anchor={anchor}
+        language={language}
         onLink={onLink}
         onClose={onClose}
       />
@@ -279,17 +283,27 @@ export function ActiveCell({
       return <JsonEditor value={value} anchor={anchor} onEdit={edit} onClose={onClose} />;
 
     /*
-     * Область правится списком координат — рисовать её мышью нечем:
-     * своей карты у нас нет (см. PolygonCell). Зато форма видна прямо
-     * над текстом и перерисовывается по мере правки, поэтому опечатка
-     * в координате заметна сразу, а не при следующем открытии.
+     * Область обводится мышью по карте — как в старой админке. Список
+     * координат под картой остаётся: он точный, и правится в нём та же
+     * пара значений, что двигается мышью. Обе стороны меняют один
+     * и тот же текст, поэтому расходиться им негде.
+     *
+     * Карта не поднялась (нет сети, отказал скрипт) — на её месте
+     * прежняя форма области из набранных координат: правка списком
+     * работает и без карты.
      */
     case "polygon":
       return (
         <JsonEditor
           value={value}
           anchor={anchor}
-          preview={(text) => <PolygonCell value={text} wrap />}
+          preview={(text, replace) => (
+            <PolygonPicker
+              points={parsePolygon(text)}
+              onDraw={(ring) => replace(JSON.stringify([ring]))}
+              fallback={<PolygonCell value={text} wrap />}
+            />
+          )}
           onEdit={edit}
           onClose={onClose}
         />
@@ -311,6 +325,20 @@ export function ActiveCell({
 
     case "time":
       return <TimeEditor value={value} anchor={anchor} onEdit={edit} onClose={onClose} />;
+
+    case "scanner":
+      return (
+        <ScannerEditor
+          field={field}
+          value={value}
+          guid={guid}
+          tableSlug={tableSlug}
+          anchor={anchor}
+          check={check}
+          onEdit={edit}
+          onClose={onClose}
+        />
+      );
 
     default:
       return (
@@ -343,6 +371,91 @@ export function ActiveCell({
 }
 
 /**
+ * SCAN_BARCODE — поле под сканер: тот же ввод кода, но по готовности
+ * оно зовёт функцию.
+ *
+ * «По готовности» задаёт админ в настройках поля, и обе настройки
+ * до сих пор только хранились:
+ *
+ *   pressEnter   отправлять по Enter — сканер дописывает его сам
+ *   length       отправлять, как только набрано столько символов;
+ *                для сканеров, которые Enter не шлют
+ *
+ * Тело вызова — старое, под него написаны функции склада: код уезжает
+ * и вторым элементом `object_ids`, и в `attributes.barcode`
+ * (см. api/functions, useScanBarcode).
+ *
+ * Функция не задана — поле остаётся обычным вводом кода. Молча ничего
+ * не делать нельзя, но и запрещать правку не за что: значение в колонке
+ * настоящее, и его читают остальные экраны.
+ */
+function ScannerEditor({
+  field,
+  value,
+  guid,
+  tableSlug,
+  anchor,
+  check,
+  onEdit,
+  onClose,
+}: {
+  field: Field;
+  value: unknown;
+  guid: string;
+  tableSlug: string;
+  anchor: DOMRect;
+  check: (value: unknown) => string | null;
+  onEdit: (value: unknown) => void;
+  onClose: () => void;
+}) {
+  const scan = useScanBarcode(tableSlug);
+  const sent = useRef(false);
+
+  const raw = field.attributes["function"];
+  const functionId = typeof raw === "string" ? raw : "";
+  const pressEnter = field.attributes["pressEnter"] === true;
+  const length = Number(field.attributes["length"]);
+
+  const invoke = (code: string) => {
+    // Один код — один вызов: без этого каждый следующий символ после
+    // набранной длины отправлял бы функцию заново.
+    if (!functionId || !code || sent.current) return;
+
+    sent.current = true;
+    scan.mutate({ functionId, rowGuid: guid, code });
+  };
+
+  return (
+    <TextEditor
+      value={value}
+      anchor={anchor}
+      multiline={false}
+      numeric={false}
+      check={check}
+      preview={(text) => (text.trim() ? <CodeCell type={field.type} value={text} big /> : null)}
+      /* Отправка по длине — только когда не ждём Enter: иначе код уедет
+         дважды, по набору и по нажатию. */
+      {...(pressEnter || !Number.isInteger(length) || length <= 0
+        ? {}
+        : {
+            onType: (text: string) => {
+              if (text.trim().length < length) return;
+
+              onEdit(text.trim());
+              invoke(text.trim());
+              onClose();
+            },
+          })}
+      onEdit={(next) => {
+        onEdit(next);
+        if (pressEnter) invoke(typeof next === "string" ? next.trim() : "");
+      }}
+      onClose={onClose}
+    />
+  );
+}
+
+/**
  * Текст, число и многострочный текст — один редактор: разница между ними
  * в разборе значения и в том, что делает Enter.
  *
@@ -358,6 +471,7 @@ function TextEditor({
   heading,
   check,
   preview,
+  onType,
   onEdit,
   onClose,
 }: {
@@ -372,9 +486,15 @@ function TextEditor({
   check: (value: unknown) => string | null;
   /** Что показать над полем ввода: рисунок кода по набранному значению. */
   preview?: ((value: string) => ReactNode) | undefined;
+  /**
+   * Ввод как он есть, не дожидаясь сохранения. Нужен сканеру: он
+   * отправляет код по длине, а не по Enter (см. ScannerEditor).
+   */
+  onType?: ((text: string) => void) | undefined;
   onEdit: (value: unknown) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(() => (isBlank(value) ? "" : String(value)));
   /*
    * Ошибка появляется на вводе, а не на попытке сохранить: человек
@@ -403,10 +523,24 @@ function TextEditor({
     element?.setSelectionRange(element.value.length, element.value.length);
   }, []);
 
+  /*
+   * «12abc» — это опечатка, а не «очистить». toNumber на таком тексте
+   * возвращает null, и без этой ветки правка уезжала бы пустым
+   * значением, СТИРАЯ прежнее число: проверка на обязательность
+   * необязательное поле пропускает. Пустая строка по-прежнему null —
+   * ею и очищают.
+   */
+  const trouble = (text: string) =>
+    numeric && text.trim() && toNumber(text) === null
+      ? t("cell.invalid")
+      : check(numeric ? toNumber(text) : text);
+
   const commit = () => {
     const next = numeric ? toNumber(latest.current) : latest.current;
 
     // Пустое число — null: пустая строка в колонку FLOAT не ложится.
+    // Сравнение раньше проверки: закрытая нетронутой ячейка не должна
+    // краснеть из-за значения, которое человек не писал.
     if (sameValue(next, value)) return onClose();
 
     /*
@@ -414,7 +548,7 @@ function TextEditor({
      * набранное исчезает вместе с карточкой и восстановить его нечем.
      * Escape по-прежнему отменяет — так же ведёт себя JSON.
      */
-    const problem = check(next);
+    const problem = trouble(latest.current);
     if (problem) return setError(problem);
 
     onEdit(next);
@@ -436,7 +570,8 @@ function TextEditor({
             const text = event.target.value;
             latest.current = text;
             setDraft(text);
-            setError(check(numeric ? toNumber(text) : text));
+            setError(trouble(text));
+            onType?.(text);
           }}
           onKeyDown={(event) => {
             // В многострочном поле Enter — перенос строки, и сохраняет
@@ -606,6 +741,7 @@ function RelationEditor({
   rowGuid,
   tableSlug,
   anchor,
+  language,
   onLink,
   onClose,
 }: {
@@ -616,6 +752,8 @@ function RelationEditor({
   /** Таблица, в которой правим строку. Нужна обеим ручкам связи. */
   tableSlug: string;
   anchor: DOMRect;
+  /** Язык ДАННЫХ: мультиязычное поле показа берётся на нём одном. */
+  language: string;
   /** Есть — выбор не уезжает запросом, а отдаётся вызывающему. */
   onLink?: ((item: Item | null) => void) | undefined;
   onClose: () => void;
@@ -629,7 +767,7 @@ function RelationEditor({
    */
   const search = useDeferredValue(query);
 
-  const slugs = relation.viewFieldSlugs;
+  const slugs = relation.viewFields;
 
   /*
    * Строки грузятся и без настроенных полей показа. Показывать их
@@ -657,12 +795,12 @@ function RelationEditor({
    */
   const needle = search.trim().toLowerCase();
   const visible = needle
-    ? items.filter((item) => relationLabel(item, slugs).toLowerCase().includes(needle))
+    ? items.filter((item) => relationLabel(item, slugs, language).toLowerCase().includes(needle))
     : items;
   const link = useLinkRelation(tableSlug);
   const create = useCreateItem(relation.toSlug);
 
-  const selected = relationSelection(row, field, slugs);
+  const selected = relationSelection(row, field, slugs, language);
   const selectedGuids = new Set(selected.map((item) => item.guid));
 
   /* Уезжает guid, но наружу отдаётся строка целиком: черновику нужна
@@ -687,7 +825,7 @@ function RelationEditor({
    */
   const createAndLink = () => {
     const text = query.trim();
-    const first = slugs[0];
+    const first = slugs[0]?.slug;
     if (!text || !first) return;
 
     const created: Item = { guid: crypto.randomUUID(), [first]: text };
@@ -734,7 +872,7 @@ function RelationEditor({
           <>
             {visible.map((item) => {
                 const guid = String(item["guid"] ?? "");
-                const label = relationLabel(item, slugs);
+                const label = relationLabel(item, slugs, language);
 
                 return (
                   <button
@@ -1099,8 +1237,12 @@ function FileEditor({
     if (!picked.length) return;
 
     upload.mutate(
-      // Одиночному полю второй файл некуда девать — берём первый.
-      { files: multiple ? picked : picked.slice(0, 1), folder: uploadFolder(field.attributes) },
+      {
+        // Одиночному полю второй файл некуда девать — берём первый.
+        files: multiple ? picked : picked.slice(0, 1),
+        folder: uploadFolder(field.attributes),
+        ratio: uploadRatio(field.attributes),
+      },
       { onSuccess: (added) => write(multiple ? [...urls, ...added] : added) },
     );
   };
@@ -1316,13 +1458,13 @@ function IconEditor({
  * правка исчезает вместе с ней. Escape отменяет.
  */
 /**
- * Точка на карте: два поля — широта и долгота.
+ * Точка на карте: карта плюс два поля — широта и долгота.
  *
- * Не встроенная карта: за неё пришлось бы платить внешним скриптом,
- * ключом API в настройках поля (старая админка спрашивала его у каждого
- * поля MAP отдельно) и запросом к чужому серверу на каждое открытие
- * ячейки. Координаты правятся руками и проверяются кнопкой «на карте» —
- * ссылка открывается в новой вкладке и ничего не грузит на страницу.
+ * Точка ставится кликом, как в старой админке, и та же пара правится
+ * руками, когда координаты известны точно. Скрипт карт грузится только
+ * при открытии такого редактора и один раз на всё приложение
+ * (`shared/lib/yandex-maps`), ключ наш и зашит там же — у поля его
+ * не спрашиваем (FIELD-AUDIT, F25).
  */
 function MapEditor({
   value,
@@ -1439,8 +1581,12 @@ function JsonEditor({
 }: {
   value: unknown;
   anchor: DOMRect;
-  /** Что показать над текстом: форма области по набранным координатам. */
-  preview?: ((value: string) => ReactNode) | undefined;
+  /**
+   * Что показать над текстом: карта области. Второй аргумент — способ
+   * заменить текст, а не только его прочитать: обводка мышью правит
+   * тот же черновик, что и клавиатура.
+   */
+  preview?: ((value: string, replace: (next: string) => void) => ReactNode) | undefined;
   onEdit: (value: unknown) => void;
   onClose: () => void;
 }) {
@@ -1448,6 +1594,14 @@ function JsonEditor({
   const [draft, setDraft] = useState(() => toJsonText(value));
   const [invalid, setInvalid] = useState(false);
   const latest = useRef(draft);
+
+  /* Черновик правят двое — textarea и карта, — поэтому пишется он
+     одинаково: и в состояние, и в ref, из которого читает commit. */
+  const replace = (next: string) => {
+    latest.current = next;
+    setDraft(next);
+    setInvalid(false);
+  };
 
   const commit = () => {
     const text = latest.current.trim();
@@ -1471,18 +1625,14 @@ function JsonEditor({
   return (
     <Anchored anchor={anchor} onClose={commit} onCancel={onClose}>
       <div className={`${card} ${invalid ? "border-danger" : "border-accent"} w-80 p-1.5`}>
-        {preview && <div className="mb-1.5 flex justify-center">{preview(draft)}</div>}
+        {preview && <div className="mb-1.5 flex justify-center">{preview(draft, replace)}</div>}
 
         <textarea
           autoFocus
           rows={8}
           value={draft}
           spellCheck={false}
-          onChange={(event) => {
-            latest.current = event.target.value;
-            setDraft(event.target.value);
-            setInvalid(false);
-          }}
+          onChange={(event) => replace(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
               event.preventDefault();

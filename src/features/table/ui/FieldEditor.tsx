@@ -26,6 +26,7 @@ import {
   hasDefaultValue,
   hasLength,
   hasPrefix,
+  hasScannerSettings,
   isValidPattern,
   newDraft,
   optionsShape,
@@ -579,7 +580,13 @@ export function FieldEditor({
                 {/* Иконка и функция кнопки. Монтируется только у BUTTON:
                     список функций — отдельный запрос, и остальным полям
                     он не нужен. */}
-                {draft.type === "BUTTON" && <ButtonSettings draft={draft} onChange={patch} />}
+                {(draft.type === "BUTTON" || hasScannerSettings(draft.type)) && (
+                  <ButtonSettings
+                    draft={draft}
+                    icon={draft.type === "BUTTON"}
+                    onChange={patch}
+                  />
+                )}
 
                 {/* Настройки, которые есть у одного типа: точка карты,
                     формат снимка, перекодирование видео, сканер.

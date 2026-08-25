@@ -45,6 +45,12 @@ export type Role = {
   name: string;
   /** Системную роль бэкенд не даёт ни переименовать, ни удалить. */
   isSystem: boolean;
+  /**
+   * Тип клиента роли. Роль без него не привязана ни к одной таблице
+   * входа; на экране людей по нему же отбираются роли вкладки —
+   * человеку из типа «клиент» роль администратора не выдают.
+   */
+  clientTypeId: string;
 };
 
 export function useRoles() {
@@ -74,6 +80,7 @@ export function toRoles(data: RolesResponseDto): Role[] {
       id: dto.guid ?? "",
       name: dto.name?.trim() || "—",
       isSystem: dto.is_system === true,
+      clientTypeId: dto.client_type_id ?? "",
     }));
 }
 

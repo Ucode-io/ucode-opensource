@@ -2,14 +2,17 @@ import { Suspense, use } from "react";
 // Только тип: при сборке импорт стирается, и библиотека остаётся
 // в своём куске, который грузится по требованию (см. parser).
 import type { Parser } from "hot-formula-parser";
+import { formatNumber } from "@/shared/lib/number-value";
 import type { Item } from "../model/types";
 
 /**
- * FORMULA_FRONTEND: значение считает браузер на каждый показ.
+ * FORMULA_FRONTEND: запасной расчёт для строки, в колонке которой пусто.
  *
- * В колонке ничего не лежит — бэкенд такие поля не считает, они и
- * называются frontend. Формула написана по слагам полей ТОЙ ЖЕ строки
- * («price * count»), синтаксис excel-подобный.
+ * Обычно значение приходит из колонки — бэкенд считает такое поле сам
+ * при сохранении строки, вопреки названию «frontend». Сюда доходят
+ * строки старше поля: их никто не пересчитывал. Формула написана по
+ * слагам полей ТОЙ ЖЕ строки («price * count»), синтаксис excel-подобный
+ * — у бэкенда JS, и число может разойтись (docs/FIELD-AUDIT.md, F22).
  *
  * Разбирает её hot-formula-parser — тот же, что в старой админке.
  * Свой разборщик выражений был бы меньше и без зависимости, но формулы
@@ -93,7 +96,10 @@ function Value({
 
   return (
     <span className={`tabular-nums ${line}`} title={formula}>
-      {typeof result === "number" ? result.toLocaleString(locale) : String(result ?? "")}
+      {/* Тот же формат, что у обычного числа: общий форматтер, и он же
+          не режет дробную часть — `toLocaleString` без настроек молча
+          округлял её до трёх знаков. */}
+      {typeof result === "number" ? formatNumber(result, locale) : String(result ?? "")}
     </span>
   );
 }

@@ -31,7 +31,9 @@ export function Button({
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${sizes[size]} ${variants[variant]} ${className}`}
+      /* Подпись кнопки не переносится: в тесной строке «Новый ключ»
+         иначе встаёт в две строки и кнопка вырастает вдвое. */
+      className={`inline-flex items-center justify-center rounded-md font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50 ${sizes[size]} ${variants[variant]} ${className}`}
     />
   );
 }

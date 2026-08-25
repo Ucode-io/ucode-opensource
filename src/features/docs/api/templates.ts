@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/shared/api/client";
+import { ApiError, api, unwrap } from "@/shared/api/client";
 import { keys } from "@/shared/lib/query-keys";
 import { reportError } from "@/shared/lib/toast";
+import { printableRow } from "../model/print-data";
 
 /**
  * Шаблоны документов таблицы: печатная форма записи.
@@ -119,9 +120,9 @@ export function useDeleteDocTemplate(tableSlug: string | undefined) {
  * новой вкладкой, а не скачиваем: печатную форму сначала смотрят.
  *
  * Строку целиком, а не guid: шлюз берёт из тела значения как есть и
- * дочитывает только связанные строки — по колонкам, кончающимся на
- * `_id` (docx_template.go:830). Что не прислали, того в документе
- * не будет.
+ * дочитывает только связанные строки. Что не прислали, того в документе
+ * не будет — но и присылать можно не всё: на некоторых ключах печать
+ * падает целиком, см. model/print-data.
  */
 export function usePrintItem(tableSlug: string | undefined) {
   const slug = tableSlug ?? "";
@@ -130,23 +131,68 @@ export function usePrintItem(tableSlug: string | undefined) {
     mutationFn: async ({
       template,
       row,
+      lookups,
     }: {
       template: DocTemplate;
       row: Record<string, unknown>;
+      /** Слаги полей LOOKUP: только они уезжают из ключей с «_id». */
+      lookups: ReadonlySet<string>;
     }) => {
-      const blob = await api.post<Blob>(
-        "/v2/docx-template/convert/pdf",
-        { table_slug: slug, data: row },
-        { params: { link: templateUrl(template.fileUrl) }, responseType: "blob" },
-      );
+      const blob = await api
+        .post<Blob>(
+          "/v2/docx-template/convert/pdf",
+          { table_slug: slug, data: printableRow(row, lookups) },
+          { params: { link: templateUrl(template.fileUrl) }, responseType: "blob" },
+        )
+        .catch(unpackBlobError);
 
       /*
        * Адрес живёт до закрытия вкладки: отзывать его сразу нельзя —
        * вкладка не успеет прочитать, а держать ссылку в состоянии ради
        * освобождения пары мегабайт значит хранить её до конца сеанса.
        */
-      window.open(URL.createObjectURL(blob), "_blank", "noopener");
+      const url = URL.createObjectURL(blob);
+
+      /*
+       * Вкладка может не открыться, и это не редкость: документ
+       * собирается дольше, чем живёт «пользовательское действие»
+       * (в Chrome — пять секунд, в Safari оно кончается на первом же
+       * await), а всплывающее окно без него браузер блокирует молча.
+       * Тогда — скачиванием, как в старой админке
+       * (`DocumentTemplates/index.jsx:85`): имя файла берём от шаблона.
+       */
+      if (window.open(url, "_blank", "noopener")) return;
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${template.title || "document"}.pdf`;
+      link.click();
     },
     onError: (error) => reportError(error, "docs.printFailed"),
   });
+}
+
+/**
+ * Причина отказа, а не «не удалось».
+ *
+ * Ответ этой ручки читается как blob, поэтому и тело ОШИБКИ приезжает
+ * блобом: `errorText` видит объект без текста и молчит. А сказать здесь
+ * есть что — за печатью стоят три чужие службы (конвертер, генератор
+ * документов, хранилище), и «relation "orders_ids" does not exist»
+ * объясняет отказ, чего вежливое сообщение не сделает никогда.
+ */
+async function unpackBlobError(error: unknown): Promise<never> {
+  if (!(error instanceof ApiError) || !(error.body instanceof Blob)) throw error;
+
+  const text = (await error.body.text()).trim();
+  if (!text) throw error;
+
+  let body: unknown = text;
+  try {
+    body = unwrap(JSON.parse(text));
+  } catch {
+    // Не JSON — значит уже готовая строка.
+  }
+
+  throw new ApiError(error.status, body);
 }

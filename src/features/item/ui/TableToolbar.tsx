@@ -58,18 +58,24 @@ export function TableToolbar({
   filterCount: number;
   onToggleFilters: () => void;
   search: string;
-  onSearch: (search: string) => void;
+  /**
+   * Свой поиск. Не задан — поля нет: право на поиск у роли отдельное
+   * (`search_button`), и отнимают его именно у поля, а не у кнопки.
+   */
+  onSearch?: ((search: string) => void) | undefined;
 }) {
   const { t } = useTranslation();
 
   return (
     <div className="flex items-center gap-0.5">
-      <SearchBox
-        value={search}
-        onChange={onSearch}
-        tableSlug={tableSlug}
-        language={language}
-      />
+      {onSearch && (
+        <SearchBox
+          value={search}
+          onChange={onSearch}
+          tableSlug={tableSlug}
+          language={language}
+        />
+      )}
 
       <ToolButton
         icon={IconFilter}

@@ -40,6 +40,21 @@ test("выражение проверяет только заполненное 
   expect(cellError(email, "нет собаки")).toEqual({ kind: "pattern", message: "Неверная почта" });
 });
 
+test("у EMAIL проверка есть и без настройки, но своя её перебивает", () => {
+  const email = field({ type: "EMAIL" });
+
+  expect(cellError(email, "a@b.uz")).toBe(null);
+  // Своего сообщения нет — покажет общее, его подставляет тот, кто рисует.
+  expect(cellError(email, "qwe")).toEqual({ kind: "pattern", message: "" });
+  // Пустое проверяет required, а не выражение.
+  expect(cellError(email, "")).toBe(null);
+
+  // Настройка админа главнее встроенной: под неё написаны живые данные.
+  const own = field({ type: "EMAIL", validation: { pattern: /^\d+$/, message: "Только цифры" } });
+  expect(cellError(own, "a@b.uz")).toEqual({ kind: "pattern", message: "Только цифры" });
+  expect(cellError(own, "12")).toBe(null);
+});
+
 test("новая строка проверяется целиком, но только по правимым колонкам", () => {
   const columns = [
     field({ id: "1", slug: "name", required: true }),

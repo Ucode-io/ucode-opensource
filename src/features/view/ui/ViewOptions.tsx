@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
+  IconAdjustments,
   IconCalendarTime,
   IconChevronLeft,
   IconChevronRight,
@@ -16,7 +17,6 @@ import {
   IconLayoutList,
   IconLayoutColumns,
   IconLayoutNavbar,
-  IconLink,
   IconLoader2,
   IconPin,
   IconPinnedOff,
@@ -48,7 +48,6 @@ import {
 } from "@/features/table";
 import type { DataLanguage } from "@/features/workspace";
 import type { TranslationKey } from "@/shared/lib/i18n";
-import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { CommitInput } from "@/shared/ui/commit-input";
@@ -232,7 +231,6 @@ type PanelPage =
   | "group"
   | "tabGroup"
   | "calendar"
-  | "fields"
   | "table"
   | "docs"
   | "navigation"
@@ -318,6 +316,18 @@ function Panel({
 
   if (page === "columns") {
     /*
+     * Одна страница на колонки view и на поля таблицы — как в старой
+     * админке, где у строки списка «Visible columns» рядом с глазом
+     * стоит меню поля с «Edit field» и «Delete field»
+     * (`ColumnsVisibility.jsx:172`, `FieldsOptions/FieldOptions.jsx`).
+     * Раздельные списки означали бы, что одно и то же поле ищут дважды
+     * в двух местах, и в одном из них его нельзя ни настроить, ни
+     * показать.
+     *
+     * Мультиязычное поле — одна строка, и настраивается в ней колонка
+     * активного языка (collapseLanguages): ровно то же делает меню
+     * колонки в шапке таблицы.
+     *
      * guid не показывается и не скрывается: это служебный ключ строки,
      * колонкой он не бывает. Исключение симметрично — и из «Показать
      * все», и из списка скрытых, и из показанных. Раньше оно стояло
@@ -353,6 +363,27 @@ function Panel({
       return (base === null ? undefined : groups.get(base)) ?? [field];
     };
 
+    /*
+     * Правка и удаление ПОЛЯ — не настройка view: они меняют схему
+     * и действуют во всех view сразу. Поэтому своё право (`can.settings`)
+     * и своя подсказка, а панель при переходе в редактор закрывается:
+     * он всплывает на том же якоре.
+     */
+    const editField =
+      can.settings && handlers.onEditField
+        ? (field: Field, at: DOMRect) => {
+            handlers.onEditField?.(field, at);
+            close();
+          }
+        : undefined;
+    const deleteField =
+      can.settings && handlers.onDeleteField
+        ? (field: Field) => {
+            handlers.onDeleteField?.(field);
+            close();
+          }
+        : undefined;
+
     return (
       <Subpage title={t("view.columns")} busy={busy} onBack={back} hint={t("view.columnsHint")}>
         <div className="flex gap-1 px-1 pb-1">
@@ -380,18 +411,25 @@ function Panel({
             draggable={!query}
             onReorder={handlers.onColumns}
             onHide={(field) => handlers.onColumns(toggleColumn(view, groupOf(field), false))}
+            onEditField={editField}
+            onDeleteField={deleteField}
           />
 
           {hidden.map((field) => (
-            <PopoverItem
-              key={field.id}
-              icon={<Icon as={IconEyeOff} size={16} className="shrink-0 text-fg-subtle" />}
-              onClick={() => handlers.onColumns(toggleColumn(view, groupOf(field), true))}
-            >
-              <span className="text-fg-subtle">
-                {localized(field.labels, language, field.label)}
-              </span>
-            </PopoverItem>
+            <div key={field.id} className="group/field flex items-center">
+              <PopoverItem
+                icon={<Icon as={IconEyeOff} size={16} className="shrink-0 text-fg-subtle" />}
+                onClick={() => handlers.onColumns(toggleColumn(view, groupOf(field), true))}
+              >
+                <span className="text-fg-subtle">
+                  {localized(field.labels, language, field.label)}
+                </span>
+              </PopoverItem>
+
+              {/* Скрытая колонка — то же поле: настроить и удалить его
+                  можно, не показывая сперва в таблице. */}
+              <FieldActions field={field} onEdit={editField} onDelete={deleteField} />
+            </div>
           ))}
         </List>
       </Subpage>
@@ -753,52 +791,6 @@ function Panel({
     );
   }
 
-  if (page === "fields") {
-    /*
-     * Поля ТАБЛИЦЫ, а не колонки view: строка ведёт в редактор поля
-     * и умеет его удалить. Удаление здесь — правка схемы: поле пропадёт
-     * во всех view сразу, вместе со значениями. Поэтому подтверждение
-     * спрашивает вызывающий, тем же диалогом, что и меню колонки.
-     */
-    return (
-      <Subpage title={t("view.fields")} busy={busy} onBack={back} hint={t("view.fieldsHint")}>
-        <FieldSearch value={query} onChange={setQuery} />
-
-        <List>
-          {matching(fields, query, language).map((field) => (
-            <div key={field.id} className="flex items-center">
-              <PopoverItem
-                icon={<Icon as={fieldIcon(field.type)} size={16} className="shrink-0" />}
-                trailing={
-                  <Icon as={IconChevronRight} size={14} className="shrink-0 text-fg-subtle" />
-                }
-                onClick={(event) => {
-                  handlers.onEditField?.(field, event.currentTarget.getBoundingClientRect());
-                  close();
-                }}
-              >
-                {localized(field.labels, language, field.label)}
-              </PopoverItem>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handlers.onDeleteField?.(field);
-                  close();
-                }}
-                aria-label={t("column.delete")}
-                title={t("column.delete")}
-                className="grid size-7 shrink-0 place-items-center rounded text-fg-subtle transition-colors hover:bg-danger-subtle hover:text-danger"
-              >
-                <Icon as={IconTrash} size={14} />
-              </button>
-            </div>
-          ))}
-        </List>
-      </Subpage>
-    );
-  }
-
   const defaultCount = activeFilterCount(defaultFilters);
   /*
    * Настройки, которых у типа view нет, не показываются. У дерева нет
@@ -993,19 +985,6 @@ function Panel({
         </>
       )}
 
-      <PopoverItem
-        icon={<Icon as={IconLink} size={16} className="shrink-0 text-fg-muted" />}
-        onClick={() => {
-          // Адрес целиком: в нём и view, и страница, и отбор — тот самый
-          // экран, который человек видит, а не просто пункт меню.
-          void navigator.clipboard.writeText(window.location.href);
-          toast.success(t("view.linkCopied"));
-          close();
-        }}
-      >
-        {t("view.copyLink")}
-      </PopoverItem>
-
       <PopoverSeparator />
       <p className="px-2 py-1 text-2xs text-fg-subtle">{t("view.dataSection")}</p>
 
@@ -1039,17 +1018,10 @@ function Panel({
         />
       )}
 
-      {/* Поля правятся там, где для них есть редактор: у вкладки связи
-          это поля ЧУЖОЙ таблицы, и открывать их из карточки записи
-          означало бы редактор поверх редактора. */}
-      {can.settings && handlers.onEditField && (
-        <Row
-          icon={IconLayoutList}
-          label={t("view.fields")}
-          value={String(fields.length)}
-          onClick={() => open("fields")}
-        />
-      )}
+      {/* Строки «Поля таблицы» здесь нет: поля настраиваются там же, где
+          показываются колонки, — на странице «Свойства» (как в старой
+          админке). Отдельный список означал бы одно и то же поле
+          в двух местах панели. */}
 
       {handlers.onDelete && can.settings && (
         <>
@@ -1093,6 +1065,8 @@ function ColumnOrder({
   draggable,
   onReorder,
   onHide,
+  onEditField,
+  onDeleteField,
 }: {
   shown: Field[];
   language: string;
@@ -1100,6 +1074,9 @@ function ColumnOrder({
   draggable: boolean;
   onReorder: (columnIds: string[]) => void;
   onHide: (field: Field) => void;
+  /** Настройки САМОГО поля. Нет прав — нет и кнопок. */
+  onEditField?: ((field: Field, anchor: DOMRect) => void) | undefined;
+  onDeleteField?: ((field: Field) => void) | undefined;
 }) {
   const { t } = useTranslation();
   const [dragged, setDragged] = useState<string | null>(null);
@@ -1150,7 +1127,7 @@ function ColumnOrder({
               event.preventDefault();
               drop(key);
             }}
-            className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors ${
+            className={`group/field flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm transition-colors ${
               dragged === key
                 ? "opacity-40"
                 : over === key && dragged
@@ -1188,9 +1165,70 @@ function ColumnOrder({
             >
               <Icon as={IconEye} size={14} />
             </button>
+
+            <FieldActions field={field} onEdit={onEditField} onDelete={onDeleteField} />
           </div>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * Настроить и удалить ПОЛЕ — прямо в строке списка колонок.
+ *
+ * Так же в старой админке: у строки «Visible columns» справа меню поля
+ * с «Edit field» и «Delete field». Кнопки, а не меню из двух пунктов:
+ * меню ради двух действий — лишний щелчок на каждое.
+ *
+ * Появляются по наведению и по фокусу с клавиатуры: в списке из сорока
+ * полей восемьдесят постоянно видимых кнопок читаются хуже, чем сами
+ * поля, а удаление ещё и опасно держать под случайным щелчком.
+ *
+ * Удаление здесь — правка схемы: поле пропадёт во всех view сразу,
+ * вместе со значениями. Подтверждение спрашивает вызывающий — тем же
+ * диалогом, что и меню колонки.
+ */
+function FieldActions({
+  field,
+  onEdit,
+  onDelete,
+}: {
+  field: Field;
+  onEdit?: ((field: Field, anchor: DOMRect) => void) | undefined;
+  onDelete?: ((field: Field) => void) | undefined;
+}) {
+  const { t } = useTranslation();
+  if (!onEdit && !onDelete) return null;
+
+  const button =
+    "grid size-6 shrink-0 place-items-center rounded text-fg-subtle opacity-0 transition-colors group-hover/field:opacity-100 focus-visible:opacity-100";
+
+  return (
+    <>
+      {onEdit && (
+        <button
+          type="button"
+          onClick={(event) => onEdit(field, event.currentTarget.getBoundingClientRect())}
+          aria-label={t("column.settings")}
+          title={t("column.settings")}
+          className={`${button} hover:bg-surface-active hover:text-fg`}
+        >
+          <Icon as={IconAdjustments} size={14} />
+        </button>
+      )}
+
+      {onDelete && (
+        <button
+          type="button"
+          onClick={() => onDelete(field)}
+          aria-label={t("column.delete")}
+          title={t("column.delete")}
+          className={`${button} hover:bg-danger-subtle hover:text-danger`}
+        >
+          <Icon as={IconTrash} size={14} />
+        </button>
+      )}
     </>
   );
 }
@@ -1518,11 +1556,36 @@ function UrlSetting({
 }) {
   const { t } = useTranslation();
 
+  /*
+   * Новая строка параметра живёт в форме, а не в настройке — иначе её
+   * нельзя было бы завести вовсе.
+   *
+   * Параметр без ключа в тело запроса не попадает (`toUrlAttribute`
+   * его отбрасывает: пустой ключ в строке запроса — это «=»), а правка
+   * кладётся в кэш этим же телом (`useUpdateView`, onMutate). То есть
+   * пустая строка, добавленная кнопкой, исчезала в том же кадре,
+   * в котором появлялась: параметры «Переходов» задать было нечем,
+   * и адрес «Новой записи» всегда уходил без строки запроса.
+   *
+   * Та же болезнь и то же лекарство, что у отбора по умолчанию
+   * (см. DefaultFilters): состояние, которого сервер ещё не принял,
+   * держит форма.
+   */
+  const [blank, setBlank] = useState<{ key: string; value: string } | null>(null);
+
   const setParam = (index: number, patch: Partial<{ key: string; value: string }>) =>
     onChange({
       ...template,
       params: template.params.map((param, at) => (at === index ? { ...param, ...patch } : param)),
     });
+
+  /** Пустая строка уезжает в настройку, как только у неё появился ключ. */
+  const commitBlank = (key: string) => {
+    if (!key.trim()) return setBlank({ key, value: blank?.value ?? "" });
+
+    onChange({ ...template, params: [...template.params, { key, value: blank?.value ?? "" }] });
+    setBlank(null);
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -1569,12 +1632,39 @@ function UrlSetting({
         </div>
       ))}
 
-      {/* Пустая строка добавляется на месте и уезжает только заполненной:
-          параметр без ключа отбрасывается при записи. */}
-      <BulkButton
-        label={t("view.addParam")}
-        onClick={() => onChange({ ...template, params: [...template.params, { key: "", value: "" }] })}
-      />
+      {blank && (
+        <div className="flex items-center gap-1">
+          <CommitInput
+            value={blank.key}
+            placeholder={t("view.paramKey")}
+            label={t("view.paramKey")}
+            onCommit={commitBlank}
+          />
+          <CommitInput
+            value={blank.value}
+            placeholder={t("view.paramValue")}
+            label={t("view.paramValue")}
+            allowEmpty
+            onCommit={(value) => setBlank({ key: blank.key, value })}
+          />
+
+          <button
+            type="button"
+            onClick={() => setBlank(null)}
+            aria-label={t("action.delete")}
+            title={t("action.delete")}
+            className="grid size-7 shrink-0 place-items-center rounded text-fg-subtle transition-colors hover:bg-danger-subtle hover:text-danger"
+          >
+            <Icon as={IconTrash} size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Вторая пустая строка не заводится, пока первая без ключа:
+          добавлять их пачкой незачем, а уехать они всё равно не могут. */}
+      {!blank && (
+        <BulkButton label={t("view.addParam")} onClick={() => setBlank({ key: "", value: "" })} />
+      )}
     </div>
   );
 }

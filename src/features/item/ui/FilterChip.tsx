@@ -2,12 +2,12 @@ import { useDeferredValue, useState } from "react";
 import { IconChevronDown, IconDots, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { localized, type Field, type Relation } from "@/features/table";
-import type { TranslationKey } from "@/shared/lib/i18n";
+import type { Translate, TranslationKey } from "@/shared/lib/i18n";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { useRelationItems } from "../api/relations";
-import { filterKind, kindOfOperator, operatorsFor } from "../model/filter-kind";
+import { filterKind, kindOfOperator, operatorsFor, rangeBound } from "../model/filter-kind";
 import { isFilterSet, type Filter, type FilterOperator } from "../model/query";
 import { relationLabel } from "../model/relation";
 import { fieldIcon } from "./field-icon";
@@ -181,9 +181,13 @@ function summary(
   filter: Filter,
   field: Field,
   language: string,
-  // Тот самый t из useTranslation: подпись условия подставляет число,
-  // а своё сужение до «ключ → строка» такой вызов уже не пропускает.
-  t: ReturnType<typeof useTranslation>["t"],
+  /*
+   * Узкий тип, а не родной `TFunction`: подпись условия подставляет
+   * число, и родной генерик разворачивается поверх всех ключей сразу
+   * — на восьмой сотне компилятор упирается в предел глубины. Почему
+   * так — в shared/lib/i18n, `Translate`.
+   */
+  t: Translate,
 ): string {
   const values = filter.values.filter(Boolean);
 
@@ -204,7 +208,16 @@ function summary(
   }
 
   if (filter.op === "equals") return t(values[0] === "true" ? "action.yes" : "action.no");
-  if (filter.op === "between") return values.join(" — ");
+
+  /*
+   * У границы времени в значении лежит и час («…T23:59:59.999»,
+   * см. rangeBound) — на чипе он лишний: человек выбирал день.
+   * Только у диапазонов: в тексте «T» — обычная буква.
+   */
+  if (kindOfOperator(filter.op) === "range") {
+    const days = values.map((value) => value.split("T")[0] ?? "");
+    return filter.op === "between" ? days.join(" — ") : (days[0] ?? "");
+  }
 
   return values[0] ?? "";
 }
@@ -230,7 +243,23 @@ function Values({
    * текста отличает только тип поля.
    */
   if (relation && filterKind(field) === "relation") {
-    return <RelationInput relation={relation} values={filter.values} onChange={setValues} />;
+    return (
+      <RelationInput
+        relation={relation}
+        language={language}
+        values={filter.values}
+        onChange={setValues}
+      />
+    );
+  }
+
+  /*
+   * У числа условия те же, что у даты (`between`, `after`, `before`),
+   * и по условию их не различить — как и связь, оно спрашивается
+   * по полю.
+   */
+  if (filterKind(field) === "number") {
+    return <RangeInput field={field} op={filter.op} values={filter.values} onChange={setValues} />;
   }
 
   switch (kindOfOperator(filter.op)) {
@@ -239,7 +268,7 @@ function Values({
     case "boolean":
       return <BooleanInput field={field} values={filter.values} onChange={setValues} />;
     case "range":
-      return <RangeInput op={filter.op} values={filter.values} onChange={setValues} />;
+      return <RangeInput field={field} op={filter.op} values={filter.values} onChange={setValues} />;
     default:
       return <TextInput values={filter.values} onChange={setValues} />;
   }
@@ -320,10 +349,13 @@ function SetInput({
  */
 function RelationInput({
   relation,
+  language,
   values,
   onChange,
 }: {
   relation: Relation;
+  /** Язык ДАННЫХ: мультиязычное поле показа берётся на нём одном. */
+  language: string;
   values: string[];
   onChange: (values: string[]) => void;
 }) {
@@ -333,18 +365,18 @@ function RelationInput({
   // буква уходит в чужую таблицу.
   const search = useDeferredValue(query);
 
-  const slugs = relation.viewFieldSlugs;
+  const slugs = relation.viewFields;
   const { items } = useRelationItems(relation.toSlug, search);
 
   // Серверный поиск идёт только по полям, помеченным как искомые, и на
   // многих таблицах не отсеивает ничего — отсеиваем и здесь, как в ячейке.
   const needle = search.trim().toLowerCase();
   const visible = needle
-    ? items.filter((item) => relationLabel(item, slugs).toLowerCase().includes(needle))
+    ? items.filter((item) => relationLabel(item, slugs, language).toLowerCase().includes(needle))
     : items;
 
   const labels = new Map(
-    items.map((item) => [String(item["guid"] ?? ""), relationLabel(item, slugs)]),
+    items.map((item) => [String(item["guid"] ?? ""), relationLabel(item, slugs, language)]),
   );
 
   const toggle = (guid: string) =>
@@ -386,7 +418,9 @@ function RelationInput({
               className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-1 text-sm transition-colors hover:bg-surface-hover"
             >
               <Checkbox checked={values.includes(guid)} onChange={() => toggle(guid)} />
-              <span className="truncate">{relationLabel(item, slugs) || guid.slice(0, 8)}</span>
+              <span className="truncate">
+                {relationLabel(item, slugs, language) || guid.slice(0, 8)}
+              </span>
             </label>
           );
         })}
@@ -467,27 +501,40 @@ function BooleanInput({
 }
 
 /**
- * Даты — нативные <input type="date">.
+ * Границы: две даты или два числа.
  *
- * Родной элемент даёт календарь, локальный формат и ввод с клавиатуры
- * бесплатно; библиотека выбора дат весит больше всей этой панели.
+ * Даты — нативные <input type="date">: родной элемент даёт календарь,
+ * локальный формат и ввод с клавиатуры бесплатно; библиотека выбора дат
+ * весит больше всей этой панели.
+ *
+ * Числа — нативный <input type="number">, и это не украшение. Бэкенд
+ * сравнивает присланное прямо с колонкой (`build_query.go:365`), поэтому
+ * буква в границе — это `invalid input syntax for type double precision`,
+ * то есть 500. Браузер при нечисловом вводе отдаёт пустую строку,
+ * и такая граница до запроса не доходит.
  */
 function RangeInput({
+  field,
   op,
   values,
   onChange,
 }: {
+  field: Field;
   op: FilterOperator;
   values: string[];
   onChange: (values: string[]) => void;
 }) {
   const { t } = useTranslation();
   const input = "h-7 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg";
+  const type = filterKind(field) === "number" ? "number" : "date";
 
-  const at = (index: number) => values[index] ?? "";
+  // В значении может лежать дотянутая до конца суток граница
+  // («2026-01-10T23:59:59.999»), а поле ввода даты понимает только день.
+  const at = (index: number) => (values[index] ?? "").split("T")[0] ?? "";
+
   const put = (index: number, value: string) => {
-    const next = [at(0), at(1)];
-    next[index] = value;
+    const next = [values[0] ?? "", values[1] ?? ""];
+    next[index] = rangeBound(field, op, index, value);
     // Хвостовые пустые убираем, иначе «заполнен» станет правдой раньше времени.
     onChange(next[1] ? next : next[0] ? [next[0]] : []);
   };
@@ -496,7 +543,7 @@ function RangeInput({
     return (
       <div className="p-1">
         <input
-          type="date"
+          type={type}
           value={at(0)}
           onChange={(event) => put(0, event.target.value)}
           className={input}
@@ -510,7 +557,7 @@ function RangeInput({
       <label className="flex items-center gap-2 text-xs text-fg-muted">
         <span className="w-6 shrink-0">{t("table.filterFrom")}</span>
         <input
-          type="date"
+          type={type}
           value={at(0)}
           onChange={(event) => put(0, event.target.value)}
           className={input}
@@ -520,7 +567,7 @@ function RangeInput({
       <label className="flex items-center gap-2 text-xs text-fg-muted">
         <span className="w-6 shrink-0">{t("table.filterTo")}</span>
         <input
-          type="date"
+          type={type}
           value={at(1)}
           onChange={(event) => put(1, event.target.value)}
           className={input}
