@@ -2,6 +2,7 @@ import { useState } from "react";
 import { IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useGlobalRight } from "@/features/auth";
+import { Button } from "@/shared/ui/button";
 import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { TemplateDialog } from "@/features/templates";
@@ -15,8 +16,15 @@ import {
   type MenuFormValue,
 } from "./MenuFormDialog";
 
-/** Кнопка «+» в шапке сайдбара: создаёт пункт на верхнем уровне. */
-export function AddMenuButton({ parentId }: { parentId: string }) {
+/**
+ * Кнопка «+» в шапке сайдбара: создаёт пункт на верхнем уровне.
+ *
+ * `label` превращает её в обычную кнопку с подписью — так она стоит на
+ * пустом экране, где это единственное осмысленное действие и значок
+ * 24px на нём не найти. Меню под ней одно и то же: заводить пункт двумя
+ * разными списками было бы двумя правдами о том, что бывает в меню.
+ */
+export function AddMenuButton({ parentId, label }: { parentId: string; label?: string }) {
   const { t } = useTranslation();
   /*
    * Заводить пункты верхнего уровня разрешает глобальное право роли —
@@ -56,18 +64,25 @@ export function AddMenuButton({ parentId }: { parentId: string }) {
     <>
       <Popover
         align="end"
-        trigger={({ open, toggle }) => (
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={t("sidebar.add")}
-            className={`grid size-6 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg ${
-              open ? "bg-surface-active text-fg" : ""
-            }`}
-          >
-            <Icon as={IconPlus} size={14} />
-          </button>
-        )}
+        trigger={({ open, toggle }) =>
+          label ? (
+            <Button type="button" onClick={toggle}>
+              <Icon as={IconPlus} size={16} />
+              {label}
+            </Button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={t("sidebar.add")}
+              className={`grid size-6 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg ${
+                open ? "bg-surface-active text-fg" : ""
+              }`}
+            >
+              <Icon as={IconPlus} size={14} />
+            </button>
+          )
+        }
       >
         {(close) => (
           <>

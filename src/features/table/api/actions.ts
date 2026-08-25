@@ -41,6 +41,13 @@ type ActionDto = {
    * не «нельзя», а COALESCE до false. См. isAllowed.
    */
   action_permission?: { id?: string; permission?: boolean };
+  /**
+   * Сама функция, к которой ведёт `event_path`. Список собирает её
+   * подзапросом `jsonb_agg` по `JOIN function f ON f.id = c.event_path`
+   * (object_builder/storage/postgres/custom_event.go:241–252) — то есть
+   * элемент всегда ровно один, а массив взялся из группировки.
+   */
+  functions?: { type?: string }[];
 };
 
 type ActionsResponse = { custom_events?: ActionDto[] };
@@ -53,6 +60,12 @@ export type Action = {
   labels: Labels;
   /** id функции проекта. Пусто — действию нечего звать. */
   functionId: string;
+  /**
+   * Тип этой функции: FUNCTION | MICRO_FRONTEND | KNATIVE | WORKFLOW
+   * (`function_type_check`, migrations/000037). Действие с
+   * MICRO_FRONTEND не вызывается, а показывается — см. isMicrofrontend.
+   */
+  functionType: string;
   /** Путь вызова у функции-процесса (WORKFLOW). У остальных пусто. */
   path: string;
   icon: string;
@@ -84,6 +97,19 @@ export const ACTION_METHODS = [
   "APPEND_MANY2MANY",
   "DELETE_MANY2MANY",
 ] as const;
+
+/**
+ * Действие показывает микрофронтенд, а не зовёт функцию.
+ *
+ * Тип берётся у самой функции — так же ветвится и старая админка
+ * (`Objects/components/CustomActionsButton/ActionButton.jsx:47`).
+ * Разница в том, куда ведёт ветка: она уходила страницей
+ * `/microfrontend/:id?itemId=…`, мы открываем окно поверх таблицы —
+ * отмеченные строки при этом остаются отмеченными.
+ */
+export function isMicrofrontend(action: Action): boolean {
+  return action.functionType === "MICRO_FRONTEND";
+}
 
 export function useActions(tableSlug: string | undefined, enabled = true) {
   const slug = tableSlug ?? "";
@@ -333,6 +359,7 @@ export function toAction(dto: ActionDto): Action {
     label: dto.label?.trim() ?? "",
     labels: pickLabels(attributes),
     functionId: dto.event_path ?? "",
+    functionType: dto.functions?.[0]?.type ?? "",
     icon: dto.icon ?? "",
     url: dto.url ?? "",
     disabled: dto.disable === true,

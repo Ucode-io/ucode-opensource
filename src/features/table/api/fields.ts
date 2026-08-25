@@ -264,6 +264,7 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
      */
     validation: draft.validation.trim(),
     validation_message: draft.validationMessage.trim(),
+    ...toVisibilityAttributes(draft),
     ...toFormulaAttributes(draft),
     /*
      * Кнопка. Ключи чужого типа не отправляются вовсе — по той же
@@ -351,6 +352,39 @@ function toSettingsAttributes(draft: FieldDraft): Record<string, unknown> {
  * быть формулой, в attributes остался бы мёртвый агрегат, и следующий
  * читатель принял бы его за настройку.
  */
+/**
+ * Условная видимость поля в карточке (см. `item/model/visibility`).
+ *
+ * Все три ключа отправляются всегда, в том числе пустыми: тело правки
+ * собирается ПОВЕРХ прежних attributes, и снятое условие иначе осталось
+ * бы в базе и продолжало прятать поле.
+ *
+ * `hide_path` уезжает массивом ровно тогда, когда им и был. Набор
+ * из одного варианта и одиночное значение в attributes выглядят
+ * по-разному, и старая админка сравнивает их по-разному тоже
+ * (`views/Objects/NewMainInfo.jsx:46`): записанный строкой набор она
+ * не сопоставит ни с чем.
+ *
+ * `type` — тоже всегда, и по той же причине: снятое числовое сравнение
+ * иначе осталось бы в базе, а `isFieldVisible` уходил бы в числовую
+ * ветку на строковом поле — то есть поле пропало бы из карточки навсегда.
+ * У поля FORMULA тот же ключ занят видом агрегата, но перекрыть его
+ * пустотой нельзя: `toFormulaAttributes` идёт следом и ставит своё,
+ * а форма у такого поля числовое сравнение и не предлагает.
+ */
+function toVisibilityAttributes(draft: FieldDraft): Record<string, unknown> {
+  const field = draft.hideField.trim();
+  const values = draft.hideValues.map((value) => value.trim()).filter(Boolean);
+
+  if (!field || !values.length) return { hide_path_field: "", hide_path: "", type: "" };
+
+  return {
+    hide_path_field: field,
+    hide_path: draft.hideMulti ? values : (values[0] ?? ""),
+    type: draft.hideCompare,
+  };
+}
+
 function toFormulaAttributes(draft: FieldDraft): Record<string, unknown> {
   if (draft.type === "FORMULA_FRONTEND" || draft.type === "MANUAL_STRING") {
     return { formula: draft.formula.trim() };

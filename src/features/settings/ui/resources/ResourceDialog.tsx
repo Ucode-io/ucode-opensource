@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useEnvironments } from "@/features/workspace";
+import { useSession } from "@/shared/api/use-session";
 import { Button } from "@/shared/ui/button";
 import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
@@ -7,13 +9,16 @@ import {
   emptyDraft,
   toDraft,
   useCreateResource,
+  useProvisionResource,
   useReconnectResource,
   useResource,
+  useResourceEnvironments,
   useUpdateResource,
   RESOURCE_LABELS,
   RESOURCE_SPECS,
   type ResourceDraft,
 } from "../../api/resources";
+import { MetabaseDashboards } from "./MetabaseDashboards";
 import { ResourceFields } from "./ResourceFields";
 import { ResourceIcon } from "./ResourceIcon";
 import { ResourceVariables } from "./ResourceVariables";
@@ -30,25 +35,51 @@ export function CreateResourceDialog({ kind, onClose }: { kind: string; onClose:
   const create = useCreateResource();
 
   const spec = RESOURCE_SPECS[kind];
+  const provision = useProvisionResource();
   const [draft, setDraft] = useState<ResourceDraft>(() => {
     const empty = emptyDraft(kind);
     /* REST без переменных бесполезен: своих настроек у него нет вовсе. */
     return spec?.variables ? { ...empty, variables: [{ id: "", key: "", value: "" }] } : empty;
   });
 
+  /*
+   * База, которую заводит платформа, идёт своей ручкой и без реквизитов
+   * — их придумывает бэкенд (см. useProvisionResource). Спрашиваем
+   * только имя.
+   */
+  const provisioned = Boolean(spec?.provision);
+  /* Поля заведения есть — значит их и показываем: у баз это полные
+     реквизиты подключения, шире того, что видно потом в списке. */
+  const asks = Boolean(spec?.createFields);
+
   return (
     <ResourceForm
-      title={`${t("resources.create")} · ${RESOURCE_LABELS[kind] ?? kind}`}
+      title={`${provisioned ? t("resources.provisionTitle") : t("resources.create")} · ${
+        RESOURCE_LABELS[kind] ?? kind
+      }`}
       submitLabel={t("action.create")}
       kind={kind}
       draft={draft}
       onChange={setDraft}
-      busy={create.isPending}
+      busy={create.isPending || provision.isPending}
       /* Учётные данные таких типов бэкенд выдаёт сам при создании —
          заполнять нечего, поля появятся уже в правке. */
-      note={spec?.readOnly ? t("resources.provisioned") : ""}
-      hideFields={Boolean(spec?.readOnly)}
-      onSubmit={() => create.mutate({ kind, draft }, { onSuccess: onClose })}
+      note={
+        provisioned
+          ? t("resources.provisionHint")
+          : asks
+            ? t("resources.createDbHint")
+            : spec?.readOnly
+              ? t("resources.provisioned")
+              : ""
+      }
+      hideFields={Boolean(spec?.readOnly) && !asks}
+      creating
+      onSubmit={() =>
+        provisioned
+          ? provision.mutate({ kind, name: draft.name }, { onSuccess: onClose })
+          : create.mutate({ kind, draft }, { onSuccess: onClose })
+      }
       onClose={onClose}
     />
   );
@@ -100,6 +131,7 @@ export function EditResourceDialog({ id, onClose }: { id: string; onClose: () =>
       busy={update.isPending}
       readOnly={managed}
       fieldsReadOnly={Boolean(spec?.readOnly)}
+      resourceId={resource.id}
       note={
         spec?.system
           ? t("resources.system")
@@ -148,6 +180,8 @@ function ResourceForm({
   readOnly = false,
   fieldsReadOnly = false,
   hideFields = false,
+  creating = false,
+  resourceId = "",
   extra = null,
   onSubmit,
   onClose,
@@ -166,6 +200,10 @@ function ResourceForm({
   fieldsReadOnly?: boolean;
   /** Настроек ещё нет: их выдадут при создании. */
   hideFields?: boolean;
+  /** Форма заведения: у баз набор полей там шире. */
+  creating?: boolean;
+  /** Заведённый ресурс: по нему читаются окружения. Пусто — создание. */
+  resourceId?: string;
   /** Действие, которое не сохраняет форму. Встаёт у левого края низа. */
   extra?: ReactNode;
   onSubmit: () => void;
@@ -208,8 +246,23 @@ function ResourceForm({
           <ResourceFields
             kind={kind}
             values={draft.settings}
-            readOnly={readOnly || fieldsReadOnly}
+            readOnly={readOnly || (fieldsReadOnly && !creating)}
+            creating={creating}
             onChange={(settings) => onChange({ ...draft, settings })}
+          />
+        )}
+
+        {/* В каких окружениях ресурс подключён. Только показ: назначить
+            окружение этой ручкой нечем, она читающая — как и список
+            в старой админке, где обработчик клика закомментирован. */}
+        {resourceId && <ResourceEnvironments id={resourceId} />}
+
+        {/* Дашборды показывает только Metabase, и только когда учётка
+            уже выдана: при создании настроек ещё нет. */}
+        {kind === "METABASE" && !hideFields && (
+          <MetabaseDashboards
+            username={draft.settings["username"] ?? ""}
+            password={draft.settings["password"] ?? ""}
           />
         )}
 
@@ -235,5 +288,39 @@ function ResourceForm({
         </div>
       </form>
     </Modal>
+  );
+}
+
+/**
+ * В каких окружениях ресурс подключён.
+ *
+ * Показ, и только: назначить окружение нечем — ручка
+ * `resource-environment` читающая. Старая админка рисует тот же список
+ * сбоку формы (`ResourcesDetail/ResourceEnvironment.jsx`) и тоже ничего
+ * им не делает: обработчик клика там закомментирован.
+ */
+function ResourceEnvironments({ id }: { id: string }) {
+  const { t } = useTranslation();
+  const { environments, isLoading } = useResourceEnvironments(id);
+  const { data } = useEnvironments(useSession().getProjectId() ?? "");
+
+  if (isLoading || !environments.length) return null;
+
+  const nameOf = (envId: string) =>
+    data?.find((item) => item.id === envId)?.name ?? envId;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-fg-muted">{t("resources.environments")}</span>
+
+      {environments.map((item) => (
+        <div key={item.id} className="flex items-center gap-2 text-xs">
+          <span className="min-w-0 flex-1 truncate text-fg">{nameOf(item.id)}</span>
+          <span className={item.configured ? "text-fg-muted" : "text-fg-subtle"}>
+            {t(item.configured ? "resources.envConfigured" : "resources.envNotConfigured")}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }

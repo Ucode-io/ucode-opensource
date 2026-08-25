@@ -5,6 +5,8 @@ export {
   useUpdateSearchFields,
 } from "./api/fields";
 export { useTableSchema } from "./api/schema";
+export { cascadeSteps, toCascadingsBody } from "./model/cascade";
+export type { CascadeStep } from "./model/cascade";
 export { useRelationRows } from "./api/relation-rows";
 export type { RelationRow } from "./api/relation-rows";
 export {

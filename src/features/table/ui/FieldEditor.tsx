@@ -47,12 +47,15 @@ import {
   type AutoFilterPair,
   type RelationDraft,
 } from "../model/relation-draft";
+import { cascadeSteps } from "../model/cascade";
 import { localized, type Field, type Relation } from "../model/types";
 import { useTableFields, useTables } from "../api/tables";
 import { AutofillSettings } from "./AutofillSettings";
 import { ButtonSettings } from "./ButtonSettings";
 import { FormulaSettings } from "./FormulaSettings";
+import { CascadeSettings } from "./CascadeSettings";
 import { TypeSettings } from "./TypeSettings";
+import { VisibilitySettings } from "./VisibilitySettings";
 
 /**
  * Поле: заводится и правится одной панелью, привязанной к тому месту,
@@ -202,6 +205,7 @@ export function FieldEditor({
       ? {
           toSlug: editingRelation.toSlug,
           autoFilters: toAutoFilters(editingRelation.raw),
+          cascade: cascadeSteps(editingRelation),
           label: localized(field?.labels ?? {}, language, field?.label ?? ""),
           viewFieldIds: editingRelation.viewFieldIds,
           selfDefault: editingRelation.selfDefault,
@@ -312,6 +316,7 @@ export function FieldEditor({
           <RelationForm
             draft={relation}
             target={editingRelation?.toSlug ?? ""}
+            fieldFrom={editingRelation?.fieldFrom ?? ""}
             ourFields={fields}
             language={language}
             onChange={setRelation}
@@ -595,6 +600,15 @@ export function FieldEditor({
                     У остальных типов блок не рисуется. */}
                 <TypeSettings draft={draft} onChange={patch} />
 
+                {/* Показывать поле в карточке, только когда значение
+                    соседнего совпало с заданным. */}
+                <VisibilitySettings
+                  draft={draft}
+                  fields={fields}
+                  language={language}
+                  onChange={patch}
+                />
+
                 {/* Автозаполнение из связанной строки. У таблицы без
                     подходящих связей блок не рисуется. */}
                 <AutofillSettings
@@ -833,6 +847,7 @@ const SELF_DEFAULTS: { value: RelationDraft["selfDefault"]; labelKey: Translatio
 function RelationForm({
   draft,
   target,
+  fieldFrom,
   ourFields,
   language,
   onChange,
@@ -842,6 +857,12 @@ function RelationForm({
   draft: RelationDraft;
   /** Слаг целевой таблицы при правке. Пусто — связь заводится заново. */
   target: string;
+  /**
+   * Колонка-ссылка в НАШЕЙ таблице. Известна только у заведённой связи:
+   * имя ей даёт бэкенд при создании. Поэтому каскад настраивается
+   * в правке, а не в форме новой связи — собирать цепочку не от чего.
+   */
+  fieldFrom: string;
   /** Поля ЭТОЙ таблицы: из них выбирается источник автофильтра. */
   ourFields: Field[];
   /** Язык ДАННЫХ: на нём подписаны таблицы проекта. */
@@ -995,6 +1016,17 @@ function RelationForm({
                 {t("relationForm.addAutoFilter")}
               </button>
             </div>
+
+            {/* Каскад: цепочка сужения перед выбором. Ниже автофильтра,
+                потому что задают его ещё реже, а работают они вместе —
+                автофильтр отбирает последний шаг. */}
+            <CascadeSettings
+              toSlug={draft.toSlug}
+              fieldFrom={fieldFrom}
+              cascade={draft.cascade}
+              language={language}
+              onChange={(cascade) => patch({ cascade })}
+            />
 
             {/* Чем колонка заполнена у НОВОЙ записи. Три состояния, а не
                 два флажка: в старой админке их два и поднять можно оба,

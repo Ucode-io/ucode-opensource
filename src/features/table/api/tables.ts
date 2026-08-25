@@ -10,6 +10,7 @@ import {
   toSelfDefaultBody,
   type RelationDraft,
 } from "../model/relation-draft";
+import { toCascadingsBody } from "../model/cascade";
 import type { Labels, Relation } from "../model/types";
 import { invalidateSchema } from "./fields";
 import { pickLabels } from "./normalize";
@@ -273,6 +274,13 @@ export function useUpdateRelation(tableSlug: string | undefined) {
          * и `...raw` вернул бы прежние пары поверх удалённых.
          */
         auto_filters: toAutoFiltersBody(draft.autoFilters),
+        /*
+         * Каскад — по тому же правилу и в том же виде, в каком лежит
+         * в колонке: ближним концом вперёд (см. model/cascade).
+         * Уезжает всегда, иначе `...raw` вернул бы прежнюю цепочку
+         * поверх снятой.
+         */
+        cascadings: toCascadingsBody(draft.cascade),
         /* Тем же порядком и по той же причине: колонки переписываются
            безусловно, и `...raw` вернул бы прежнее поверх снятого. */
         ...toSelfDefaultBody(draft.selfDefault),

@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, useMemo, type ReactNode } from "react";
+import { Suspense, lazy, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useEnvironments } from "@/features/workspace";
 import { errorText, http, httpAuth } from "@/shared/api/client";
@@ -6,6 +6,7 @@ import { useSession } from "@/shared/api/use-session";
 import i18n from "@/shared/lib/i18n";
 import { useMicrofrontend } from "../api/microfrontend";
 import { loadRemotePage, type RemotePageProps } from "../model/remote";
+import { RemoteBoundary } from "./RemoteBoundary";
 
 /**
  * Экран пункта меню типа `MICROFRONTEND`: чужое приложение внутри админки.
@@ -66,7 +67,7 @@ export function MicrofrontendPage({
   };
 
   return (
-    <RemoteBoundary key={activationKey} fallback={t("microfrontend.loadFailed")}>
+    <RemoteBoundary key={activationKey} fallback={<Message text={t("microfrontend.loadFailed")} />}>
       <Suspense fallback={<Message text={t("common.loading")} />}>
         {Page && <Page {...props} />}
       </Suspense>
@@ -94,33 +95,4 @@ function Message({ text }: { text: string }) {
       <p className="max-w-sm text-sm text-fg-muted">{text}</p>
     </div>
   );
-}
-
-/**
- * Граница ошибки вокруг ремоута.
- *
- * Без неё сбой в чужом коде — а он чужой и собран отдельно — снимает
- * с экрана всю админку: React размонтирует дерево до корня. Здесь же
- * падение остаётся внутри пункта меню, и сайдбар с шапкой стоят на месте.
- */
-class RemoteBoundary extends Component<
-  { children: ReactNode; fallback: string },
-  { failed: boolean }
-> {
-  override state = { failed: false };
-
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-
-  override componentDidCatch(error: unknown) {
-    // Причина нужна тому, кто собирал ремоут: несовпавшая версия,
-    // отсутствующий `./Page`, CORS. В интерфейс её не выносим —
-    // читать её всё равно по стеку.
-    console.error("microfrontend failed", error);
-  }
-
-  override render() {
-    return this.state.failed ? <Message text={this.props.fallback} /> : this.props.children;
-  }
 }

@@ -29,7 +29,14 @@ const VARIABLES = "/v1/company/project/resource-variable";
 /** Переподключение базы — ручка первой версии, соседняя с этими. */
 const RECONNECT = "/v1/company/project/resource/reconnect";
 
-export type FieldKind = "text" | "password" | "number";
+/**
+ * `toggle` — единственное поле-флажок на весь раздел: `ssl_mode`
+ * у PostgreSQL. В proto это `bool` (`PostgresCredentials`, поле 7),
+ * а не строка «true», поэтому у него своя ветка и в форме, и в теле
+ * запроса. Черновик при этом остаётся строковым: у формы одно хранилище
+ * на все типы.
+ */
+export type FieldKind = "text" | "password" | "number" | "toggle";
 
 export type ResourceField = {
   /**
@@ -43,9 +50,9 @@ export type ResourceField = {
 };
 
 /** Группы в выборе типа: по поводу, а не по вендору. */
-export type ResourceGroup = "otp" | "code" | "bi" | "other";
+export type ResourceGroup = "otp" | "code" | "bi" | "db" | "other";
 
-export const RESOURCE_GROUPS: ResourceGroup[] = ["otp", "code", "bi", "other"];
+export const RESOURCE_GROUPS: ResourceGroup[] = ["otp", "code", "bi", "db", "other"];
 
 export type ResourceSpec = {
   /**
@@ -57,6 +64,16 @@ export type ResourceSpec = {
   /** Ключ, под которым настройки этого типа лежат в `settings`. */
   settingsKey?: string;
   fields?: readonly ResourceField[];
+  /**
+   * Поля, которые спрашиваются ТОЛЬКО при заведении.
+   *
+   * Нужны базам: подключить свою просят полными реквизитами — с паролем
+   * и режимом SSL, — а показываем мы у них потом лишь то, что отдаёт
+   * список. Заведённая строка живёт в `project_resource`, системная
+   * приезжает из `resource` (UNION в `resource.go:1626`), и различить
+   * их в ответе нечем; поэтому правка выключена у обеих (см. readOnly).
+   */
+  createFields?: readonly ResourceField[];
   /** Учётные данные выдаёт сам бэкенд: показать можно, править нечем. */
   readOnly?: true;
   /**
@@ -73,6 +90,11 @@ export type ResourceSpec = {
   system?: true;
   /** Отключается своей ручкой: эта на удаление отвечает отказом. */
   noDelete?: true;
+  /**
+   * Заводится НА ПЛАТФОРМЕ, а не подключается: реквизиты придумывает
+   * бэкенд. Отдельная ручка — см. useProvisionResource.
+   */
+  provision?: true;
   /** Вместо настроек — список пар «ключ-значение». */
   variables?: true;
   /**
@@ -206,8 +228,28 @@ export const RESOURCE_SPECS: Record<string, ResourceSpec> = {
   REST: { code: 4, group: "other", variables: true },
 
   MONGODB: { ...SYSTEM, code: 1, reconnect: true },
-  CLICKHOUSE: { ...SYSTEM, code: 2 },
-  POSTGRESQL: { ...SYSTEM, code: 3, reconnect: true },
+  /*
+   * ClickHouse не подключают, а ЗАВОДЯТ: реквизиты придумывает
+   * платформа (`company_service/grpc/service/resource.go:577` — имя базы,
+   * пользователь и пароль собираются там же). Поэтому у него группа
+   * есть, а полей заведения нет — см. provisionable.
+   */
+  CLICKHOUSE: { ...SYSTEM, code: 2, group: "db", provision: true },
+  POSTGRESQL: {
+    ...SYSTEM,
+    code: 3,
+    reconnect: true,
+    group: "db",
+    createFields: [
+      { key: "host", kind: "text" },
+      { key: "port", kind: "text" },
+      { key: "database", kind: "text" },
+      { key: "username", kind: "text" },
+      { key: "password", kind: "password" },
+      { key: "connection_name", kind: "text" },
+      { key: "ssl_mode", kind: "toggle" },
+    ],
+  },
 
   /* Подключаются своей дверью, и шлюз честно отказывает этой
      (`project_resource.go:56`, `:64`, `:75`). Показываем, но не трогаем. */
@@ -331,14 +373,21 @@ export function toResource(dto: ResourceDto): Resource {
  * Набор полный всегда: PUT кладёт `settings` целиком
  * (`resource.go:1850`), и отправить половину значит стереть вторую.
  */
-export function toSettings(kind: string, values: Record<string, string>) {
+export function toSettings(kind: string, values: Record<string, string>, creating = false) {
   const spec = RESOURCE_SPECS[kind];
-  if (!spec?.settingsKey || !spec.fields?.length) return undefined;
+  // При заведении набор бывает шире показанного: у баз спрашивают пароль
+  // и имя подключения, которых в списке потом не видно.
+  const fields = (creating && spec?.createFields) || spec?.fields;
+  if (!spec?.settingsKey || !fields?.length) return undefined;
 
-  const body: Record<string, string | number> = {};
-  for (const field of spec.fields) {
+  const body: Record<string, string | number | boolean> = {};
+  for (const field of fields) {
     const value = (values[field.key] ?? "").trim();
-    body[field.key] = field.kind === "number" ? Number(value) || 0 : value;
+
+    // Флажок в proto — bool, и строка «true» в нём валит разбор тела
+    // целиком, как и строка в числовом поле.
+    if (field.kind === "toggle") body[field.key] = value === "true";
+    else body[field.key] = field.kind === "number" ? Number(value) || 0 : value;
   }
 
   return { [spec.settingsKey]: body };
@@ -419,17 +468,21 @@ export function useCreateResource() {
     mutationFn: ({ kind, draft }: { kind: string; draft: ResourceDraft }) => {
       /* У типов с выданной учёткой настроек в форме нет — и посылать
          пустые поля значит отправить то, чего человек не вводил.
-         Бэкенд их всё равно перезапишет своими. */
-      const settings = RESOURCE_SPECS[kind]?.readOnly
-        ? undefined
-        : toSettings(kind, draft.settings);
+         Бэкенд их всё равно перезапишет своими. У баз исключение:
+         их подключают своими реквизитами, и спрашиваются они только
+         здесь (см. createFields). */
+      const spec = RESOURCE_SPECS[kind];
+      const settings =
+        spec?.readOnly && !spec.createFields
+          ? undefined
+          : toSettings(kind, draft.settings, true);
       const variables = toVariables(draft.variables);
 
       return api.post<unknown>(
         RESOURCES,
         {
           name: draft.name.trim(),
-          type: RESOURCE_SPECS[kind]?.code ?? 0,
+          type: spec?.code ?? 0,
           ...(settings ? { settings } : {}),
           /* При создании переменные заводит сама ручка ресурса
              (`resource.go:2599`) — отдельного запроса не нужно. */
@@ -552,6 +605,91 @@ const SERVICE_NAMES: Record<number, string> = {
  * из ответа выпадает (`projects_service.proto:374`). Старая админка
  * ответ не читала вовсе и писала «успешно» в любом случае.
  */
+/**
+ * Завести базу НА ПЛАТФОРМЕ, а не подключить свою.
+ *
+ * Ручка первой версии и с другим телом: `POST
+ * /v1/company/project/create-resource`. Реквизитов она не принимает —
+ * имя базы, пользователя и пароль собирает сама
+ * (`company_service/grpc/service/resource.go:610–640`), а `node_type`
+ * решает, на каком кластере заводить.
+ *
+ * Тело повторяет старую админку дословно (`Resources/Detail/index.jsx:337`):
+ * `node_type: "LOW"` и `resource` с тем же типом и заголовком «Light».
+ * Второго тарифа она не предлагала, и придумывать его нам неоткуда:
+ * набор допустимых `node_type` живёт в конфигурации платформы.
+ *
+ * **В старой админке форма реквизитов для ClickHouse существует
+ * и не используется.** `ClickHouseForm.jsx` собирает host, port,
+ * username, password и database, а ветка отправки для типа 2 строит
+ * тело заново и введённое не читает — значения просто теряются.
+ * Поэтому у нас этой формы нет: заведение спрашивает только имя.
+ */
+export function useProvisionResource() {
+  const invalidate = useInvalidateResources();
+  const session = useSession();
+
+  return useMutation({
+    mutationFn: ({ kind, name }: { kind: string; name: string }) =>
+      api.post<unknown>("/v1/company/project/create-resource", {
+        name: name.trim(),
+        project_id: session.getProjectId() ?? "",
+        environment_id: session.getEnvironmentId() ?? "",
+        node_type: NODE_TYPE,
+        resource: {
+          resource_type: RESOURCE_SPECS[kind]?.code ?? 0,
+          node_type: NODE_TYPE,
+          title: NODE_TITLE,
+          is_configured: true,
+        },
+      }),
+    onError: (error) => reportError(error, "resources.provisionFailed"),
+    onSuccess: async () => {
+      toast.success(i18n.t("resources.provisioned"));
+      await invalidate();
+    },
+  });
+}
+
+/** Тариф кластера. Единственный, который знает старая админка. */
+const NODE_TYPE = "LOW";
+const NODE_TITLE = "Light";
+
+/**
+ * В каких окружениях ресурс подключён.
+ *
+ * Ответ — строки `resource_environment`: у ресурса своя строка на
+ * окружение, и «подключено» это её `is_configured`. Старая админка
+ * показывает тот же список сбоку формы (`ResourceEnvironment.jsx`),
+ * но выбрать в нём ничего нельзя — обработчик клика там закомментирован.
+ * У нас он тоже только показывает: назначить окружение этой ручкой
+ * нечем, она читающая.
+ */
+export function useResourceEnvironments(id: string) {
+  const session = useSession();
+  const projectId = session.getProjectId() ?? "";
+  const envId = session.getEnvironmentId() ?? "";
+
+  const query = useQuery({
+    queryKey: [...keys.settings.resource(projectId, envId, id), "environments"] as const,
+    queryFn: () =>
+      api.get<{ resource_environments?: ResourceEnvironmentDto[] | null }>(
+        `/v1/company/project/resource-environment/${id}`,
+      ),
+    enabled: Boolean(id),
+  });
+
+  return {
+    environments: (query.data?.resource_environments ?? []).map((dto) => ({
+      id: dto.environment_id ?? "",
+      configured: dto.is_configured === true,
+    })),
+    isLoading: query.isLoading,
+  };
+}
+
+type ResourceEnvironmentDto = { environment_id?: string; is_configured?: boolean };
+
 export function useReconnectResource() {
   const projectId = useSession().getProjectId() ?? "";
 

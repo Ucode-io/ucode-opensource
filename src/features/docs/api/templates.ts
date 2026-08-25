@@ -99,6 +99,29 @@ export function useCreateDocTemplate(tableSlug: string | undefined) {
   });
 }
 
+/**
+ * Переименовать шаблон: уезжают только `id` и новое имя.
+ *
+ * Именно только они. Шлюз на `PUT`, увидев непустой `file_url`, заново
+ * скачивает файл, гонит его через платный конвертер, кладёт в minio под
+ * НОВЫМИ именами и подменяет обе ссылки (docx_template.go:403–559) —
+ * то есть «прежнее тело с новым именем» стоило бы конвертации и
+ * оставляло бы прежнюю пару файлов сиротами. Пустые поля до базы
+ * не доходят: `Update` собирает SET только из заполненных
+ * (object_builder/storage/postgres/docx_template.go:232–250).
+ */
+export function useRenameDocTemplate(tableSlug: string | undefined) {
+  const queryClient = useQueryClient();
+  const slug = tableSlug ?? "";
+
+  return useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) =>
+      api.put<unknown>("/v2/docx-template", { id, title }),
+    onError: (error) => reportError(error, "common.saveFailed"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.docs.templates(slug) }),
+  });
+}
+
 export function useDeleteDocTemplate(tableSlug: string | undefined) {
   const queryClient = useQueryClient();
   const slug = tableSlug ?? "";

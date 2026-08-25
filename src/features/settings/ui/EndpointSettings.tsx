@@ -54,6 +54,28 @@ export function EndpointSettings() {
     reorder.mutate(next.map((endpoint) => endpoint.id));
   };
 
+  /*
+   * Перетаскивание — второй способ, а не замена стрелкам. Стрелки
+   * остаются: до них добираются с клавиатуры, а до перетаскивания нет,
+   * и порядок правил решает, какое из них сработает первым.
+   */
+  const [dragged, setDragged] = useState("");
+
+  /** Бросили на строку — переносим туда, а не меняем местами: правило
+      обычно двигают через несколько соседей, а не на один. */
+  const drop = (index: number) => {
+    const from = endpoints.findIndex((endpoint) => endpoint.id === dragged);
+    setDragged("");
+    if (from < 0 || from === index) return;
+
+    const next = [...endpoints];
+    const [moved] = next.splice(from, 1);
+    if (!moved) return;
+
+    next.splice(index, 0, moved);
+    reorder.mutate(next.map((endpoint) => endpoint.id));
+  };
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SectionHeader title={t("endpoints.title")} hint={t("endpoints.hint")}>
@@ -80,7 +102,31 @@ export function EndpointSettings() {
             {!isLoading && !endpoints.length && <Empty text={t("endpoints.empty")} colSpan={5} />}
 
             {endpoints.map((endpoint, index) => (
-              <tr key={endpoint.id} className="group/row hover:bg-surface-hover">
+              <tr
+                key={endpoint.id}
+                draggable
+                onDragStart={(event) => {
+                  // Без данных в dataTransfer Firefox не начинает
+                  // перетаскивание вовсе.
+                  event.dataTransfer.setData("text/plain", endpoint.id);
+                  event.dataTransfer.effectAllowed = "move";
+                  setDragged(endpoint.id);
+                }}
+                onDragOver={(event) => {
+                  if (!dragged) return;
+                  // Без preventDefault строка не считается местом сброса.
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  drop(index);
+                }}
+                onDragEnd={() => setDragged("")}
+                className={`group/row cursor-grab hover:bg-surface-hover ${
+                  dragged === endpoint.id ? "opacity-40" : ""
+                }`}
+              >
                 <Td className="text-center text-2xs text-fg-subtle">{index + 1}</Td>
                 <Td className="font-mono text-xs">{endpoint.from}</Td>
                 <Td className="font-mono text-xs text-fg-muted">{endpoint.to}</Td>

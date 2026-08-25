@@ -12,6 +12,7 @@ import {
   type Resource,
 } from "../../api/resources";
 import { Empty, SectionHeader, Td, Th } from "../parts";
+import { IntegrationAccounts } from "./IntegrationAccounts";
 import { CreateResourceDialog, EditResourceDialog } from "./ResourceDialog";
 import { ResourceIcon } from "./ResourceIcon";
 import { ResourceTypePicker } from "./ResourceTypePicker";
@@ -146,6 +147,10 @@ export function ResourceSettings() {
       )}
 
       {creating && <CreateResourceDialog kind={creating} onClose={() => setCreating("")} />}
+
+      {/* Подключённые аккаунты репозиториев. Отдельная сущность,
+          а не поле ресурса GITHUB, — см. api/integrations. */}
+      <IntegrationAccounts />
 
       {editing && <EditResourceDialog id={editing.id} onClose={() => setEditing(null)} />}
 

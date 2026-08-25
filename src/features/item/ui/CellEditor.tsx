@@ -3,6 +3,7 @@ import {
   lazy,
   useDeferredValue,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -17,7 +18,14 @@ import {
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { IconPicker } from "@/features/icons";
-import { STATUS_GROUPS, type Field, type FieldOption, type Relation } from "@/features/table";
+import {
+  STATUS_GROUPS,
+  cascadeSteps,
+  useTableSchema,
+  type Field,
+  type FieldOption,
+  type Relation,
+} from "@/features/table";
 import { Anchored } from "@/shared/ui/anchored";
 import { Chip } from "@/shared/ui/chip";
 import { openPreview } from "@/shared/ui/file-preview";
@@ -47,6 +55,7 @@ import type { Item } from "../model/types";
 import { cellError } from "../model/validate";
 import { Cell, optionColor, optionLabel } from "./Cell";
 import { CodeCell } from "./CodeCell";
+import { ForeignRecord } from "./ForeignRecord";
 import { MapPicker } from "./MapPicker";
 import { PolygonCell } from "./PolygonCell";
 import { PolygonPicker } from "./PolygonPicker";
@@ -803,7 +812,35 @@ function RelationEditor({
    */
   const search = useDeferredValue(query);
 
-  const slugs = relation.viewFields;
+  /*
+   * Каскад: выбор идёт сверху вниз — область, в ней город, в нём
+   * район, — и только последний шаг записывается в поле. Каскада нет
+   * (обычная связь) — шагов ноль, и всё ниже сводится к прежнему
+   * одному списку. См. features/table/model/cascade.
+   */
+  const steps = useMemo(() => cascadeSteps(relation), [relation]);
+  /** Выбранные предки: по одному на пройденный шаг. */
+  const [picked, setPicked] = useState<{ guid: string; label: string }[]>([]);
+  const level = Math.min(picked.length, Math.max(steps.length - 1, 0));
+  const last = !steps.length || level === steps.length - 1;
+
+  const listSlug = steps.length ? (steps[level]?.tableSlug ?? "") : relation.toSlug;
+
+  /*
+   * Подпись строки промежуточного шага брать неоткуда: поля показа
+   * есть у связи, а связь тут не наша — она у таблицы уровнем ниже
+   * и смотрит вверх. Её и спрашиваем, вместо того чтобы угадывать
+   * «первое текстовое» (см. [[Relation]] в CONTEXT).
+   */
+  const belowSlug = last ? "" : (steps[level + 1]?.tableSlug ?? "");
+  const below = useTableSchema(belowSlug || undefined, []);
+  const step = steps[level];
+
+  const slugs = last
+    ? relation.viewFields
+    : (below.schema.relations.find(
+        (item) => item.toSlug === step?.tableSlug && item.fieldFrom === step?.fieldSlug,
+      )?.viewFields ?? []);
 
   /*
    * Строки грузятся и без настроенных полей показа. Показывать их
@@ -812,16 +849,23 @@ function RelationEditor({
    * и застревали после создания связи, где поля показа не выбрали.
    */
   /*
-   * Выбор отобран настройкой самой связи: пока в строке не выбран
-   * регион, город показывается любой, а как только выбран — только
-   * его города. Раньше настройка не читалась вовсе, и список чужой
-   * таблицы приезжал целиком.
+   * Чем отобран список. На первом шаге — ничем, дальше выбранным
+   * предком. Автофильтр связи применяется ТОЛЬКО на последнем шаге:
+   * его пары названы колонками целевой таблицы, и на чужой таблице
+   * промежуточного шага они отобрали бы пустоту.
    */
-  const { items, isLoading } = useRelationItems(
-    relation.toSlug,
-    search,
-    autoFilterValues(relation, row),
-  );
+  const filters = useMemo(() => {
+    if (!steps.length) return autoFilterValues(relation, row);
+
+    const own = last ? autoFilterValues(relation, row) : {};
+    if (level === 0) return own;
+
+    const parent = steps[level - 1];
+    const value = picked[level - 1]?.guid;
+    return parent && value ? { ...own, [parent.fieldSlug]: value } : own;
+  }, [steps, level, last, picked, relation, row]);
+
+  const { items, isLoading } = useRelationItems(listSlug, search, filters);
 
   /*
    * Поиск отсеивает ещё и на клиенте. Серверный `search` ищет только
@@ -849,10 +893,32 @@ function RelationEditor({
   };
 
   const pick = (item: Item) => {
+    const guid = String(item["guid"] ?? "");
+
+    /*
+     * Промежуточный шаг каскада ничего не записывает — он сужает
+     * следующий список. Значение получает только последний шаг:
+     * поле связи ведёт на его таблицу.
+     */
+    if (!last) {
+      setPicked([...picked.slice(0, level), { guid, label: relationLabel(item, slugs, language) }]);
+      setQuery("");
+      return;
+    }
+
     // Ссылка одна: повторный выбор того же значения снимает её.
-    write(selectedGuids.has(String(item["guid"] ?? "")) ? null : item);
+    write(selectedGuids.has(guid) ? null : item);
     onClose();
   };
+
+  /** Вернуться к шагу: выбранное ниже него перестаёт иметь смысл. */
+  const backTo = (index: number) => {
+    setPicked(picked.slice(0, index));
+    setQuery("");
+  };
+
+  /** Открытая карточка связанной записи. Своего адреса у неё нет. */
+  const [opened, setOpened] = useState<{ guid: string; label: string } | null>(null);
 
   /**
    * Новая строка связанной таблицы. Заполняется первым полем показа —
@@ -877,15 +943,48 @@ function RelationEditor({
   return (
     <Anchored anchor={anchor} onClose={onClose}>
       <div className={`${card} border-accent w-80 overflow-hidden`}>
+        {/* Пройденные шаги каскада: нажатие возвращает к любому из них.
+            Крошки, а не кнопка «назад», — из них видно, где мы. */}
+        {Boolean(steps.length) && (
+          <div className="flex items-center gap-1 overflow-x-auto border-b border-border px-2 py-1.5 text-2xs text-fg-muted">
+            {picked.slice(0, level).map((item, index) => (
+              <span key={item.guid} className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => backTo(index)}
+                  className="max-w-32 truncate rounded px-1 transition-colors hover:bg-surface-hover hover:text-fg"
+                >
+                  {item.label || item.guid}
+                </button>
+                <span className="text-fg-subtle">›</span>
+              </span>
+            ))}
+
+            <span className="shrink-0 text-fg">{step?.tableSlug}</span>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-1 border-b border-border p-1.5">
           {selected.map((item) => (
-            <Chip
-              key={item.guid}
-              onRemove={() => write(null)}
-              removeLabel={t("cell.remove")}
-            >
-              {item.label || item.guid}
-            </Chip>
+            <span key={item.guid} className="inline-flex min-w-0 items-center gap-0.5">
+              <Chip onRemove={() => write(null)} removeLabel={t("cell.remove")}>
+                {item.label || item.guid}
+              </Chip>
+
+              {/* Перейти к самой записи. Рядом с чипом, а не внутри:
+                  внутри его обрезает `truncate` вместе с подписью.
+                  Раньше туда вела только вкладка связи, а её заводит
+                  админ. */}
+              <button
+                type="button"
+                onClick={() => setOpened(item)}
+                aria-label={t("cell.open")}
+                title={t("cell.open")}
+                className="grid size-4 shrink-0 place-items-center rounded text-fg-subtle transition-colors hover:text-fg"
+              >
+                <Icon as={IconExternalLink} size={11} />
+              </button>
+            </span>
           ))}
 
           <input
@@ -931,7 +1030,7 @@ function RelationEditor({
 
             {/* Новую строку заполнять нечем, пока не выбрано ни одного
                 поля показа: писать текст в guid нельзя. */}
-            {query.trim() && slugs.length > 0 && (
+            {last && query.trim() && slugs.length > 0 && (
                 <button
                   type="button"
                   onClick={createAndLink}
@@ -945,6 +1044,16 @@ function RelationEditor({
           </>
         </div>
       </div>
+
+      {opened && (
+        <ForeignRecord
+          tableSlug={relation.toSlug}
+          guid={opened.guid}
+          language={language}
+          trail={[{ label: opened.label || opened.guid, onClick: () => setOpened(null) }]}
+          onClose={() => setOpened(null)}
+        />
+      )}
     </Anchored>
   );
 }

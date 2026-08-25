@@ -57,6 +57,7 @@ import { Tabs } from "@/shared/ui/tabs";
 import { cellKind, editorKind } from "../model/cell-kind";
 import { itemTitle } from "../model/layout";
 import type { Item } from "../model/types";
+import { visibleFields } from "../model/visibility";
 import { Cell } from "./Cell";
 import { ActiveCell } from "./CellEditor";
 import { fieldIcon } from "./field-icon";
@@ -362,7 +363,17 @@ export function ItemDrawer({
    * там не ставил.
    */
   const title = heading ? fields.find((field) => field.slug === heading) : undefined;
-  const rest = title ? fields.filter((field) => field !== title) : fields;
+
+  /*
+   * Условная видимость: поле показывается, только когда значение
+   * соседнего совпало с заданным (см. model/visibility).
+   *
+   * Заголовок правилу не подчиняется намеренно: он не строка формы,
+   * а имя карточки, и спрятанный он оставил бы её безымянной. Ставить
+   * условие на поле-заголовок — ошибка настройки, а не случай, который
+   * стоит поддерживать.
+   */
+  const rest = visibleFields(title ? fields.filter((field) => field !== title) : fields, row);
 
   /*
    * Крошки: путь до карточки и она сама последней. Своя крошка

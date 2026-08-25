@@ -225,6 +225,26 @@ function SidebarPanel({
         />
       </label>
 
+      {/* ВРЕМЕННО СКРЫТО. Строка помощника — над меню и вне его: это не
+          раздел проекта, а вход в отдельный экран, и в дереве меню он
+          не сортируется, не переносится и не удаляется. Тот же ряд 32px
+          и та же пара «наведение → surface с тенью у выбранного», что
+          у пунктов меню.
+
+          Сам экран жив и открывается по адресу /copilot — убран только
+          вход из сайдбара. Вернуть — раскомментировать вместе с
+          IconSparkles в импорте выше.
+
+      <Link
+        to="/copilot"
+        className="flex h-8 items-center gap-2 rounded-md px-2 text-sm text-fg-muted transition-colors hover:bg-surface-hover"
+        activeProps={{ className: "bg-surface font-medium text-fg shadow-raised" }}
+      >
+        <Icon as={IconSparkles} size={16} className="shrink-0 text-accent-text" />
+        <span className="truncate">{t("copilot.title")}</span>
+      </Link>
+      */}
+
       <div className="flex items-center justify-between px-2 pt-1">
         <span className="text-2xs font-medium tracking-wide text-fg-subtle uppercase">
           {t(searching ? "sidebar.searchResults" : "sidebar.menu")}
