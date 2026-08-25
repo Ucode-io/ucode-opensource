@@ -9,7 +9,6 @@ import {
   DataGrid,
   FilterBar,
   blankItem,
-  groupValue,
   GridSkeleton,
   ItemDrawer,
   TreeGrid,
@@ -53,6 +52,7 @@ import {
   parseFilters,
   relationDataKey,
   rowErrors,
+  selfDefaults,
   toConditions,
   type ColumnActions,
   type Filters,
@@ -107,6 +107,7 @@ import {
   useDeleteView,
   useExportExcel,
   useMenuViews,
+  subGroupField,
   tabGroupField,
   useTabGroup,
   useUpdateView,
@@ -118,6 +119,7 @@ import {
   type View,
 } from "@/features/view";
 import { useDataLanguages } from "@/features/workspace";
+import { useSession } from "@/shared/api/use-session";
 import { toast } from "@/shared/lib/toast";
 import { useUi } from "@/shared/lib/ui-store";
 import type { TranslationKey } from "@/shared/lib/i18n";
@@ -233,6 +235,9 @@ function MenuPage() {
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const { t, i18n } = useTranslation();
+  /* Нужен ровно для одного: «свой» по умолчанию у новой записи —
+     это про того, кто её заводит, а не про схему таблицы. */
+  const session = useSession();
 
   const menu = useMenu(menuId);
   // Язык ДАННЫХ — не локаль интерфейса: подписи вариантов и мультиязычных
@@ -417,6 +422,25 @@ function MenuPage() {
   const drawerColumns = useMemo(
     () => collapseLanguages(drawerFields, codes, language),
     [drawerFields, codes, language],
+  );
+
+  /*
+   * Чем заполнена новая запись сверх настроек полей: связь, помеченная
+   * «подставлять своего», получает того, кто её заводит. Считается один
+   * раз на схему и уходит в оба места, где запись заводится, — в карточку
+   * и в строку в подвале таблицы.
+   *
+   * Версия сеанса в зависимостях: сам объект сессии стабилен, а токен
+   * под ним меняется при обновлении, и вместе с ним — «свои» строки.
+   */
+  const sessionVersion = session.getVersion();
+  const newRowDefaults = useMemo(
+    () =>
+      selfDefaults(schema.relations, {
+        userId: session.getUserId(),
+        objectIds: session.getObjectIds(),
+      }),
+    [schema.relations, session, sessionVersion],
   );
 
   const supportedView = view ? IMPLEMENTED_VIEW_TYPES.has(view.type) : false;
@@ -682,6 +706,9 @@ function MenuPage() {
   const tabFilters = boardView ? EMPTY_FILTERS : tabGroup.filters;
   /** Поле, значения которого стали колонками доски. */
   const boardField = boardView ? tabGroupField(view, tableFields) : undefined;
+  /* Поле дорожек ищется теми же двумя ключами, что и поле колонок:
+     у поля-связи в настройках лежит id связи, а не поля. */
+  const boardLaneField = boardView ? subGroupField(view, tableFields) : undefined;
   /** Доску не по чему раскладывать: поле не выбрано в настройках view. */
   const boardNotReady = boardView && !boardField;
 
@@ -1073,11 +1100,28 @@ function MenuPage() {
    */
   const filesFolder = menu?.type === "MINIO_FOLDER" ? menu.folder : "";
 
+  /*
+   * Шапка ещё не знает, что показывать: имя пункта и набор вкладок едут
+   * разными запросами. Без этого признака шапка рисовалась пустой, потом
+   * дорисовывала имя, потом полосу вкладок, потом кнопки — четыре рывка
+   * на один переход. Вместо них — заглушка тех же размеров.
+   */
+  const chromeLoading = !menu || viewsLoading;
+
   return (
-    <div className="flex h-full flex-col">
+    /*
+     * key — чтобы появление проигрывалось на КАЖДЫЙ пункт меню, а не
+     * один раз за жизнь экрана: анимация привязана к созданию элемента,
+     * а сам компонент при переходе между пунктами остаётся тем же.
+     */
+    <div key={menuId} className="animate-page flex h-full flex-col">
       <header className="flex h-header shrink-0 items-center gap-2 border-b border-border px-4">
         <SidebarToggleButton />
-        <span className="text-sm font-medium">{menu?.label ?? t("menu.title")}</span>
+        {menu ? (
+          <span className="text-sm font-medium">{menu.label || t("menu.title")}</span>
+        ) : (
+          <Bar className="h-3.5 w-32" />
+        )}
         {/* Число без слова: «16 записей» требует согласования по падежу
             в русском и узбекском, а множественные формы i18next стоят
             трёх ключей на язык ради одного счётчика. */}
@@ -1101,8 +1145,25 @@ function MenuPage() {
 
           И при нуле вкладок тоже — ради «+»: пункт меню без view иначе
           становится тупиком, из которого нечем завести первый. */}
-      {supported && (tabs.length > 0 || (can.viewCreate && tableSlug)) && (
+      {/* Заглушка повторяет раскладку строки: вкладки слева, ряд кнопок
+          справа. Не «пусто, а потом всё сразу» — иначе полоса дёргается
+          дважды: сначала под вкладками, потом под «Новой записью». */}
+      {supported && chromeLoading && (
         <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+          <Bar className="h-3.5 w-20" />
+          <Bar className="h-3.5 w-16" />
+          <div className="ml-auto flex items-center gap-1.5">
+            <Bar className="size-5" />
+            <Bar className="size-5" />
+            <Bar className="size-5" />
+            <Bar className="h-6 w-24 rounded-md" />
+            <Bar className="size-5" />
+          </div>
+        </div>
+      )}
+
+      {supported && !chromeLoading && (tabs.length > 0 || (can.viewCreate && tableSlug)) && (
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3 transition-opacity duration-200 ease-out starting:opacity-0">
           <ViewTabs
             views={tabs}
             activeId={view?.id ?? ""}
@@ -1153,6 +1214,11 @@ function MenuPage() {
                         onSorts: (next: Sort[]) =>
                           setSearch({ sort: formatSorts(next), page: 1 }, true),
                       })}
+                  /* Перечитать строки. Данные меняются и без нас —
+                     приложением заказчика, функцией, импортом, — а кэш
+                     держит их минуту. */
+                  onRefresh={() => void refetchRows()}
+                  refreshing={isFetching}
                   filtersOpen={filtersVisible}
                   filterCount={activeFilters}
                   // Закрытие не стирает сами фильтры: спрятать строку и снять
@@ -1198,7 +1264,7 @@ function MenuPage() {
                        задал (`attributes.url_object`). */
                     if (view && openCreateUrl(view)) return;
 
-                    startDraft(blankItem(drawerColumns));
+                    startDraft(blankItem(drawerColumns, newRowDefaults));
                   }}
                   className="mr-1 h-7 shrink-0 rounded-md bg-accent-solid px-3 text-sm font-medium text-accent-fg transition-opacity hover:opacity-90"
                 >
@@ -1241,6 +1307,8 @@ function MenuPage() {
                   onInfiniteScroll: (infiniteScroll) =>
                     updateView.mutate({ view, infiniteScroll }),
                   onGroupBy: (groupBy) => updateView.mutate({ view, groupBy }),
+                  /* Дорожки доски: второй уровень той же раскладки. */
+                  onSubGroup: (subGroup) => updateView.mutate({ view, subGroup }),
                   // Поля дат календаря. Смена поля начала сбрасывает
                   // видимый день: диапазон считался по прежнему полю,
                   // и оставлять его — показывать чужой отбор.
@@ -1419,7 +1487,7 @@ function MenuPage() {
                    */
                   onAddChild: (parent: Item) => {
                     startDraft({
-                      ...blankItem(drawerColumns),
+                      ...blankItem(drawerColumns, newRowDefaults),
                       [`${view.tableSlug}_id`]: parent.guid ?? null,
                       [relationDataKey(`${view.tableSlug}_id`)]: parent,
                     });
@@ -1461,6 +1529,10 @@ function MenuPage() {
             </div>
           )}
 
+          {/* Полоса отбора проявляется, а не возникает. Высоту ей не
+              анимируем: у чипов внутри есть выпадающие списки, а сжать
+              высоту можно только обрезающим контейнером — он бы их
+              срезал (см. shared/ui/popover: меню лежит в потоке). */}
           {filtersVisible && (
             <FilterBar
               columns={columns}
@@ -1520,6 +1592,10 @@ function MenuPage() {
               columns={columns}
               rows={rows.rows}
               field={boardField}
+              /* Дорожки доски: второй уровень раскладки. Поле берётся
+                 из тех же настроек, что и колонки, — и оно же должно
+                 быть в схеме, иначе дорожек просто нет. */
+              {...(boardLaneField ? { laneField: boardLaneField } : {})}
               relations={schema.relations}
               locale={i18n.language}
               language={language}
@@ -1552,15 +1628,12 @@ function MenuPage() {
                  заполнено, остальное — в карточке. */
               {...(can.write
                 ? {
-                    onAddCard: (columnId: string) => {
+                    onAddCard: (values: Record<string, unknown>) => {
                       /* Адрес из настроек важнее черновика: админ задал
                          свою страницу создания — значит, заводят там. */
                       if (openCreateUrl(view)) return;
 
-                      startDraft({
-                        ...blankItem(drawerColumns),
-                        [boardField.slug]: groupValue(boardField, columnId),
-                      });
+                      startDraft({ ...blankItem(drawerColumns, newRowDefaults), ...values });
                     },
                   }
                 : {})}
@@ -1611,7 +1684,7 @@ function MenuPage() {
                     onCreate: (values: Record<string, unknown>) => {
                       if (openCreateUrl(view)) return;
 
-                      startDraft({ ...blankItem(drawerColumns), ...values });
+                      startDraft({ ...blankItem(drawerColumns, newRowDefaults), ...values });
                     },
                   }
                 : {})}
@@ -1689,7 +1762,7 @@ function MenuPage() {
                     onCreate: (values: Record<string, unknown>) => {
                       if (openCreateUrl(view)) return;
 
-                      startDraft({ ...blankItem(drawerColumns), ...values });
+                      startDraft({ ...blankItem(drawerColumns, newRowDefaults), ...values });
                     },
                   }
                 : {})}
@@ -1698,6 +1771,9 @@ function MenuPage() {
             <DataGrid
               tableSlug={view.tableSlug}
               columns={columns}
+              /* Та же подстановка, что и в карточке: настройка, которая
+                 работает в одном из двух мест, хуже отсутствующей. */
+              newRowDefaults={newRowDefaults}
               pinned={pinned}
               /* Строки догружаются прокруткой: обработчик отдаётся,
                  только пока есть что грузить. */
@@ -2006,6 +2082,9 @@ function MenuPage() {
           onLanguage={setLanguage}
           sections={drawerLayout.sections}
           heading=""
+          /* Поле «только для чтения» здесь открыто: настройка про правку
+             заведённой записи, а не про её заполнение. */
+          creating
           titlePlaceholder={t("table.addRow")}
           /* Тот же путь, что у открытой строки: без него шапка черновика
              — пустая полоса с двумя значками. Крошка меню закрывает
@@ -2261,6 +2340,16 @@ function MenuPage() {
   );
 }
 
+
+/**
+ * Плашка заглушки: место того, что ещё едет. Тот же приём, что у таблицы
+ * и у сайдбара (GridSkeleton, Sidebar/Skeleton) — плоская плашка цвета
+ * `surface-active`, без мерцания: пульсация на шапке, которая появляется
+ * на четверть секунды, читается как ошибка отрисовки.
+ */
+function Bar({ className }: { className: string }) {
+  return <span className={`shrink-0 rounded-sm bg-surface-active ${className}`} aria-hidden />;
+}
 
 function Notice({
   text,

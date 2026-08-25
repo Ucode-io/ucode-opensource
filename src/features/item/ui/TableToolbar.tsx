@@ -4,6 +4,7 @@ import {
   IconDotsVertical,
   IconLoader2,
   IconFilter,
+  IconRefresh,
   IconSearch,
   IconX,
 } from "@tabler/icons-react";
@@ -43,6 +44,8 @@ export function TableToolbar({
   onToggleFilters,
   search,
   onSearch,
+  onRefresh,
+  refreshing,
 }: {
   tableSlug: string;
   columns: Field[];
@@ -63,11 +66,29 @@ export function TableToolbar({
    * (`search_button`), и отнимают его именно у поля, а не у кнопки.
    */
   onSearch?: ((search: string) => void) | undefined;
+  /**
+   * Перечитать строки. Данные меняет не только тот, кто на них смотрит:
+   * запись заводят из приложения заказчика, правит функция, дописывает
+   * импорт — а таблица держит их в кэше минуту. Без этой кнопки
+   * единственный способ увидеть новое — перезагрузить страницу.
+   */
+  onRefresh?: (() => void) | undefined;
+  /** Запрос уже в пути: кнопка крутится, чтобы щёлкать её ещё раз незачем. */
+  refreshing?: boolean | undefined;
 }) {
   const { t } = useTranslation();
 
   return (
     <div className="flex items-center gap-0.5">
+      {onRefresh && (
+        <ToolButton
+          icon={IconRefresh}
+          label={t("table.refresh")}
+          spin={refreshing === true}
+          onClick={onRefresh}
+        />
+      )}
+
       {onSearch && (
         <SearchBox
           value={search}
@@ -158,20 +179,6 @@ function SearchBox({
     latest.current("");
   };
 
-  if (!open) {
-    return (
-      <ToolButton
-        icon={IconSearch}
-        label={t("table.search")}
-        onClick={() => {
-          setOpen(true);
-          // Фокус после отрисовки поля: до неё фокусировать нечего.
-          requestAnimationFrame(() => input.current?.focus());
-        }}
-      />
-    );
-  }
-
   return (
     /*
      * Пустое поле схлопывается, как только фокус ушёл из него совсем:
@@ -180,34 +187,65 @@ function SearchBox({
      * потери фокуса.
      */
     <div
-      className="mr-1 flex items-center"
+      className={`flex items-center ${open ? "mr-1" : ""}`}
       onBlur={(event) => {
         if (!text && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
     >
-      <label className="flex h-7 w-52 items-center gap-1.5 rounded-md px-1.5 text-sm">
-        <Icon as={IconSearch} size={16} className="shrink-0 text-fg-muted" />
+      {/* Кнопка со своего места не уходит: она и раскрывает поле,
+          и сворачивает его обратно. Свернуть — значит очистить: заданный
+          запрос обязан быть виден, иначе таблица показывает неполный
+          список без объяснения. */}
+      <ToolButton
+        icon={IconSearch}
+        label={t("table.search")}
+        open={open}
+        on={Boolean(value)}
+        onClick={() => {
+          if (open) {
+            close();
+            return;
+          }
+
+          setOpen(true);
+          // Фокус после отрисовки поля: до неё фокусировать нечего.
+          requestAnimationFrame(() => input.current?.focus());
+        }}
+      />
+
+      {/*
+        Поле не появляется, а выезжает из-под кнопки: ширина едет от нуля,
+        а содержимое подрезается по дороге. Меню «по каким полям искать»
+        оставлено СНАРУЖИ этой рамки: оно раскрывается списком вниз,
+        и обрезающий контейнер срезал бы его целиком.
+      */}
+      <label
+        className={`flex h-7 items-center overflow-hidden text-sm transition-[width] duration-200 ease-out ${
+          open ? "w-52" : "w-0"
+        }`}
+      >
         <input
           ref={input}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => event.key === "Escape" && close()}
           placeholder={t("table.searchPlaceholder")}
-          className="min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-fg-subtle"
+          tabIndex={open ? 0 : -1}
+          className="min-w-0 flex-1 bg-transparent px-1.5 text-fg outline-none placeholder:text-fg-subtle"
         />
         {text && (
           <button
             type="button"
             onClick={close}
             aria-label={t("table.clearSearch")}
-            className="shrink-0 text-fg-subtle transition-colors hover:text-fg"
+            className="mr-1.5 shrink-0 text-fg-subtle transition-colors hover:text-fg"
           >
             <Icon as={IconX} size={14} />
           </button>
         )}
       </label>
 
-      <SearchFieldsMenu tableSlug={tableSlug} language={language} />
+      {open && <SearchFieldsMenu tableSlug={tableSlug} language={language} />}
     </div>
   );
 }

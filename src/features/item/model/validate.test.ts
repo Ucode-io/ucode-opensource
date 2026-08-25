@@ -15,6 +15,7 @@ const field = (over: Partial<Field> = {}): Field => ({
   required: false,
   validation: null,
   editable: true,
+    locked: false,
   attributes: {},
   raw: {},
   ...over,
@@ -61,13 +62,25 @@ test("новая строка проверяется целиком, но тол
     field({ id: "2", slug: "email", validation: { pattern: /^\S+@\S+$/, message: "" } }),
     // Значение считает бэкенд — спрашивать его с человека нечего.
     field({ id: "3", slug: "number", type: "INCREMENT_ID", required: true }),
-    // Правку запретил админ — заполнить такую колонку тоже нечем.
-    field({ id: "4", slug: "locked", required: true, editable: false }),
+    // Право отняла РОЛЬ: заполнить такую колонку нечем и при заведении.
+    field({ id: "4", slug: "denied", required: true, editable: false, locked: true }),
   ];
 
   expect([...rowErrors(columns, {}).keys()]).toEqual(["name"]);
   expect([...rowErrors(columns, { name: "Аня", email: "нет собаки" }).keys()]).toEqual(["email"]);
   expect(rowErrors(columns, { name: "Аня", email: "a@b.uz" }).size).toBe(0);
+});
+
+/*
+ * «Только чтение» админа — про правку заведённой записи, а не про её
+ * заполнение: иначе обязательное поле, закрытое от правки, нельзя было
+ * бы задать вообще нигде. Так же считает и старая админка (`&& isEditing`).
+ */
+test("поле «только чтение» при заведении заполняется и потому обязательно", () => {
+  const readOnly = field({ id: "5", slug: "contract", required: true, editable: false });
+
+  expect([...rowErrors([readOnly], {}).keys()]).toEqual(["contract"]);
+  expect(rowErrors([readOnly], { contract: "Д-17" }).size).toBe(0);
 });
 
 test("списки и объекты выражением не проверяются", () => {
@@ -77,4 +90,17 @@ test("списки и объекты выражением не проверяю�
   expect(cellError(any, { lat: 1 })).toBe(null);
   expect(cellError(any, 42)).toBe(null);
   expect(cellError(any, "42a")).toEqual({ kind: "pattern", message: "" });
+});
+
+/*
+ * Пробелы — не значение. В старой админке это проверяется вручную
+ * и только у MULTI_LINE; у нас — у любой строки, потому что причина
+ * одна и та же.
+ */
+test("строка из пробелов не заполняет обязательное поле", () => {
+  const required = field({ required: true });
+
+  expect(cellError(required, "   ")).toEqual({ kind: "required", message: "" });
+  expect(cellError(required, "\n\t")).toEqual({ kind: "required", message: "" });
+  expect(cellError(required, " Аня ")).toBe(null);
 });

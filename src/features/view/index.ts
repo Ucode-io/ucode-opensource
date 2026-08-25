@@ -1,6 +1,6 @@
 export { useExportExcel, useImportExcel, useReadExcel } from "./api/excel";
 export { useCreateView, useDeleteView, useMenuViews, useUpdateView } from "./api/views";
-export { TAB_GROUP_TYPES, tabGroupField, useTabGroup } from "./api/tab-group";
+export { TAB_GROUP_TYPES, subGroupField, tabGroupField, useTabGroup } from "./api/tab-group";
 export type { TabGroup, TabGroupTab } from "./api/tab-group";
 export { relationTabs, tabbableRelations } from "./model/relation-tabs";
 export type { RelationTab } from "./model/relation-tabs";

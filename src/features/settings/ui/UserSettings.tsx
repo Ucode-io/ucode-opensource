@@ -10,7 +10,8 @@ import { Field, Input, Select } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { Tabs } from "@/shared/ui/tabs";
-import { useClientTypes, useRoles, type Role } from "../api/roles";
+import { useClientTypes } from "../api/client-types";
+import { useRoles, type Role } from "../api/roles";
 import {
   USERS_PAGE,
   useCreateUser,

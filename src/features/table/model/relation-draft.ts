@@ -42,6 +42,13 @@ export type RelationDraft = {
    * спрашиваем.
    */
   viewFieldIds: string[];
+  /**
+   * Чем заполнить колонку у НОВОЙ записи — «свой» строкой того, кто
+   * её заводит. См. `Relation.selfDefault`: значений три и они
+   * взаимоисключающие, поэтому это список, а не два флажка (в старой
+   * админке их два, и поднять можно оба — выигрывает всё равно один).
+   */
+  selfDefault: "user" | "object" | null;
 };
 
 /**
@@ -76,7 +83,22 @@ export const EMPTY_RELATION_DRAFT: RelationDraft = {
   autoFilters: [],
   label: "",
   viewFieldIds: [],
+  selfDefault: null,
 };
+
+/**
+ * Черновик обратно в две колонки связи.
+ *
+ * Уезжают обе и всегда: UPDATE переписывает их безусловно
+ * (`relation.go:2033`), и вернуть в теле только поднятую значило бы
+ * оставить вторую в прежнем состоянии — то есть не снять её никогда.
+ */
+export function toSelfDefaultBody(value: RelationDraft["selfDefault"]) {
+  return {
+    is_user_id_default: value === "user",
+    object_id_from_jwt: value === "object",
+  };
+}
 
 /**
  * Пары автофильтра, как они лежат в связи, — в черновик.

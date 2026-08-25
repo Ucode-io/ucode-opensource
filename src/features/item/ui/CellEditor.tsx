@@ -100,6 +100,7 @@ export function ActiveCell({
   locale,
   language,
   heading,
+  creating,
   onSettings,
   onEdit,
   onLink,
@@ -117,6 +118,12 @@ export function ActiveCell({
   language: string;
   /** Заголовок строки в drawer: правится тем же кеглем, каким показан. */
   heading?: boolean | undefined;
+  /**
+   * Строка ещё не заведена. Тогда «только чтение», поставленное полю
+   * админом, не действует: настройка про правку, а не про заполнение
+   * (см. model/cell-kind, editorKind).
+   */
+  creating?: boolean | undefined;
   /** Настройки поля из ячейки: варианты выбора правят, глядя на список. */
   onSettings?: ((field: Field, anchor: DOMRect) => void) | undefined;
   onEdit: (value: unknown) => void;
@@ -131,7 +138,7 @@ export function ActiveCell({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const kind = editorKind(field);
+  const kind = editorKind(field, creating === true);
   const value = row[field.slug];
 
   /**
@@ -347,6 +354,7 @@ export function ActiveCell({
           anchor={anchor}
           multiline={kind === "longtext"}
           numeric={kind === "number"}
+          {...(inputModeOf(field.type) ? { mode: inputModeOf(field.type) } : {})}
           heading={heading}
           check={check}
           /*
@@ -463,11 +471,30 @@ function ScannerEditor({
  * значение, а не прокручиваться внутри 180 пикселей. Ради этого раскрытие
  * и делалось.
  */
+/**
+ * Клавиатура под тип поля. Не проверка и не маска — подсказка браузеру:
+ * на телефоне у поля с номером появляется цифровой набор, у почты —
+ * клавиша «@».
+ *
+ * Маски здесь намеренно нет. В старой админке INTERNATION_PHONE — это
+ * отдельная библиотека с флагами стран и форматированием на лету
+ * (`hf-internationalPhone.jsx`), но в колонке всё равно лежит строка,
+ * и любая маска — это ещё одно место, где введённое расходится
+ * с сохранённым. См. docs/PARITY.md.
+ */
+function inputModeOf(type: string): "tel" | "email" | "url" | undefined {
+  if (type === "PHONE" || type === "INTERNATION_PHONE") return "tel";
+  if (type === "EMAIL") return "email";
+  if (type === "LINK") return "url";
+  return undefined;
+}
+
 function TextEditor({
   value,
   anchor,
   multiline,
   numeric,
+  mode,
   heading,
   check,
   preview,
@@ -479,6 +506,15 @@ function TextEditor({
   anchor: DOMRect;
   multiline: boolean;
   numeric: boolean;
+  /**
+   * Какую клавиатуру просить у телефона и планшета. Числовую задаёт
+   * `numeric`, остальные — тип поля: у телефона это набор цифр
+   * со звёздочкой, у почты — клавиша «@».
+   *
+   * Только подсказка браузеру: значение всё равно приходит строкой,
+   * и проверяет его та же `check`.
+   */
+  mode?: "tel" | "email" | "url" | undefined;
   /** Тем же кеглем, что и показанное значение: заголовок не ужимается
       до 13px на время правки и обратно — текст на месте не прыгает. */
   heading?: boolean | undefined;
@@ -565,7 +601,7 @@ function TextEditor({
           autoFocus
           rows={1}
           value={draft}
-          inputMode={numeric ? "decimal" : undefined}
+          inputMode={numeric ? "decimal" : mode}
           onChange={(event) => {
             const text = event.target.value;
             latest.current = text;

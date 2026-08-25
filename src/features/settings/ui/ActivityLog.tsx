@@ -1,6 +1,12 @@
 import { useDeferredValue, useState } from "react";
+import { IconFileSpreadsheet } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { localized, useTables } from "@/features/table";
+import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
+import { DatePicker } from "@/shared/ui/date-picker";
+import { Dropdown } from "@/shared/ui/dropdown";
+import { Icon } from "@/shared/ui/icon";
 import { Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
 import {
@@ -8,6 +14,7 @@ import {
   NO_FILTERS,
   useActivity,
   useActivityEntry,
+  useExportActivity,
   type ActivityFilters,
 } from "../api/activity";
 import { unwrapEntry } from "../model/activity";
@@ -41,6 +48,7 @@ export function ActivityLog() {
   const { entries, count, isLoading } = useActivity(deferred, page);
 
   const [opened, setOpened] = useState("");
+  const exportExcel = useExportActivity();
 
   const put = (patch: Partial<ActivityFilters>) => {
     setFilters((current) => ({ ...current, ...patch }));
@@ -49,7 +57,19 @@ export function ActivityLog() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <SectionHeader title={t("activity.title")} hint={t("activity.hint")} />
+      <SectionHeader title={t("activity.title")} hint={t("activity.hint")}>
+        {/* Выгружается отобранное, а не страница: файл делают, чтобы
+            посмотреть шире экрана. */}
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={exportExcel.isPending}
+          onClick={() => exportExcel.mutate(deferred)}
+        >
+          <Icon as={IconFileSpreadsheet} size={14} />
+          {exportExcel.isPending ? t("common.loading") : t("activity.export")}
+        </Button>
+      </SectionHeader>
 
       {/*
         Ширину задаёт обёртка, а не само поле: у `Input` в базовых
@@ -69,13 +89,7 @@ export function ActivityLog() {
         </div>
 
         <div className="w-40">
-          <Input
-            value={filters.table}
-            onChange={(event) => put({ table: event.target.value })}
-            placeholder={t("activity.table")}
-            aria-label={t("activity.table")}
-            className="h-7 text-sm"
-          />
+          <TableFilter value={filters.table} onChange={(table) => put({ table })} />
         </div>
 
         <div className="w-40">
@@ -88,25 +102,29 @@ export function ActivityLog() {
           />
         </div>
 
-        {/* Нативные поля даты: календарь, локальный формат и ввод
-            с клавиатуры — бесплатно, как в фильтрах таблицы. */}
+        {/* Наш календарь, а не нативное поле: у `<input type="date">`
+            свой вид в каждой системе и светлый календарь в тёмной теме. */}
         <div className="w-36">
-          <Input
-            type="date"
+          <DatePicker
             value={filters.from}
-            onChange={(event) => put({ from: event.target.value })}
-            aria-label={t("activity.from")}
-            className="h-7 text-sm"
+            locale={i18n.language}
+            placeholder={t("activity.from")}
+            ariaLabel={t("activity.from")}
+            clearLabel={t("table.clearFilters")}
+            onChange={(from) => put({ from })}
+            className="h-7"
           />
         </div>
 
         <div className="w-36">
-          <Input
-            type="date"
+          <DatePicker
             value={filters.to}
-            onChange={(event) => put({ to: event.target.value })}
-            aria-label={t("activity.to")}
-            className="h-7 text-sm"
+            locale={i18n.language}
+            placeholder={t("activity.to")}
+            ariaLabel={t("activity.to")}
+            clearLabel={t("table.clearFilters")}
+            onChange={(to) => put({ to })}
+            className="h-7"
           />
         </div>
 
@@ -176,6 +194,64 @@ export function ActivityLog() {
 
       {opened && <EntryDialog id={opened} onClose={() => setOpened("")} />}
     </div>
+  );
+}
+
+/**
+ * Отбор по таблице — выбором из списка, а не набором подстроки: слаг
+ * таблицы (`orders`, `user_addresses`) человек по памяти не наберёт,
+ * а с опечаткой журнал молча покажет пусто.
+ *
+ * Список тот же, что у связей и у пункта меню, — `useTables`: та же
+ * ручка, тот же поиск на сервере и та же догрузка по страницам.
+ * Сотни таблиц в проекте — норма, поэтому целиком он не тянется.
+ *
+ * В отбор уходит СЛАГ: сервер сравнивает его по подстроке и со слагом,
+ * и с подписью (`version_history.go:158`), но подпись переводится
+ * и повторяется у разных таблиц, а слаг один.
+ */
+function TableFilter({ value, onChange }: { value: string; onChange: (slug: string) => void }) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const { current: language } = useDataLanguages();
+  const tables = useTables(search);
+
+  const found = tables.items.map((table) => ({
+    value: table.slug,
+    label: localized(table.labels, language, table.label),
+  }));
+
+  const items = [
+    // Первым пунктом — снять отбор: стереть выбор в списке больше нечем.
+    ...(value ? [{ value: "", label: t("table.clearFilters") }] : []),
+    /*
+     * Выбранная таблица остаётся в списке, даже когда поиск её не нашёл:
+     * иначе набранное в поиске чужое слово стирает подпись с кнопки,
+     * и кажется, что отбора нет, — а он есть. Слага хватает: он же
+     * и лежит в отборе.
+     */
+    ...(value && !found.some((item) => item.value === value)
+      ? [{ value, label: value }]
+      : []),
+    ...found,
+  ];
+
+  return (
+    <Dropdown
+      value={value}
+      items={items}
+      placeholder={t("activity.table")}
+      ariaLabel={t("activity.table")}
+      searchPlaceholder={t("menuForm.tableSearch")}
+      emptyText={t("menuForm.tableEmpty")}
+      search={search}
+      loading={tables.isLoading}
+      hasMore={tables.hasMore}
+      onSearch={setSearch}
+      onLoadMore={tables.loadMore}
+      onChange={onChange}
+      className="h-7"
+    />
   );
 }
 

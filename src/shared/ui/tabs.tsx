@@ -43,7 +43,11 @@ export function Tabs({
   if (!tabs.length) return null;
 
   return (
-    <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-lg bg-surface-active p-0.5">
+    // Дорожка по содержимому, а не во всю строку: три вкладки на всю
+    // ширину модалки читаются как пустая панель, у которой что-то
+    // не загрузилось. `max-w-full` оставляет прокрутку там, где вкладок
+    // больше, чем помещается.
+    <div className="flex w-fit min-w-0 max-w-full items-center gap-0.5 overflow-x-auto rounded-lg bg-surface-active p-0.5">
       {tabs.map((item) => {
         const active = item.id === activeId;
 

@@ -150,7 +150,7 @@ export function sameValue(a: unknown, b: unknown): boolean {
  * в булеву — булево. Строка в колонке NUMERIC — это 500 в ответ
  * на вставку, а не «поле осталось пустым».
  */
-export function blankItem(columns: Field[]): Item {
+export function blankItem(columns: Field[], defaults: Item = {}): Item {
   const row: Item = { guid: crypto.randomUUID() };
 
   for (const field of columns) {
@@ -177,7 +177,18 @@ export function blankItem(columns: Field[]): Item {
     }
   }
 
-  return row;
+  /*
+   * Поверх — то, чего поле о себе не знает: связь, помеченная
+   * «подставлять своего» (features/item/model/relation, `selfDefaults`).
+   * Именно поверх, а не под: в старой админке этот выбор проверяется
+   * первым и до `defaultValue` дело не доходит вовсе
+   * (`FormElementGenerator.jsx:126`).
+   *
+   * Вторым параметром, а не сборкой внутри: blankItem чистый, а «кто
+   * вошёл» — это сеанс. Зато подстановка одна на оба места, где
+   * заводится запись, — карточку и строку в подвале таблицы.
+   */
+  return { ...row, ...defaults };
 }
 
 /** Значение MULTISELECT: в строке список, но одиночная строка тоже бывает. */

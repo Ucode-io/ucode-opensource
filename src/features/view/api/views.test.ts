@@ -84,6 +84,7 @@ test("быстрые фильтры уходят с is_checked — по нему
     required: false,
     validation: null,
     editable: true,
+    locked: false,
     attributes: {},
     raw: { id: "f1", slug: "status", type: "STATUS" },
   };

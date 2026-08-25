@@ -7,7 +7,13 @@ export {
 export { useTableSchema } from "./api/schema";
 export { useRelationRows } from "./api/relation-rows";
 export type { RelationRow } from "./api/relation-rows";
-export { useCreateRelation, useDeleteRelation, useTables, useUpdateRelation } from "./api/tables";
+export {
+  useCreateRelation,
+  useDeleteRelation,
+  useTableFields,
+  useTables,
+  useUpdateRelation,
+} from "./api/tables";
 export { EMPTY_RELATION_DRAFT, isRelationReady } from "./model/relation-draft";
 export type { RelationDraft } from "./model/relation-draft";
 export { ALL_VIEW_RIGHTS, useTableDetails } from "./api/table-details";

@@ -110,7 +110,10 @@ export function WorkspaceSwitcher({
       <button
         type="button"
         onClick={() => setAdding(true)}
-        className="mt-1 mb-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-border text-sm text-fg transition-colors hover:bg-surface-hover"
+        /* 28px — как у остальных обведённых кнопок этого поповера
+           (см. WorkspaceHeader, POPOVER_BUTTON): они стоят в одном
+           столбце, и разнобой в высоте виден сразу. */
+        className="mt-1 mb-1 flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-border text-sm text-fg transition-colors hover:bg-surface-hover"
       >
         <Icon as={IconPlus} size={14} />
         {t("workspace.addOrganization")}

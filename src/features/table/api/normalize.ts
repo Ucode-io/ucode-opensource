@@ -30,6 +30,7 @@ export function toField(dto: FieldDto): Field {
     required: dto.required === true,
     validation: toValidation(dto.attributes),
     editable: isEditable(dto.attributes),
+    locked: isLocked(dto.attributes),
     attributes: dto.attributes ?? {},
     raw: { ...dto },
   };
@@ -43,11 +44,19 @@ export function toField(dto: FieldDto): Field {
  * бы не ошибкой, а «так задумано».
  */
 function isEditable(attributes: Record<string, unknown> | undefined): boolean {
-  if (!attributes) return true;
-  if (attributes["disabled"] === true) return false;
+  return attributes?.["disabled"] !== true && !isLocked(attributes);
+}
 
-  const permission = attributes["field_permission"];
-  return !isRecord(permission) || permission["edit_permission"] !== false;
+/**
+ * Запретила ли поле РОЛЬ (`field_permission.edit_permission`).
+ *
+ * Отдельно от `disabled`, потому что запреты разные: «только чтение»
+ * ставит админ полю, и это про правку уже заведённой записи; право роли
+ * — это про человека, и оно действует всегда, в том числе при заведении.
+ */
+function isLocked(attributes: Record<string, unknown> | undefined): boolean {
+  const permission = attributes?.["field_permission"];
+  return isRecord(permission) && permission["edit_permission"] === false;
 }
 
 /**
@@ -250,6 +259,21 @@ export function toRelation(dto: RelationDto, tableSlug: string): Relation {
       (to?.slug ? `${to.slug}_id` : ""),
     viewFields,
     viewFieldIds,
+    /*
+     * Оба флага — колонки самой связи (`000001_init_tables.up.sql:114`),
+     * и в ответе их нет, когда они false: в proto это `bool` с omitempty.
+     * Отсюда сравнение с true, а не приведение к булеву.
+     *
+     * Порядок как в старой админке: `object_id_from_jwt` проверяется
+     * первым (`FormElementGenerator.jsx:126`), поэтому при обоих
+     * поднятых флагах выигрывает он.
+     */
+    selfDefault:
+      dto["object_id_from_jwt"] === true
+        ? "object"
+        : dto["is_user_id_default"] === true
+          ? "user"
+          : null,
     raw: { ...dto },
   };
 }

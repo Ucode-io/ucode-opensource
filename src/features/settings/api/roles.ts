@@ -136,37 +136,6 @@ export function useUpdateRolePermissions(roleId: string) {
 }
 
 /**
- * Типы клиентов проекта: у роли обязательно есть один, и выбирают его
- * при создании. Ответ устроен как у ролей — `{data: {count, response}}`.
- */
-type ClientTypeDto = { guid?: string; name?: string };
-type ClientTypesResponseDto = { data?: { response?: ClientTypeDto[] } };
-
-export type ClientType = { id: string; name: string };
-
-export function useClientTypes(enabled = true) {
-  const projectId = useSession().getProjectId() ?? "";
-
-  const query = useQuery({
-    queryKey: keys.settings.clientTypes(projectId),
-    queryFn: () =>
-      authApi.get<ClientTypesResponseDto>("/v2/client-type", {
-        params: { "project-id": projectId, limit: 50, offset: 0 },
-      }),
-    enabled: enabled && Boolean(projectId),
-    staleTime: 5 * 60_000,
-    select: (data): ClientType[] =>
-      (data.data?.response ?? [])
-        .filter((dto) => dto.guid)
-        .map((dto) => ({ id: dto.guid ?? "", name: dto.name?.trim() || dto.guid || "" })),
-  });
-
-  return { clientTypes: query.data ?? NO_CLIENT_TYPES, isLoading: query.isLoading };
-}
-
-const NO_CLIENT_TYPES: ClientType[] = [];
-
-/**
  * Новая роль. Тип клиента обязателен: роль без него не привязана
  * ни к одной таблице входа, и войти под ней нельзя.
  *

@@ -7,6 +7,7 @@ import { reportError, toast } from "@/shared/lib/toast";
 import {
   RELATION_DIRECTION,
   toAutoFiltersBody,
+  toSelfDefaultBody,
   type RelationDraft,
 } from "../model/relation-draft";
 import type { Labels, Relation } from "../model/types";
@@ -201,6 +202,7 @@ export function useCreateRelation(tableSlug: string | undefined) {
         relation_table_slug: draft.toSlug,
         view_fields: draft.viewFieldIds,
         auto_filters: toAutoFiltersBody(draft.autoFilters),
+        ...toSelfDefaultBody(draft.selfDefault),
         label,
         attributes: { [`label_${language}`]: label },
       });
@@ -271,6 +273,9 @@ export function useUpdateRelation(tableSlug: string | undefined) {
          * и `...raw` вернул бы прежние пары поверх удалённых.
          */
         auto_filters: toAutoFiltersBody(draft.autoFilters),
+        /* Тем же порядком и по той же причине: колонки переписываются
+           безусловно, и `...raw` вернул бы прежнее поверх снятого. */
+        ...toSelfDefaultBody(draft.selfDefault),
         label,
         attributes: { ...attributes, label, [`label_${language}`]: label },
       });

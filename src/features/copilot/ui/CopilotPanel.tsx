@@ -49,7 +49,15 @@ export function CopilotPanel() {
   const box = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
 
-  if (!copilotOpen) return null;
+  /*
+   * Курсор в поле — на КАЖДОЕ открытие, а не на монтирование: панель
+   * с экрана не снимается (иначе ей нечем уезжать), и `autoFocus`
+   * сработал бы один раз за жизнь вкладки — при загрузке приложения,
+   * в закрытую панель.
+   */
+  useEffect(() => {
+    if (copilotOpen) box.current?.focus();
+  }, [copilotOpen]);
 
   const submit = (text: string) => {
     if (!text.trim() || chat.sending) return;
@@ -72,7 +80,20 @@ export function CopilotPanel() {
   return (
     <aside
       ref={panel}
-      style={{ width: copilotWidth }}
+      /*
+       * Закрытая уезжает ОТРИЦАТЕЛЬНЫМ ОТСТУПОМ, как и сайдбар: ширину
+       * в это же время пишет ручка размера, и переход по ней превратил
+       * бы перетаскивание в желе. Отступ двигает и панель, и контент
+       * за ней — одним свойством.
+       *
+       * Уехавшая лежит за правым краем окна; чтобы она не завела там
+       * горизонтальную прокрутку, оболочка приложения обрезает по X
+       * (см. _authed.tsx).
+       */
+      style={{ width: copilotWidth, marginRight: copilotOpen ? 0 : -copilotWidth }}
+      /* За краем экрана, но в DOM — значит, вне обхода с клавиатуры:
+         Tab не должен уводить в невидимое. */
+      inert={!copilotOpen}
       /* Панель — это фон приложения, а не карточка на нём: ни рамки,
          ни скругления, ни полей, как у сайдбара. Карточка здесь одна —
          контент; всё, что от неё справа и слева, лежит на общем фоне.
@@ -82,7 +103,7 @@ export function CopilotPanel() {
          (p-2): иначе шапка помощника висит на 8px выше шапки страницы,
          и три заголовка на экране стоят на двух разных уровнях. Карточки
          нет — нет и отступа. */
-      className={`relative flex shrink-0 flex-col overflow-hidden ${
+      className={`relative flex shrink-0 flex-col overflow-hidden transition-[margin-right] duration-200 ease-out ${
         sidebarCollapsed ? "" : "pt-2"
       }`}
     >
@@ -336,8 +357,9 @@ function Composer({
         <textarea
           ref={inputRef}
           rows={1}
-          // Панель открыли, чтобы спросить: курсор сразу здесь.
-          autoFocus
+          /* Курсор ставит сама панель, на каждое открытие (см.
+             CopilotPanel): она смонтирована всегда, и autoFocus здесь
+             сработал бы разово — при загрузке приложения. */
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {

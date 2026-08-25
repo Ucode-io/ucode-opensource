@@ -18,8 +18,16 @@ import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Modal } from "@/shared/ui/modal";
 import { Popover, PopoverItem, PopoverSeparator } from "@/shared/ui/popover";
 import { Select } from "@/shared/ui/input";
+import { useClientTypes } from "../api/client-types";
 import {
-  useClientTypes,
+  CUSTOM_RIGHTS,
+  useCreateCustomPermission,
+  useCustomPermissions,
+  useDeleteCustomPermission,
+  useUpdateCustomAccess,
+  type CustomPermission,
+} from "../api/custom-permissions";
+import {
   useCreateRole,
   useDeleteRole,
   useMenuPermissions,
@@ -82,7 +90,7 @@ export function RoleSettings() {
   const [draft, setDraft] = useState<RolePermissions | null>(null);
   useEffect(() => setDraft(permissions ?? null), [permissions]);
 
-  const [tab, setTab] = useState<"tables" | "global" | "menu">("tables");
+  const [tab, setTab] = useState<"tables" | "global" | "menu" | "custom">("tables");
   /** Таблиц в живом проекте полторы сотни — без поиска это стена. */
   const [query, setQuery] = useState("");
 
@@ -191,6 +199,9 @@ export function RoleSettings() {
               <Tab active={tab === "global"} onClick={() => setTab("global")}>
                 {t("roles.global")}
               </Tab>
+              <Tab active={tab === "custom"} onClick={() => setTab("custom")}>
+                {t("customRights.title")}
+              </Tab>
 
               {tab === "tables" && (
                 <div className="ml-auto w-56">
@@ -210,8 +221,16 @@ export function RoleSettings() {
                 дерево грузится по уровню, и класть его в общий черновик
                 прав на таблицы нечем. */}
             {tab === "menu" && <MenuRights roleId={active} />}
+            {/* Свои права — тоже своя ручка и своё дерево: право живёт
+                у типа клиента роли, а не у неё самой. */}
+            {tab === "custom" && (
+              <CustomRights
+                roleId={active}
+                clientTypeId={roles.find((role) => role.id === active)?.clientTypeId ?? ""}
+              />
+            )}
 
-            {tab !== "menu" && (
+            {tab !== "menu" && tab !== "custom" && (
               <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-t border-border px-3">
                 <p className="text-xs text-fg-subtle">{t("roles.hint")}</p>
 
@@ -731,6 +750,302 @@ function RoleCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreat
             {t("action.cancel")}
           </Button>
           <Button type="submit" disabled={!name.trim() || !clientTypeId || create.isPending}>
+            {create.isPending ? t("common.saving") : t("action.create")}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Свои права роли — те, которых нет в матрице.
+ *
+ * Матрица прав — про таблицы и кнопки САМОЙ админки. Приложению
+ * заказчика этого мало: «может утверждать счета», «видит склад» —
+ * такие права придумывает он. Здесь их заводят и раздают.
+ *
+ * Право принадлежит ТИПУ КЛИЕНТА роли, а не роли: заведённое право
+ * бэкенд сразу добавляет всем ролям этой аудитории. Поэтому кнопка
+ * «Новое право» тут же, рядом с флажками, — заводят и раздают за один
+ * заход, а не в двух разных местах.
+ *
+ * Дерево грузится по уровню, как и меню. Правки копятся и уезжают
+ * по кнопке — по запросу на каждое изменённое право: списка ручка
+ * не принимает.
+ */
+function CustomRights({ roleId, clientTypeId }: { roleId: string; clientTypeId: string }) {
+  const { t } = useTranslation();
+  const update = useUpdateCustomAccess(roleId, clientTypeId);
+  const remove = useDeleteCustomPermission();
+
+  /** Правки по id права: они и уезжают на сервер. */
+  const [changed, setChanged] = useState<Record<string, CustomPermission>>({});
+  /** `null` — форма закрыта. Иначе — чьим ребёнком заводим. */
+  const [adding, setAdding] = useState<{ parentId: string; parentTitle: string } | null>(null);
+  const [deleting, setDeleting] = useState<CustomPermission | null>(null);
+
+  const apply = (permission: CustomPermission) =>
+    setChanged((current) => ({ ...current, [permission.id]: permission }));
+
+  /* Роль без типа клиента заведена мимо нашей формы: прав аудитории
+     у неё нет, и показывать пустое дерево значит врать. */
+  if (!clientTypeId) {
+    return <p className="p-4 text-sm text-fg-subtle">{t("customRights.noClientType")}</p>;
+  }
+
+  return (
+    <>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="sticky top-0 z-10 flex h-9 items-center gap-2 border-b border-border bg-surface pr-3 pl-2 text-xs text-fg-muted">
+          <span className="min-w-0 flex-1">{t("customRights.name")}</span>
+          {CUSTOM_RIGHTS.map((right) => (
+            <span key={right} className="w-20 shrink-0 text-center">
+              {t(`roles.right.${right}` as TranslationKey)}
+            </span>
+          ))}
+          {/* Место под кнопки строки — иначе подписи прав съезжают
+              относительно флажков под ними. */}
+          <span className="w-14 shrink-0" />
+        </div>
+
+        <div className="p-2">
+          <CustomLevel
+            roleId={roleId}
+            clientTypeId={clientTypeId}
+            parentId=""
+            changed={changed}
+            onChange={apply}
+            onAddChild={setAdding}
+            onDelete={setDeleting}
+          />
+
+          <button
+            type="button"
+            onClick={() => setAdding({ parentId: "", parentTitle: "" })}
+            className="mt-1 flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+          >
+            <Icon as={IconPlus} size={14} />
+            {t("customRights.create")}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-t border-border px-3">
+        <p className="text-xs text-fg-subtle">{t("customRights.hint")}</p>
+
+        <Button
+          size="sm"
+          disabled={!Object.keys(changed).length || update.isPending}
+          onClick={() =>
+            update.mutate(Object.values(changed), { onSuccess: () => setChanged({}) })
+          }
+        >
+          {update.isPending ? t("common.saving") : t("action.save")}
+        </Button>
+      </div>
+
+      {adding && (
+        <CustomPermissionDialog
+          clientTypeId={clientTypeId}
+          parentId={adding.parentId}
+          parentTitle={adding.parentTitle}
+          onClose={() => setAdding(null)}
+        />
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title={t("customRights.deleteTitle", { name: deleting.title })}
+          description={t("customRights.deleteDescription")}
+          confirmLabel={t("action.delete")}
+          busy={remove.isPending}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => remove.mutate(deleting.id, { onSuccess: () => setDeleting(null) })}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Один уровень дерева своих прав. Раскрывается любое право: вложенность
+ * тут произвольная — «Склад» → «Списание» → «Утвердить», — и признака
+ * «есть дети» ручка не отдаёт.
+ */
+function CustomLevel({
+  roleId,
+  clientTypeId,
+  parentId,
+  changed,
+  onChange,
+  onAddChild,
+  onDelete,
+  depth = 0,
+}: {
+  roleId: string;
+  clientTypeId: string;
+  parentId: string;
+  changed: Record<string, CustomPermission>;
+  onChange: (permission: CustomPermission) => void;
+  onAddChild: (parent: { parentId: string; parentTitle: string }) => void;
+  onDelete: (permission: CustomPermission) => void;
+  depth?: number;
+}) {
+  const { t } = useTranslation();
+  const { permissions, isLoading } = useCustomPermissions({ roleId, clientTypeId, parentId });
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+
+  if (isLoading) return <p className="px-2 py-1 text-xs text-fg-subtle">{t("common.loading")}</p>;
+
+  if (!permissions.length) {
+    return depth === 0 ? (
+      <p className="px-2 py-1 text-xs text-fg-subtle">{t("customRights.empty")}</p>
+    ) : null;
+  }
+
+  return (
+    <div className="flex flex-col">
+      {permissions.map((permission) => {
+        const value = changed[permission.id] ?? permission;
+        const expanded = open.has(permission.id);
+
+        return (
+          <div key={permission.id} className="flex flex-col">
+            <div
+              className="group/right flex h-9 items-center gap-2 rounded-md pr-2 hover:bg-surface-hover"
+              style={{ paddingLeft: depth * 16 }}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen((current) => {
+                    const next = new Set(current);
+                    if (!next.delete(permission.id)) next.add(permission.id);
+                    return next;
+                  })
+                }
+                aria-label={t(expanded ? "tree.collapse" : "tree.expand")}
+                className="grid size-6 shrink-0 place-items-center rounded text-fg-subtle transition-colors hover:text-fg"
+              >
+                <Icon as={expanded ? IconChevronDown : IconChevronRight} size={14} />
+              </button>
+
+              <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                <span className="truncate text-sm">{value.title}</span>
+                {value.description && (
+                  <span className="truncate text-xs text-fg-subtle">{value.description}</span>
+                )}
+              </span>
+
+              {CUSTOM_RIGHTS.map((right) => (
+                <span key={right} className="flex w-20 shrink-0 justify-center">
+                  <Checkbox
+                    checked={value[right]}
+                    aria-label={`${value.title}: ${t(`roles.right.${right}` as TranslationKey)}`}
+                    onChange={(event) => onChange({ ...value, [right]: event.target.checked })}
+                  />
+                </span>
+              ))}
+
+              <span className="flex w-14 shrink-0 justify-end gap-0.5 opacity-0 transition-opacity group-hover/right:opacity-100 focus-within:opacity-100">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAddChild({ parentId: permission.id, parentTitle: permission.title })
+                  }
+                  aria-label={t("tree.addChild")}
+                  title={t("tree.addChild")}
+                  className="grid size-6 place-items-center rounded text-fg-subtle transition-colors hover:bg-surface-active hover:text-fg"
+                >
+                  <Icon as={IconPlus} size={14} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onDelete(permission)}
+                  aria-label={t("action.delete")}
+                  title={t("action.delete")}
+                  className="grid size-6 place-items-center rounded text-fg-subtle transition-colors hover:bg-danger-subtle hover:text-danger"
+                >
+                  <Icon as={IconTrash} size={14} />
+                </button>
+              </span>
+            </div>
+
+            {expanded && (
+              <CustomLevel
+                roleId={roleId}
+                clientTypeId={clientTypeId}
+                parentId={permission.id}
+                changed={changed}
+                onChange={onChange}
+                onAddChild={onAddChild}
+                onDelete={onDelete}
+                depth={depth + 1}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Новое право: имя и пояснение. Больше у него ничего и нет — права
+ * «да/нет» раздаются флажками в дереве, сразу после заведения.
+ */
+function CustomPermissionDialog({
+  clientTypeId,
+  parentId,
+  parentTitle,
+  onClose,
+}: {
+  clientTypeId: string;
+  parentId: string;
+  parentTitle: string;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const create = useCreateCustomPermission(clientTypeId);
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+
+  return (
+    <Modal onClose={onClose}>
+      <form
+        className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          create.mutate({ title, description, parentId }, { onSuccess: onClose });
+        }}
+      >
+        <h2 className="text-base font-semibold">
+          {parentTitle
+            ? t("customRights.createChild", { name: parentTitle })
+            : t("customRights.create")}
+        </h2>
+
+        <Field label={t("customRights.name")} hint={t("customRights.nameHint")}>
+          <Input
+            autoFocus
+            required
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </Field>
+
+        <Field label={t("customRights.description")}>
+          <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+        </Field>
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            {t("action.cancel")}
+          </Button>
+          <Button type="submit" disabled={!title.trim() || create.isPending}>
             {create.isPending ? t("common.saving") : t("action.create")}
           </Button>
         </div>

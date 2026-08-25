@@ -250,9 +250,21 @@ export function isMultiValue(type: string): boolean {
   return MULTI.has(type);
 }
 
-/** Вид редактора или null, если поле только читается. */
-export function editorKind(field: Field): CellKind | null {
-  if (!field.editable || COMPUTED.has(field.type)) return null;
+/**
+ * Вид редактора или null, если поле только читается.
+ *
+ * `creating` — заводится НОВАЯ запись. Тогда «только чтение», которое
+ * админ поставил полю, не действует: эта настройка про правку, а не про
+ * заполнение. «Номер договора», закрытый от правки, иначе нельзя было бы
+ * задать вообще нигде. Так же считает и старая админка — там запрет
+ * прибавлен через `&& isEditing` (DrawerFormDetailPage.jsx:362).
+ *
+ * Запрет РОЛИ снимать нельзя и при заведении: это про человека, а не
+ * про поле, и открытая на создании форма стала бы обходом права.
+ */
+export function editorKind(field: Field, creating = false): CellKind | null {
+  if (field.locked || COMPUTED.has(field.type)) return null;
+  if (!field.editable && !creating) return null;
 
   const kind = cellKind(field.type);
   if (!EDITABLE.has(kind)) return null;

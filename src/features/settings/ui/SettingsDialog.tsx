@@ -4,6 +4,8 @@ import {
   IconBuilding,
   IconDatabase,
   IconHistory,
+  IconIdBadge2,
+  IconPlug,
   IconRoute,
   IconServer2,
   IconShieldLock,
@@ -18,6 +20,7 @@ import { Icon } from "@/shared/ui/icon";
 import { Modal } from "@/shared/ui/modal";
 import { ActivityLog } from "./ActivityLog";
 import { ApiKeySettings } from "./ApiKeySettings";
+import { ClientTypeSettings } from "./ClientTypeSettings";
 import { ConnectionSettings } from "./ConnectionSettings";
 import { EndpointSettings } from "./EndpointSettings";
 import { EnvironmentSettings } from "./EnvironmentSettings";
@@ -25,6 +28,7 @@ import { ProfileSettings } from "./ProfileSettings";
 import { ProjectSettings } from "./ProjectSettings";
 import { RoleSettings } from "./RoleSettings";
 import { UserSettings } from "./UserSettings";
+import { ResourceSettings } from "./resources/ResourceSettings";
 
 /**
  * Настройки — окно, а не страница.
@@ -36,13 +40,14 @@ import { UserSettings } from "./UserSettings";
  * люди не в них.
  *
  * Разделы сгруппированы по тому, ЧЬИ это настройки: свои, проекта и
- * его внешних границ (ключи, адреса, чужие базы, журнал). Группа —
- * не украшение: девять пунктов подряд читаются как список, а не как
- * структура, и «Окружения» теряются между «Профилем» и «API-ключами».
+ * его внешних границ (ключи, адреса, чужие базы, ресурсы, журнал).
+ * Группа — не украшение: одиннадцать пунктов подряд читаются как
+ * список, а не как структура, и «Окружения» теряются между «Профилем»
+ * и «API-ключами».
  *
  * Пустых пунктов нет: пункт, который ничего не открывает, — это
- * обещание. Разделы, которых у нас нет намеренно (биллинг, ресурсы,
- * функции, микрофронтенды), перечислены с причинами в docs/PARITY.md.
+ * обещание. Разделы, которых у нас нет намеренно (биллинг, функции,
+ * микрофронтенды), перечислены с причинами в docs/PARITY.md.
  *
  * Содержимое монтируется только у открытого раздела — значит и запросы
  * уходят только у него. Восемь разделов, грузящихся разом при открытии
@@ -65,7 +70,21 @@ type Section = {
   wide?: boolean;
 };
 
-const GROUPS: { titleKey: TranslationKey; items: Section[] }[] = [
+const GROUPS: {
+  titleKey: TranslationKey;
+  /**
+   * Право на ГРУППУ целиком. `settings_button` — это не кнопка окна,
+   * как читается по имени, а разрешение на настройки ПРОЕКТА: без него
+   * старая админка выбрасывает из окна всё, кроме личной группы
+   * (`useSettingsPopupProps.jsx:286` — `tabs.splice(1)`).
+   *
+   * Поэтому право стоит на группе, а не на каждом разделе: у половины
+   * разделов своего права нет вовсе, и без группового они оставались бы
+   * видны роли, которой настройки проекта запрещены целиком.
+   */
+  right?: string;
+  items: Section[];
+}[] = [
   {
     titleKey: "settings.groupAccount",
     items: [
@@ -74,6 +93,7 @@ const GROUPS: { titleKey: TranslationKey; items: Section[] }[] = [
   },
   {
     titleKey: "settings.groupProject",
+    right: "settings_button",
     items: [
       {
         id: "project",
@@ -88,12 +108,19 @@ const GROUPS: { titleKey: TranslationKey; items: Section[] }[] = [
         right: "environments_button",
         wide: true,
       },
+      {
+        id: "clientTypes",
+        labelKey: "clientTypes.title",
+        icon: IconIdBadge2,
+        wide: true,
+      },
       { id: "users", labelKey: "users.title", icon: IconUsers, wide: true },
       { id: "roles", labelKey: "settings.roles", icon: IconShieldLock, wide: true },
     ],
   },
   {
     titleKey: "settings.groupDeveloper",
+    right: "settings_button",
     items: [
       {
         id: "apiKeys",
@@ -110,6 +137,7 @@ const GROUPS: { titleKey: TranslationKey; items: Section[] }[] = [
         wide: true,
       },
       { id: "connections", labelKey: "connections.title", icon: IconDatabase, wide: true },
+      { id: "resources", labelKey: "resources.title", icon: IconPlug, wide: true },
       {
         id: "activity",
         labelKey: "activity.title",
@@ -125,11 +153,13 @@ const CONTENT: Record<string, () => React.JSX.Element> = {
   profile: ProfileSettings,
   project: ProjectSettings,
   environments: EnvironmentSettings,
+  clientTypes: ClientTypeSettings,
   users: UserSettings,
   roles: RoleSettings,
   apiKeys: ApiKeySettings,
   endpoints: EndpointSettings,
   connections: ConnectionSettings,
+  resources: ResourceSettings,
   activity: ActivityLog,
 };
 
@@ -144,6 +174,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
    * ставит роли.
    */
   const allowed: Record<string, boolean> = {
+    settings_button: useGlobalRight("settings_button"),
     project_settings_button: useGlobalRight("project_settings_button"),
     environments_button: useGlobalRight("environments_button"),
     api_keys_button: useGlobalRight("api_keys_button"),
@@ -151,10 +182,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
     version_button: useGlobalRight("version_button"),
   };
 
-  const groups = GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !item.right || allowed[item.right]),
-  })).filter((group) => group.items.length);
+  const groups = GROUPS.filter((group) => !group.right || allowed[group.right])
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.right || allowed[item.right]),
+    }))
+    .filter((group) => group.items.length);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();

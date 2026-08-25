@@ -289,6 +289,8 @@ export type ViewEdit = {
   groupBy?: string[];
   /** Поле раскладки вкладками. Пустая строка — убрать вкладки. */
   tabGroup?: string;
+  /** Поле дорожек доски. Пустая строка — убрать дорожки. */
+  subGroup?: string;
   /** Слаг поля начала события. Пустая строка — календарю нечего рисовать. */
   dateFrom?: string;
   /** Слаг поля конца события. Пустая строка — событие точкой в дне. */
@@ -323,6 +325,7 @@ export function toUpdateBody({
   infiniteScroll,
   groupBy,
   tabGroup,
+  subGroup,
   dateFrom,
   dateTo,
 }: ViewEdit): Record<string, unknown> {
@@ -363,6 +366,13 @@ export function toUpdateBody({
      * а не выбор одного поля). Порядок = порядок уровней.
      */
     ...(groupBy === undefined ? {} : { group_by_columns: groupBy }),
+    /*
+     * Дорожки доски. Снятие — именно `null`, а не пустая строка: так
+     * его пишет старая админка, и её же экран сравнивает ключ с id поля
+     * (BoardSubGroup.jsx:77) — пустая строка сравнением не отличается
+     * от «поля с пустым id», а null отличается.
+     */
+    ...(subGroup === undefined ? {} : { sub_group_by_id: subGroup || null }),
   };
 
   return {
@@ -475,6 +485,12 @@ export function toView(dto: ViewDto): View {
     infiniteScroll: dto.attributes?.["infinite_scroll"] === true,
     groupByIds: toGroupByIds(dto.attributes),
     tabGroupId: typeof dto.group_fields?.[0] === "string" ? dto.group_fields[0] : "",
+    /* Дорожки доски. Ключ снимается через null: старая админка пишет
+       туда именно `null`, а не пустую строку (useBoardSubGroupProps.jsx:15). */
+    subGroupId:
+      typeof dto.attributes?.["sub_group_by_id"] === "string"
+        ? dto.attributes["sub_group_by_id"]
+        : "",
     dateFromSlug: toDateSlug(dto.calendar_from_slug, dto.attributes, "calendar_from_slug"),
     dateToSlug: toDateSlug(dto.calendar_to_slug, dto.attributes, "calendar_to_slug"),
     statusFieldSlug: dto.status_field_slug?.trim() ?? "",

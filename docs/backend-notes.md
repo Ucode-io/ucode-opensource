@@ -688,6 +688,93 @@ api_keys.go:36` — одиннадцать колонок, лимитов сре
 Пришедший по ней регистрируется сам — `/v2/register` с теми же
 `project-id`, `env_id`, `role_id`, `client_type_id`.
 
+## Типы клиентов
+
+**Правка теряет `self_recover`.**
+`ucode_go_auth_service/grpc/service/client_service_v2.go:364` кладёт
+значение в тело под именем `self_recorder`, а колонка в
+`client_type` называется `self_recover`
+(`ucode_go_object_builder_service/migrations/postgres/
+000001_init_tables.up.sql:26`). Object-builder пишет только те ключи,
+у которых есть строка в `field` (`storage/postgres/items.go:641`),
+поэтому опечатка не создаёт мусора — она просто ничего не меняет.
+Прежнее значение остаётся целым.
+
+Флажок «Восстановление пароля» показан только при СОЗДАНИИ: там путь
+другой (`client_service_v2.go:47`, через proto с правильным именем)
+и значение доезжает.
+
+**Создание теряет `default_page`.** Там же, `client_service_v2.go:43`:
+тело для object-builder собирается из девяти полей
+(`CreateClientTypeRequestToObjService`), и адреса среди них нет —
+в отличие от правки, где он есть (`client_service_v2.go:369`).
+Поэтому «Страница после входа» есть в форме правки и её нет в форме
+создания.
+
+**Правка ВСЕГДА переписывает `confirm_by`.** Поле в
+`V2UpdateClientTypeRequest` — enum, и его нулевое значение
+(`UNDECIDED`) уезжает в базу, даже если в теле запроса поля не было.
+Поэтому мы возвращаем сохранённое значение обратно числом
+(`features/settings/api/client-types`, `CONFIRM_BY`), хотя сам
+`confirm_by` не показываем: решений по нему никто не принимает —
+в ответе входа он захардкожен нулём
+(`ucode_go_object_builder_service/storage/postgres/login.go:357`).
+
+**Имя с пробелом ломает автосозданную таблицу входа.**
+`client_service_v2.go:72` заводит таблицу со слагом
+`strings.ToLower(strings.ReplaceAll(name, " ", "_")) + "_users"`,
+а в запись `client_type` кладёт `strings.ToLower(name) + "_users"`
+(строка 96) — без замены пробела. У типа «Delivery Drivers» таблица
+называется `delivery_drivers_users`, а тип ссылается на
+`delivery drivers_users`, которой нет.
+
+## Свои права (custom_permission)
+
+**Только PostgreSQL.** `ucode_go_admin_api_gateway/api/handlers/v1/
+custom_permission.go:242` — шлюз отвечает «resource type not supported»
+всему, что не `ResourceType_POSTGRESQL`. На mongo-проекте вкладка «Свои
+права» откроется и останется пустой; обойти это нечем.
+
+**Доступ правится по одному.** `PUT /v1/custom-permission/accesses`
+принимает ОДИН `custom_permission_id`
+(`ucode_go_object_builder_service/storage/postgres/
+custom_permission.go:298`), списка нет. Поэтому «Сохранить» на вкладке
+шлёт по запросу на каждое изменённое право.
+
+Пустая строка в `read`/`write`/`update`/`delete` означает «не трогать»
+(там же, строка 311). Мы всегда шлём все четыре — иначе снятая галка
+не доехала бы.
+
+**Права появляются у роли только через два INSERT.** Заведение права
+добавляет строку доступа каждой роли этого типа клиента
+(`custom_permission.go:96`), заведение роли — каждому праву типа
+(`storage/postgres/permission.go:605`). Список читается JOIN'ом
+по `custom_permission_access`, поэтому право без строки доступа
+не видно вовсе.
+
+## Таблицы аудитории (connections)
+
+**`main_table_slug` не читает никто.** Колонка есть
+(`000001_init_tables.up.sql:297`), в форме старой админки она
+обязательна (`Matrix/ConnectionCreateModal.jsx:243`), но во всех
+четырёх сервисах она только пишется и сканируется в список — ни вход,
+ни `/v2/get-connection-options` её не используют.
+
+**`view_slug` некуда взять.** Колонка есть и уезжает приложению при
+входе (`storage/postgres/login.go:190`), а у таблицы `view` колонки
+`slug` нет вовсе (`000001_init_tables.up.sql:398`): у вида есть `id`
+и `name`. Старая админка кладёт туда слаг ПОЛЯ выбранной таблицы.
+
+**`view_label`, `icon` и `type` не пишет ни одна ручка.** Вход их
+отдаёт, но в `CreateConnectionRequest` таких полей нет
+(`ucode_go_auth_service/api/models/connection_v2.go:3`).
+
+**`project_id` в теле не действует.** `V2CreateConnection` собирает
+структуру ДО того, как подставляет `connection.ProjectId`
+(`api/handlers/connection_v2.go:68` против `:73`). Значения это
+не меняет: колонки `project_id` у `connections` нет, и запись
+её игнорирует.
+
 ## Журнал изменений (version_history)
 
 **Опечатка в имени поля.** В proto поле называется `previus`
@@ -710,3 +797,120 @@ version_history WHERE true` и фильтрует только по типу, д
 окружения. Это не проблема, но объясняет, почему записи соседнего
 окружения не видны и почему `env_id` в параметрах ни на что
 не влияет.
+
+## Ресурсы проекта (project_resource)
+
+**Список уже склеен из двух таблиц.** `GetProjectResourceList` —
+это UNION ALL: строки `project_resource` плюс строки `resource`,
+присоединённые через `resource_environment`
+(`ucode_go_company_service/storage/postgres/resource.go:1626`).
+То есть базы проекта в ответе v2 УЖЕ есть. Старая админка
+дополнительно грузит их же из `/v1/company/project/resource`
+и клеит три списка в один
+(`SettingsPopup/modules/Resources/useResourcesProps.jsx:83`) —
+и показывает каждую базу дважды.
+
+**Порядка у списка нет.** В запросе нет `ORDER BY` вовсе. При этом
+код подтверждения берётся из ПЕРВОГО ресурса типа
+(`ucode_go_auth_service/grpc/service/session_service_v2.go:1104`,
+`api/handlers/register_v2.go:266`). Два ресурса SMS в одном
+окружении — и какой из них работает, не определено ничем.
+
+**`type` при создании — число, при правке — строка.** Тело шлюз
+читает обычным `ShouldBindJSON`, то есть `encoding/json`, а не
+protojson. В `AddResourceToProjectRequest` поле `type` — proto-enum,
+и «SMS» строкой валит разбор ВСЕГО тела
+(`api/handlers/v1/project_resource.go:35`). В `ProjectResource`
+(правка) то же поле объявлено строкой — там наоборот.
+
+**Правка не меняет тип.** `UPDATE project_resource` пишет ровно три
+колонки: `name`, `settings` и `external_id`
+(`storage/postgres/resource.go:1846`). Присланный `type` не читает
+никто.
+
+**Правка затирает настройки целиком.** `settings = :settings`, без
+слияния. Переименование ресурса, отправленное без настроек, обнуляет
+учётку — в том числе выданную самим бэкендом (Superset, Metabase).
+
+**Настройки системных строк подставляются под postgres.** Когда
+`GetSingleProjectResouece` не находит строку в `project_resource`,
+он читает `resource` и кладёт host/port/username/database
+в `settings.postgres` — независимо от того, mongo это или clickhouse
+(`storage/postgres/resource.go:1812`). Своего конверта у mongo нет.
+
+**Удалить системную строку нельзя, а править — можно молча.**
+`DELETE ... RETURNING id` по строке, которой нет в `project_resource`,
+даёт `ErrNoRows` и 500; `UPDATE` не находит её и отвечает успехом,
+ничего не изменив.
+
+**Пустой список переменных приезжает одной пустой строкой.**
+`JSON_AGG` по `LEFT JOIN` даёт `[{"id":null,…}]`, а не `[]`
+(`storage/postgres/resource.go:1725`). Через omitempty до фронта
+доезжает `[{}]`, и `variables.length` на такой строке врёт.
+
+**Список переменных не отдаёт значения.** `GetVariableResourceList`
+выбирает id, project_id, environment_id, key и project_resource_id —
+колонки `value` в SELECT нет
+(`storage/postgres/resource.go:1354`). Значения приходят только
+в ответе на запрос одного ресурса.
+
+**`false` в ответе переподключения выпадает.** `ReconnectResourceRes`
+отдаёт по строке на службу с полем `status bool`
+(`projects_service.proto:374`), а `omitempty` выбрасывает ложь.
+«Служба не ответила» — это ОТСУТСТВИЕ `status`, а не `status: false`.
+Заодно: ветки есть только у mongo и postgres
+(`grpc/service/resource.go:1113`), у остальных типов ручка возвращает
+пустой список и ничего не делает.
+
+**Google Drive, Google Calendar, Telegram и Instagram отклоняются.**
+Шлюз отвечает 400 со ссылкой на свою ручку подключения
+(`api/handlers/v1/project_resource.go:56`, `:60`, `:64`, `:75`).
+Telegram и Instagram не дают и удалить (`:729`, `:733`).
+
+**Superset, Metabase и Transcoder игнорируют присланные настройки.**
+Бэкенд заводит учётку сам и перезаписывает `in.Settings` своими
+значениями (`grpc/service/resource.go:2546` для superset), а для
+Transcoder создаёт компанию и проект в перекодировщике (`:2225`).
+Поля формы в старой админке для этих типов отключены — и это верно.
+
+**Ресурс POSTGRESQL — это подключение внешней базы.**
+`AddResourceToProject` зовёт `CreateConnectionAndSchema`
+(`grpc/service/resource.go:2582`) — ту же ручку, что и
+`POST /v1/connections` (`api/handlers/v1/table.go:1333`). Разница
+в том, что через ресурсы нет второго шага, выбора таблиц, без
+которого подключение бесполезно.
+
+## Права и middleware
+
+**`AdminAuthMiddleware` прав роли не проверяет вовсе.** Имя обманывает:
+это не «только супер-админ», а «без проверки прав». Обычный
+`AuthMiddleware` зовёт `V2HasAccessUser`, и тот сверяет путь, метод
+и таблицу с правами роли (`session_service_v2.go:2024`,
+`checkPermission`). Соседний `HasAccessSuperAdmin`
+(`session_service.go:295`) только разбирает токен, находит сессию
+и пользователя — и возвращает данные сессии. Ни одной проверки прав
+в нём нет, и флага «супер-админ» он тоже не смотрит: годится любой
+живой токен.
+
+Под этим middleware висит целая группа `/v2`
+(`api/api.go:536`): логи функций, запуск функции, ресурсы проекта
+(`/v2/company/project/resource`), печатные формы (`/v2/docx-template`)
+и конвертер HTML. То есть роль без единого права дотянется до них
+запросом напрямую — единственное, что стоит на пути, это наши же
+кнопки. Из фронта это не чинится; здесь записано, чтобы никто
+не принял отсутствие 403 за разрешение.
+
+## View
+
+**`function_path` только читается.** Колонка есть
+(`ucode_go_object_builder_service/migrations/postgres/
+000001_init_tables.up.sql:428`), её читают в пяти местах — настройки
+связи, раскладка, секции, — и по ней поле связи должно брать варианты
+не из таблицы, а из функции проекта. Но записать её нечем: во всём
+сервисе она встречается только в списках SELECT (`view.go:234`, `:428`),
+ни в одном INSERT и ни в одном UPDATE её нет.
+
+То есть выпадающий список «Function» в форме связи старой админки
+(`Constructor/Tables/Form/Relations/FunctionPath.jsx`) не сохраняет
+ничего, а её же ветка чтения (`RelationField.jsx:265`) не срабатывает
+никогда. Настройки у нас нет по этой причине, а не по забывчивости.

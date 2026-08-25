@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  IconAppWindow,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
@@ -17,10 +18,9 @@ import {
   IconGripVertical,
   IconHeading,
   IconLayoutList,
-  IconLayoutSidebarRightExpand,
+  IconLayoutSidebarRight,
+  IconMaximize,
   IconPlus,
-  IconSquare,
-  IconSquareToggleHorizontal,
   IconTable,
   IconX,
   type Icon as TablerIcon,
@@ -110,6 +110,7 @@ export function ItemDrawer({
   tabTypes,
   onPdf,
   actions,
+  creating,
   titlePlaceholder,
   footer,
   onEdit,
@@ -204,6 +205,15 @@ export function ItemDrawer({
    */
   actions?: ReactNode;
   /**
+   * Карточка заводит НОВУЮ запись, а не показывает существующую.
+   *
+   * Меняет ровно одно: поле, помеченное админом «только чтение»,
+   * здесь открыто. Эта настройка про правку заведённой записи, и без
+   * такого различия «Номер договора», закрытый от правки, нельзя было
+   * бы задать вообще нигде. Запрет РОЛИ действует и здесь.
+   */
+  creating?: boolean | undefined;
+  /**
    * Чем подписать карточку, у которой заголовка нет: у новой записи
    * это «Новая запись», а не «Без заголовка» — заголовок ей ещё
    * неоткуда взять.
@@ -282,6 +292,33 @@ export function ItemDrawer({
   );
 
   /*
+   * Карточка не появляется и не исчезает, а приезжает и уезжает.
+   *
+   * Въезд отдан браузеру: `@starting-style` (variant `starting:`) — это
+   * значения «до первого кадра», от которых он сам доводит элемент до
+   * обычных. Состояния для этого не нужно.
+   *
+   * Выезд без состояния не сделать: снятому с экрана элементу двигаться
+   * уже нечем. Поэтому закрытие сначала ПРОИГРЫВАЕТСЯ и только потом
+   * доходит до вызывающего — через все три двери сразу (крестик,
+   * Escape, щелчок мимо), иначе анимации не было бы у двух из них.
+   *
+   * Метка в ref, а не в состоянии: она нужна ровно для того, чтобы
+   * второе нажатие не завело второй таймер, и перерисовки не стоит.
+   */
+  const [closing, setClosing] = useState(false);
+  const exit = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const dismiss = () => {
+    if (exit.current) return;
+
+    setClosing(true);
+    exit.current = setTimeout(onClose, EXIT_MS);
+  };
+
+  useEffect(() => () => clearTimeout(exit.current), []);
+
+  /*
    * Escape закрывает drawer — но только когда поверх него ничего нет.
    * У открытого редактора свой Escape («отменить правку»), и одно
    * нажатие не должно делать оба действия сразу.
@@ -299,7 +336,7 @@ export function ItemDrawer({
       if (event.key !== "Escape" || active) return;
       if (DRAWER_STACK[DRAWER_STACK.length - 1] !== self) return;
 
-      onClose();
+      dismiss();
     };
 
     document.addEventListener("keydown", onKeyDown);
@@ -309,7 +346,7 @@ export function ItemDrawer({
       const at = DRAWER_STACK.indexOf(self);
       if (at !== -1) DRAWER_STACK.splice(at, 1);
     };
-  }, [active, onClose]);
+  }, [active, dismiss]);
 
   const guid = typeof row?.guid === "string" ? row.guid : undefined;
 
@@ -370,7 +407,7 @@ export function ItemDrawer({
 
   const open = (field: Field, element: HTMLElement) => {
     // Флажок переключается на месте — как в таблице.
-    if (row && guid && onEdit && editorKind(field) === "boolean") {
+    if (row && guid && onEdit && editorKind(field, creating === true) === "boolean") {
       onEdit(guid, field.slug, !row[field.slug]);
       return;
     }
@@ -419,9 +456,11 @@ export function ItemDrawer({
           остаётся рабочей, во весь экран её и не видно. */}
       {drawerMode === "center" && (
         <div
-          className="fixed inset-0 z-40"
+          className={`fixed inset-0 z-40 transition-opacity duration-200 ease-out starting:opacity-0 ${
+            closing ? "opacity-0" : ""
+          }`}
           style={{ background: "var(--color-overlay)" }}
-          onClick={onClose}
+          onClick={dismiss}
         />
       )}
 
@@ -435,9 +474,12 @@ export function ItemDrawer({
          * бы единственной плавающей поверхностью на экране, где всё
          * остальное лежит встык.
          */
-        className={`fixed z-50 flex flex-col bg-surface ${
+        /* Переход по `translate`, а не по `transform`: утилиты сдвига
+           в tailwind 4 пишут отдельное свойство translate, и переход
+           по transform не двигал бы ничего. */
+        className={`fixed z-50 flex flex-col bg-surface transition-[translate,opacity] duration-200 ease-out ${
           side && sidebarCollapsed ? SIDE_FLUSH : MODE_CLASS[drawerMode]
-        }`}
+        } ${closing ? EXIT_CLASS[drawerMode] : ENTER_CLASS[drawerMode]}`}
       >
         {side && (
           <ResizeHandle
@@ -468,7 +510,7 @@ export function ItemDrawer({
           <IconButton
             icon={side ? IconChevronsRight : IconX}
             label={t("action.close")}
-            onClick={onClose}
+            onClick={dismiss}
           />
 
           <Popover
@@ -822,6 +864,7 @@ export function ItemDrawer({
             locale={locale}
             language={language}
             heading={active.slug === title?.slug}
+            creating={creating}
             onSettings={onSettings}
             onEdit={(value) => {
               if (guid) onEdit?.(guid, active.slug, value);
@@ -948,10 +991,22 @@ const MODE_LABEL = {
   full: "drawer.fullPage",
 } as const;
 
+/**
+ * Значок режима рисует, ГДЕ окажется карточка, а не что с ней сделают:
+ *   сбоку     — рамка с колонкой у правого края, ровно там, где панель;
+ *   по центру — окно с шапкой: карточка поверх страницы;
+ *   во весь   — четыре угла: рамки больше нет, есть экран.
+ *
+ * Прежние читались мимо: у бокового внутри стояла стрелка «раскрыть»
+ * (`IconLayoutSidebarRightExpand`) — обещание действия, которого нет;
+ * центральный был переключателем (`IconSquareToggleHorizontal`),
+ * а полноэкранный — пустым квадратом, то есть в строке меню
+ * неотличим от невыбранного флажка.
+ */
 const MODE_ICON = {
-  side: IconLayoutSidebarRightExpand,
-  center: IconSquareToggleHorizontal,
-  full: IconSquare,
+  side: IconLayoutSidebarRight,
+  center: IconAppWindow,
+  full: IconMaximize,
 } as const;
 
 /**
@@ -975,6 +1030,33 @@ const MODE_CLASS = {
 
 /** Панель сбоку без сайдбара: встык к краю окна, как и сам контент. */
 const SIDE_FLUSH = "inset-y-0 right-0 border-l border-border shadow-modal";
+
+/**
+ * Откуда карточка приезжает и куда уезжает.
+ *
+ * Сбоку — из-за правого края: панель у края, и въезд оттуда же говорит,
+ * где она живёт. По центру и во весь экран ехать неоткуда — там
+ * проявление: у окна по центру нет своей стороны, а полноэкранное
+ * приехало бы поверх всего сразу.
+ *
+ * Прозрачность есть и у боковой: `translate-x-full` — это ровно ширина
+ * панели, а стоит она в 8px от края, и без затухания в конце оставался
+ * бы видимый край.
+ */
+const ENTER_CLASS = {
+  side: "starting:translate-x-full starting:opacity-0",
+  center: "starting:opacity-0",
+  full: "starting:opacity-0",
+} as const;
+
+const EXIT_CLASS = {
+  side: "translate-x-full opacity-0",
+  center: "opacity-0",
+  full: "opacity-0",
+} as const;
+
+/** Столько едет закрытие. Совпадает с `duration-200` на самой панели. */
+const EXIT_MS = 200;
 
 /** Шире этого drawer забирает экран себе — сайдбар уступает место. */
 const SIDEBAR_YIELDS_AT = 800;

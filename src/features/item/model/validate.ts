@@ -43,7 +43,17 @@ const BUILT_IN: Record<string, RegExp> = {
 };
 
 export function cellError(field: Field, value: unknown): CellError | null {
-  if (isBlank(value)) return field.required ? { kind: "required", message: "" } : null;
+  /*
+   * Строка из одних пробелов — это незаполненное поле, а не значение.
+   * Проверяется здесь, а не в isBlank: та же функция решает, отправлять
+   * ли правку, и там пробел — законное изменение.
+   *
+   * В старой админке для этого есть отдельная ветка, но только под один
+   * тип: обязательный MULTI_LINE проверяется через `.trim()` вручную
+   * (DrawerDetailPage/index.jsx:246), а такой же SINGLE_LINE — нет.
+   */
+  const blank = typeof value === "string" ? !value.trim() : isBlank(value);
+  if (blank) return field.required ? { kind: "required", message: "" } : null;
 
   const pattern = field.validation?.pattern ?? BUILT_IN[field.type];
   if (!pattern) return null;
@@ -79,7 +89,10 @@ export function rowErrors(columns: Field[], row: Item): Map<string, CellError> {
   const errors = new Map<string, CellError>();
 
   for (const field of columns) {
-    if (!editorKind(field)) continue;
+    /* Признак заведения — здесь всегда: эта проверка бывает только
+       у новой строки. Поэтому обязательным считается и поле «только
+       для чтения»: при заведении оно открыто, и заполнить его можно. */
+    if (!editorKind(field, true)) continue;
 
     const error = cellError(field, row[field.slug]);
     if (error) errors.set(field.slug, error);

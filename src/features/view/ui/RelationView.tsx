@@ -14,7 +14,6 @@ import {
   TreeGrid,
   activeFilterCount,
   fromConditions,
-  groupValue,
   nextSorts,
   orderColumns,
   seedFilters,
@@ -683,8 +682,7 @@ export function RelationView({
              */
             {...(tab.canCreate && can.write
               ? {
-                  onAddCard: (columnId: string) =>
-                    createRelated({ [boardField.slug]: groupValue(boardField, columnId) }),
+                  onAddCard: (values: Record<string, unknown>) => createRelated(values),
                 }
               : {})}
             {...(hasMore ? { onEndReached: loadMore } : {})}

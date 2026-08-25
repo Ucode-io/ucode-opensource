@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Relation } from "@/features/table";
-import { autoFilterValues } from "./relation";
+import { autoFilterValues, selfDefaults } from "./relation";
 
 /** Связь с настроенным автофильтром: город отбирается по региону строки. */
 function relationWith(autoFilters: unknown): Relation {
@@ -16,6 +16,7 @@ function relationWith(autoFilters: unknown): Relation {
     linkField: "cities_id",
     viewFields: [{ slug: "name", type: "SINGLE_LINE" }],
     viewFieldIds: [],
+    selfDefault: null,
     raw: { auto_filters: autoFilters },
   };
 }
@@ -52,4 +53,46 @@ test("ненастроенная связь условий не добавляе
   expect(autoFilterValues(relationWith(null), { regions_id: "reg-1" })).toEqual({});
   expect(autoFilterValues(relationWith([{}]), { regions_id: "reg-1" })).toEqual({});
   expect(autoFilterValues(relationWith([{ field_from: "regions_id" }]), {})).toEqual({});
+});
+
+/** Связь, помеченная подстановкой «своего». */
+function selfRelation(
+  selfDefault: Relation["selfDefault"],
+  extra: Partial<Relation> = {},
+): Relation {
+  return { ...relationWith([]), selfDefault, ...extra };
+}
+
+const ME = { userId: "user-1", objectIds: { cities: "city-7", couriers: "courier-3" } };
+
+test("«тот, кто заводит» подставляется в колонку-ссылку", () => {
+  expect(selfDefaults([selfRelation("user")], ME)).toEqual({ cities_id: "user-1" });
+});
+
+/*
+ * «Своя строка» и «вошедший» — разные идентификаторы: у курьера есть
+ * пользователь и есть строка в таблице курьеров. Перепутать их значит
+ * записать в колонку id, которого в целевой таблице нет вовсе.
+ */
+test("«его строка» берётся по целевой таблице, а не по пользователю", () => {
+  expect(selfDefaults([selfRelation("object")], ME)).toEqual({ cities_id: "city-7" });
+
+  const courier = selfRelation("object", { toSlug: "couriers", linkField: "couriers_id" });
+  expect(selfDefaults([courier], ME)).toEqual({ couriers_id: "courier-3" });
+});
+
+test("подставлять нечего — колонки в новой записи нет", () => {
+  // Своей строки в этой таблице у вошедшего нет: пустая строка
+  // в колонке-ссылке — это битый идентификатор, а не «никто».
+  const other = selfRelation("object", { toSlug: "orders", linkField: "orders_id" });
+  expect(selfDefaults([other], ME)).toEqual({});
+
+  expect(selfDefaults([selfRelation("user")], { userId: "", objectIds: {} })).toEqual({});
+  expect(selfDefaults([selfRelation(null)], ME)).toEqual({});
+});
+
+/* У входящей связи колонки-ссылки в нашей строке нет — она в чужой. */
+test("входящая связь ничего не подставляет", () => {
+  const incoming = selfRelation("user", { direction: "incoming" });
+  expect(selfDefaults([incoming], ME)).toEqual({});
 });

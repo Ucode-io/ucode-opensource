@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Field } from "@/features/table";
-import { boardColumns, boardOrderAt, groupValue, NO_GROUP } from "./board";
+import { boardColumns, boardLanes, boardOrderAt, groupValue, NO_GROUP } from "./board";
 
 const tabs = [
   { id: "todo", label: "К работе" },
@@ -131,4 +131,57 @@ test("у MULTISELECT значение уезжает списком", () => {
   expect(groupValue(field("MULTISELECT"), "todo")).toEqual(["todo"]);
   expect(groupValue(field("STATUS"), "todo")).toBe("todo");
   expect(groupValue(field("LOOKUP"), "guid-1")).toBe("guid-1");
+});
+
+const LANE_ARGS = {
+  tabs: [
+    { id: "todo", label: "К работе" },
+    { id: "done", label: "Готово" },
+  ],
+  slug: "status",
+  unassigned: "Без статуса",
+};
+
+test("без поля дорожки доска остаётся одной дорожкой", () => {
+  const lanes = boardLanes({
+    ...LANE_ARGS,
+    lane: "",
+    rows: [{ guid: "1", status: "todo" }],
+  });
+
+  expect(lanes).toHaveLength(1);
+  expect(lanes[0]?.id).toBe("");
+  expect(lanes[0]?.columns.map((column) => column.id)).toEqual(["todo", "done", ""]);
+});
+
+/*
+ * Колонки внутри дорожки те же и в том же порядке: иначе «Готово»
+ * у одного исполнителя оказывалось бы третьим, а у другого — первым,
+ * и доску нельзя было бы читать по строкам.
+ */
+test("у каждой дорожки свои строки и одинаковый набор колонок", () => {
+  const lanes = boardLanes({
+    ...LANE_ARGS,
+    lane: "owner",
+    laneTabs: [{ id: "anna", label: "Анна" }],
+    rows: [
+      { guid: "1", status: "todo", owner: "anna" },
+      { guid: "2", status: "done", owner: "boris" },
+      { guid: "3", status: "todo" },
+    ],
+  });
+
+  // Анна — вариант поля, Борис встретился в данных, пустая дорожка последней.
+  expect(lanes.map((lane) => lane.id)).toEqual(["anna", "boris", ""]);
+  expect(lanes.map((lane) => lane.columns.map((column) => column.id))).toEqual([
+    ["todo", "done", ""],
+    ["todo", "done", ""],
+    ["todo", "done", ""],
+  ]);
+
+  const anna = lanes[0]?.columns.find((column) => column.id === "todo");
+  expect(anna?.rows.map((row) => row.guid)).toEqual(["1"]);
+
+  const nobody = lanes[2]?.columns.find((column) => column.id === "todo");
+  expect(nobody?.rows.map((row) => row.guid)).toEqual(["3"]);
 });

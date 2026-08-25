@@ -1,9 +1,9 @@
 import {
   IconChevronDown,
   IconChevronsLeft,
+  IconChevronsRight,
   IconDeviceDesktop,
   IconLanguage,
-  IconLayoutSidebarLeftExpand,
   IconMoon,
   IconSettings,
   IconSun,
@@ -48,13 +48,22 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
     <>
     <Popover
       trigger={({ open, toggle }) => (
-        <div className="flex items-center gap-1">
+        /*
+         * Подсветка — на ряду целиком, а не на кнопке поповера: кнопка
+         * сворачивания стоит ВНУТРИ этой подсветки, и ряд обязан
+         * подсвечиваться, когда курсор на ней. Кнопки при этом две,
+         * а не одна: вложенных <button> не бывает, да и действия у них
+         * разные — открыть меню и убрать панель.
+         */
+        <div
+          className={`flex items-center gap-1 rounded-md p-1.5 transition-colors hover:bg-surface-hover ${
+            open ? "bg-surface-hover" : ""
+          }`}
+        >
           <button
             type="button"
             onClick={toggle}
-            className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-surface-hover ${
-              open ? "bg-surface-hover" : ""
-            }`}
+            className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
           >
             <Avatar
               letter={letter}
@@ -111,7 +120,7 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
                   close();
                   setSettingsOpen(true);
                 }}
-                className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-sm text-fg transition-colors hover:bg-surface-hover"
+                className={POPOVER_BUTTON}
               >
                 <Icon as={IconSettings} size={14} />
                 {t("workspace.settings")}
@@ -141,6 +150,17 @@ export function WorkspaceHeader({ floating = false }: { floating?: boolean }) {
 }
 
 /**
+ * Кнопка в поповере профиля: 28px, а не 32px как обычная кнопка формы.
+ *
+ * Поповер узкий, и обведённых рамкой кнопок в нём подряд три. В полный
+ * рост они спорили бы со строками списка под собой — а это действия
+ * рядом, не главное в меню. 28px — тот же размер, что у кнопок-иконок
+ * над таблицей (ToolButton): «компактное управление» в системе одно.
+ */
+const POPOVER_BUTTON =
+  "flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-sm text-fg transition-colors hover:bg-surface-hover";
+
+/**
  * Кнопка сворачивания — в шапке, рядом с переключателем рабочего
  * пространства, и появляется только при наведении на сайдбар: место
  * она занимает всегда, а нужна редко.
@@ -157,13 +177,17 @@ function CollapseButton({ floating }: { floating: boolean }) {
       onClick={toggleSidebar}
       aria-label={label}
       title={label}
-      className="grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle opacity-0 transition-opacity group-hover/aside:opacity-100 hover:bg-surface-hover hover:text-fg focus-visible:opacity-100"
+      /* Наведение красит `surface-active`, а не `surface-hover`: кнопка
+         лежит внутри подсвеченного ряда, и второй такой же заливкой
+         она бы на нём не проступила. */
+      className="grid size-7 shrink-0 place-items-center rounded-md text-fg-subtle opacity-0 transition-opacity group-hover/aside:opacity-100 hover:bg-surface-active hover:text-fg focus-visible:opacity-100"
     >
-      {/* Закрепить — тем же значком, что и кнопка в шапке контента:
-          действие одно (и ключ подписи один), а значков на него было
-          два. Свернуть — стрелками влево: это про направление, и рядом
-          с ним ничего похожего нет. */}
-      <Icon as={floating ? IconLayoutSidebarLeftExpand : IconChevronsLeft} size={16} />
+      {/* Пара зеркальная: убрать панель — стрелки влево, вернуть —
+          вправо. Это про НАПРАВЛЕНИЕ, и читается без словаря; коробка
+          с панелью внутри на 16px спорила бы сама с собой — рисует
+          сайдбар там, где его сейчас нет. Тот же значок стоит на кнопке
+          в шапке контента: действие одно (и ключ подписи один). */}
+      <Icon as={floating ? IconChevronsRight : IconChevronsLeft} size={16} />
     </button>
   );
 }
@@ -186,7 +210,10 @@ function ThemeSwitch() {
   ] as const;
 
   return (
-    <div className="flex gap-1 rounded-md border border-border p-0.5">
+    /* Высота — как у соседних кнопок поповера (28px), считая рамку
+       и внутренний зазор: переключатель стоит с ними в одном столбце,
+       и на 34px он читался бы как что-то более важное. */
+    <div className="flex h-7 gap-1 rounded-md border border-border p-0.5">
       {options.map((option) => (
         <button
           key={option.value}
@@ -195,7 +222,7 @@ function ThemeSwitch() {
           aria-label={t(`theme.${option.value}`)}
           title={t(`theme.${option.value}`)}
           aria-pressed={theme === option.value}
-          className={`flex h-7 flex-1 items-center justify-center rounded-sm transition-colors ${
+          className={`flex h-full flex-1 items-center justify-center rounded-sm transition-colors ${
             theme === option.value
               ? "bg-surface-active text-fg"
               : "text-fg-subtle hover:bg-surface-hover hover:text-fg"
@@ -221,7 +248,7 @@ function LanguageButton() {
     <button
       type="button"
       onClick={() => setLocale(next)}
-      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-border text-sm text-fg uppercase transition-colors hover:bg-surface-hover"
+      className={`${POPOVER_BUTTON} uppercase`}
     >
       {current}
       <Icon as={IconLanguage} size={14} />

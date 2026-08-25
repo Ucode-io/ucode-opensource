@@ -196,10 +196,17 @@ export function DataGrid({
   onAddRow,
   creating,
   onEndReached,
+  newRowDefaults,
 }: {
   /** Слаг таблицы: ячейка-связь пишет не только в свою строку. */
   tableSlug: string;
   columns: Field[];
+  /**
+   * Чем заполнена новая строка сверх настроек полей — «свой» по связи,
+   * помеченной подстановкой (см. features/item/model/relation).
+   * Считает это страница: ей видно и схему, и сеанс.
+   */
+  newRowDefaults?: Item | undefined;
   /**
    * Докрутили до конца загруженного — пора просить следующий кусок.
    * Не задан — таблица показывает ровно то, что ей дали.
@@ -325,7 +332,7 @@ export function DataGrid({
     setDraft((current) => (current ? { ...current, ...values } : current));
 
   const startDraft = () => {
-    setDraft(blankItem(columns));
+    setDraft(blankItem(columns, newRowDefaults));
     setShowErrors(false);
   };
 
@@ -1054,6 +1061,9 @@ export function DataGrid({
           relations={byId}
           locale={locale}
           language={language}
+          /* У черновика «только чтение» не действует: настройка про
+             правку заведённой строки, а не про её заполнение. */
+          creating={activeDraft}
           // «Настроить поле» прямо из раскрытой ячейки: варианты
           // статуса правят, глядя на список, а не на схему таблицы.
           onSettings={columnActions?.settings}

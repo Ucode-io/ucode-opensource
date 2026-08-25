@@ -19,12 +19,15 @@ export function ToolButton({
   label,
   open = false,
   on = false,
+  spin = false,
   onClick,
 }: {
   icon: TablerIcon;
   label: string;
   open?: boolean;
   on?: boolean;
+  /** Действие уже выполняется: значок крутится, повторный щелчок не нужен. */
+  spin?: boolean;
   onClick: () => void;
 }) {
   const color = on ? "text-accent-text" : open ? "text-fg" : "text-fg-muted hover:text-fg";
@@ -33,6 +36,7 @@ export function ToolButton({
     <button
       type="button"
       onClick={onClick}
+      disabled={spin}
       aria-label={label}
       aria-pressed={open}
       title={label}
@@ -40,7 +44,7 @@ export function ToolButton({
         open ? "bg-accent-subtle" : "hover:bg-surface-hover"
       }`}
     >
-      <Icon as={icon} size={16} />
+      <Icon as={icon} size={16} className={spin ? "animate-spin" : ""} />
     </button>
   );
 }
