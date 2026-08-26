@@ -51,6 +51,34 @@ export function localized(labels: Labels, language: string, fallback: string): s
 }
 
 /**
+ * Вариант выбора по значению, СОХРАНЁННОМУ В СТРОКЕ.
+ *
+ * Прямое попадание по ключу — обычный случай: ключ и есть то, что
+ * кладётся в строку (см. api/normalize, toOptions).
+ *
+ * Перебор нужен полям прежних поколений. Слаг у вариантов MULTISELECT
+ * появился не сразу: раньше в строку клали подпись, а слаг приписали
+ * задним числом — и он не совпадает с тем, что уже лежит в колонке.
+ * Тогда вариант ищется по подписи, своей или на языке данных. Старая
+ * админка читает их так же, каскадом slug → value → label
+ * (`MultiSelectDisplay.jsx:24`).
+ *
+ * Не нашлось — undefined: вариант могли удалить из настроек, а строки
+ * с ним остались. Значение таких показывается как есть.
+ */
+export function optionOf(field: Field, value: string): FieldOption | undefined {
+  const direct = field.options.get(value);
+  if (direct) return direct;
+
+  for (const option of field.options.values()) {
+    if (option.label === value) return option;
+    if (Object.values(option.labels).includes(value)) return option;
+  }
+
+  return undefined;
+}
+
+/**
  * Подпись поля в КАРТОЧКЕ, где язык выбирают вкладкой.
  *
  * Вкладку человек только что нажал — подпись обязана поехать за ней,
@@ -91,7 +119,11 @@ export type StatusGroup = (typeof STATUS_GROUPS)[number];
  * не находил никогда: ячейка теряла и цвет, и перевод.
  */
 export type FieldOption = {
-  /** То, что лежит в строке. Единственный ключ поиска. */
+  /**
+   * То, что лежит в строке. Ключ, по которому вариант ищут, — но
+   * не единственный: у полей прежних поколений в строке осталась
+   * подпись, см. optionOf.
+   */
   value: string;
   /** Подпись без языка. У STATUS её нет — тогда пустая строка. */
   label: string;
@@ -171,8 +203,6 @@ export type Field = {
    * Собирает их model/multilanguage.
    */
   multilanguage: boolean;
-  /** Красить ли варианты. Выключено — чип нейтральный, цвет игнорируется. */
-  hasColor: boolean;
   /**
    * Заполнение обязательно. Колонка `required` в таблице field, а не
    * ключ в attributes: бэкенд её и проверяет при вставке.

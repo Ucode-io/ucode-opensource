@@ -10,7 +10,7 @@ import {
 } from "react";
 import { IconChevronLeft, IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import type { Field, Relation } from "@/features/table";
+import { optionOf, type Field, type Relation } from "@/features/table";
 import { toast } from "@/shared/lib/toast";
 import { CHIP_STYLES, CHIP_SURFACE, hexToChipColor, type ChipColor } from "@/shared/ui/chip";
 import { Icon } from "@/shared/ui/icon";
@@ -192,7 +192,7 @@ export function CalendarView({
 
   /** Цвет события — по варианту поля, а не по HEX из данных (см. Chip). */
   const colorOf = (row: Item): ChipColor => {
-    const option = statusField?.options.get(String(row[statusField.slug] ?? ""));
+    const option = statusField && optionOf(statusField, String(row[statusField.slug] ?? ""));
     return option?.color ? hexToChipColor(option.color) : "blue";
   };
 

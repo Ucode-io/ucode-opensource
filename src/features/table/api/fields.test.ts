@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { hexToChipColor } from "@/shared/ui/chip";
 import { EMPTY_DRAFT, toDraft } from "../model/field-draft";
 import { toField } from "./normalize";
 import { toCreateBody, toUpdateBody } from "./fields";
@@ -114,7 +115,9 @@ test("созданное поле читается собственным раз
   });
 
   expect(field.options.get("srochno")).toMatchObject({ value: "srochno", label: "Срочно" });
-  expect(field.hasColor).toBe(true);
+  // Цвет уезжает HEX'ом и читается обратно тем же оттенком — по нему
+  // и красится чип, флага has_color никто не спрашивает.
+  expect(hexToChipColor(field.options.get("srochno")?.color ?? "")).toBe("red");
 });
 
 test("настройки агрегата уезжают под теми именами, под которыми их читает бэкенд", () => {

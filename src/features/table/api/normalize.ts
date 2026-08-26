@@ -26,7 +26,6 @@ export function toField(dto: FieldDto): Field {
     relationId: dto.relation_field || dto.relation_id || null,
     options: toOptions(dto),
     multilanguage: dto.enable_multilanguage === true,
-    hasColor: dto.attributes?.has_color === true,
     required: dto.required === true,
     validation: toValidation(dto.attributes),
     editable: isEditable(dto.attributes),

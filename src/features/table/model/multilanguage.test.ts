@@ -23,7 +23,6 @@ const field = (slug: string, multilanguage = false): Field => ({
   relationId: null,
   options: new Map(),
   multilanguage,
-  hasColor: false,
   required: false,
   validation: null,
   editable: true,

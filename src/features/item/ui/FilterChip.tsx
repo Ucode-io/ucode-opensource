@@ -1,7 +1,7 @@
 import { useDeferredValue, useState } from "react";
 import { IconChevronDown, IconDots, IconTrash } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { localized, type Field, type Relation } from "@/features/table";
+import { localized, optionOf, type Field, type Relation } from "@/features/table";
 import type { Translate, TranslationKey } from "@/shared/lib/i18n";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Icon } from "@/shared/ui/icon";
@@ -201,7 +201,7 @@ function summary(
 
   if (filter.op === "any") {
     const [first, ...rest] = values.map((item) => {
-      const option = field.options.get(item);
+      const option = optionOf(field, item);
       return option ? localized(option.labels, language, option.label || option.value) : item;
     });
     return rest.length ? `${first} +${rest.length}` : (first ?? "");

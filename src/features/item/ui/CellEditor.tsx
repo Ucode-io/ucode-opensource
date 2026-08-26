@@ -21,6 +21,7 @@ import { IconPicker } from "@/features/icons";
 import {
   STATUS_GROUPS,
   cascadeSteps,
+  optionOf,
   useTableSchema,
   type Field,
   type FieldOption,
@@ -1119,14 +1120,14 @@ function StatusEditor({
           {current && (
             <Chip
               dot
-              color={optionColor(field, field.options.get(current))}
+              color={optionColor(optionOf(field, current))}
               onRemove={() => {
                 onEdit("");
                 onClose();
               }}
               removeLabel={t("cell.clear")}
             >
-              {optionLabel(field.options.get(current), current, language)}
+              {optionLabel(optionOf(field, current), current, language)}
             </Chip>
           )}
 
@@ -1152,7 +1153,6 @@ function StatusEditor({
               {list.map((option) => (
                 <OptionRow
                   key={option.value}
-                  field={field}
                   option={option}
                   language={language}
                   dot
@@ -1165,7 +1165,6 @@ function StatusEditor({
           {ungrouped.map((option) => (
             <OptionRow
               key={option.value}
-              field={field}
               option={option}
               language={language}
               dot
@@ -1256,11 +1255,11 @@ function MultiselectEditor({
           {selected.map((item) => (
             <Chip
               key={item}
-              color={optionColor(field, field.options.get(item))}
+              color={optionColor(optionOf(field, item))}
               onRemove={() => toggle(item)}
               removeLabel={t("cell.remove")}
             >
-              {optionLabel(field.options.get(item), item, language)}
+              {optionLabel(optionOf(field, item), item, language)}
             </Chip>
           ))}
 
@@ -1289,7 +1288,6 @@ function MultiselectEditor({
           {visible.map((option) => (
             <OptionRow
               key={option.value}
-              field={field}
               option={option}
               language={language}
               checked={selected.includes(option.value)}
@@ -1309,14 +1307,12 @@ function MultiselectEditor({
 }
 
 function OptionRow({
-  field,
   option,
   language,
   checked,
   dot,
   onClick,
 }: {
-  field: Field;
   option: FieldOption;
   language: string;
   checked?: boolean | undefined;
@@ -1329,7 +1325,7 @@ function OptionRow({
       onClick={onClick}
       className="flex h-8 w-full items-center gap-2 rounded-md px-1.5 text-left transition-colors hover:bg-surface-hover"
     >
-      <Chip dot={dot} color={optionColor(field, option)}>
+      <Chip dot={dot} color={optionColor(option)}>
         {optionLabel(option, option.value, language)}
       </Chip>
 

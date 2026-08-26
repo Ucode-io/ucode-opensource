@@ -11,7 +11,6 @@ const field = (over: Partial<Field> = {}): Field => ({
   relationId: null,
   options: new Map(),
   multilanguage: false,
-  hasColor: false,
   required: false,
   validation: null,
   editable: true,

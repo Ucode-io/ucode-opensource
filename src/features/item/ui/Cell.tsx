@@ -1,6 +1,6 @@
 import { IconCopy, IconExternalLink, IconMapPin, IconPaperclip, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { localized, type Field, type FieldOption, type Relation } from "@/features/table";
+import { localized, optionOf, type Field, type FieldOption, type Relation } from "@/features/table";
 import { fileName } from "@/shared/lib/file-kind";
 import { toast } from "@/shared/lib/toast";
 import { Checkbox } from "@/shared/ui/checkbox";
@@ -382,19 +382,40 @@ function TagsCell({
   if (!items.length) return <Empty />;
 
   return (
-    <span className={`flex min-w-0 gap-1 ${wrap ? "flex-wrap" : ""}`}>
-      {items.map((item, index) => (
-        <Chip key={index} dot={dot} color={optionColor(field, field.options.get(item))}>
-          {optionLabel(field.options.get(item), item, language)}
-        </Chip>
-      ))}
+    /* overflow-hidden в один ряд: чипы ужимаются, но не бесконечно —
+       у каждого остаются отступы и точка. Десяток значений в узкой
+       колонке всё равно шире неё, и лишнее надо обрезать здесь: в ячейке
+       таблицы это делает td, а на карточке доски — никто. */
+    <span className={`flex min-w-0 gap-1 ${wrap ? "flex-wrap" : "overflow-hidden"}`}>
+      {items.map((item, index) => {
+        const option = optionOf(field, item);
+
+        return (
+          <Chip key={index} dot={dot} color={optionColor(option)}>
+            {optionLabel(option, item, language)}
+          </Chip>
+        );
+      })}
     </span>
   );
 }
 
-/** Цвет варианта — только когда поле цветное: иначе чип нейтральный. */
-export function optionColor(field: Field, option: FieldOption | undefined) {
-  return field.hasColor && option?.color ? hexToChipColor(option.color) : "gray";
+/**
+ * Цвет варианта. Есть цвет — красим, нет — нейтральный чип.
+ *
+ * `attributes.has_color` при этом не спрашивается, и это осознанно.
+ * Флаг ничего не значит: мы пишем его `true` всем полям с вариантами
+ * (api/fields, toOptionAttributes), а старая админка ставила его при
+ * создании поля и при выборе цвета — то есть поле, заведённое ручкой
+ * или импортом, остаётся без флага с цветными вариантами внутри.
+ * Цвет — это данные варианта, флаг — переключатель формы.
+ *
+ * Так же читают его доска, календарь, таймлайн и сама форма поля
+ * (Board, Calendar, Timeline, field-draft): один вариант не может быть
+ * цветным на доске и серым в таблице.
+ */
+export function optionColor(option: FieldOption | undefined) {
+  return option?.color ? hexToChipColor(option.color) : "gray";
 }
 
 /** Три ступени: перевод, базовая подпись, само значение. Пустоты не бывает. */

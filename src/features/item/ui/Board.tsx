@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type UIEvent } from "react";
 import { IconPencil, IconPlus, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { localized, type Field, type Relation } from "@/features/table";
+import { localized, optionOf, type Field, type Relation } from "@/features/table";
 import { CHIP_SURFACE, Chip, hexToChipColor, type ChipColor } from "@/shared/ui/chip";
 import { openPreview } from "@/shared/ui/file-preview";
 import { Icon } from "@/shared/ui/icon";
@@ -244,7 +244,7 @@ export function Board({
               вместе с её карточками, пока соседние стоят на месте. */}
           <div className={`flex gap-3 pt-3 ${laneField ? "pb-1" : "flex-1"}`}>
             {lane.columns.map((column) => {
-              const option = field.options.get(column.id);
+              const option = optionOf(field, column.id);
               const color: ChipColor = option?.color ? hexToChipColor(option.color) : "gray";
               const tint = CHIP_SURFACE[color];
               const isOver = over?.lane === lane.id && over.column === column.id;
@@ -476,12 +476,13 @@ function Placeholder({ height }: { height: number }) {
 
 /**
  * Содержимое карточки: обложка, заголовок и значения остальных колонок
- * view — подряд, без подписей.
+ * view — подряд, со значком типа вместо подписи.
  *
  * Подписи — всплывающей подсказкой, как в старой админке
  * (BoardCardRowGenerator, `rowHint`): в колонке шириной 288px подпись
- * съедает половину строки, а карточка и так читается — «12.03.2026»
- * и «Иванов» не путаются между собой. Пустые значения пропускаются:
+ * съедает половину строки. Значок при этом остаётся: он говорит, какого
+ * рода значение, не занимая места, — тот же, что в шапке колонки
+ * таблицы и в чипе фильтра. Пустые значения пропускаются:
  * колонок во view бывает три десятка, и карточка из прочерков не
  * говорит ничего, зато занимает экран.
  *
@@ -491,8 +492,8 @@ function Placeholder({ height }: { height: number }) {
  *
  * С `onEdit` карточка раскрыта на правку, и тогда всё наоборот: поля
  * показаны ВСЕ, включая пустые, — иначе незаполненное поле нечем
- * заполнить, — у каждого свой значок, а щелчок открывает тот же
- * редактор, что в таблице и в карточке записи.
+ * заполнить, — а щелчок открывает тот же редактор, что в таблице
+ * и в карточке записи.
  */
 function Card({
   columns,
@@ -593,13 +594,18 @@ function Card({
         </button>
       )}
 
+      {/* Значок и у заголовка: первой колонкой view бывает не название
+          записи, а бюджет или дата, и «0» без значка не читается ничем.
+          Сверху, а не по центру: заголовок переносится, и у строки
+          в три строки значок посреди высоты не относится ни к чему. */}
       {title &&
         (onEdit ? (
           <button
             type="button"
             onClick={(event) => open(title, event.currentTarget)}
-            className="mb-1.5 flex min-h-7 w-full items-center rounded-md px-1 pr-7 text-left text-sm font-medium transition-colors hover:bg-surface-hover"
+            className="mb-1.5 flex min-h-7 w-full items-start gap-2 rounded-md px-1 py-1 pr-7 text-left text-sm font-medium transition-colors hover:bg-surface-hover"
           >
+            <Icon as={fieldIcon(title.type)} size={14} className="mt-0.5 shrink-0 text-fg-subtle" />
             {isBlank(row[title.slug]) ? (
               <span className="truncate text-fg-subtle">{t("board.untitled")}</span>
             ) : (
@@ -607,7 +613,10 @@ function Card({
             )}
           </button>
         ) : (
-          <div className="mb-1.5 pr-6 text-sm font-medium">{cell(title, true)}</div>
+          <div className="mb-1.5 flex items-start gap-2 pr-6 text-sm font-medium">
+            <Icon as={fieldIcon(title.type)} size={14} className="mt-0.5 shrink-0 text-fg-subtle" />
+            {cell(title, true)}
+          </div>
         ))}
 
       <div className="flex flex-col gap-1">
@@ -627,7 +636,8 @@ function Card({
             /* Чьё это значение — по наведению: на карточке видно
                значение, а слаг ещё и то имя, которым поле зовут в API. */
             <Tooltip key={item.id} label={item.slug}>
-              <div className="flex min-w-0 items-center px-1 text-xs text-fg-muted">
+              <div className="flex min-w-0 items-center gap-2 px-1 text-xs text-fg-muted">
+                <Icon as={fieldIcon(item.type)} size={14} className="shrink-0 text-fg-subtle" />
                 {cell(item)}
               </div>
             </Tooltip>

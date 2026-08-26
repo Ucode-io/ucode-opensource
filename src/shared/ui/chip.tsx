@@ -178,8 +178,16 @@ export function Chip({
   children: ReactNode;
 }) {
   return (
+    /*
+     * min-w-0 — не украшение: у элемента flex минимальная ширина равна
+     * содержимому, и ряд из двух чипов не сжимался, а вылезал за край
+     * (на карточке доски — прямо поверх соседней колонки). max-w-full
+     * этого не ловит: он ограничивает КАЖДЫЙ чип шириной ряда, а их
+     * сумму — нет. С min-w-0 длинные чипы ужимаются вместе и обрезаются
+     * многоточием каждый.
+     */
     <span
-      className={`inline-flex h-5 max-w-full items-center gap-1 rounded-sm px-1.5 text-xs ${CHIP_STYLES[color]}`}
+      className={`inline-flex h-5 max-w-full min-w-0 items-center gap-1 rounded-sm px-1.5 text-xs ${CHIP_STYLES[color]}`}
     >
       {/* Цвет точки — сам текст чипа: третий токен на каждый оттенок
           пришлось бы держать в двух темах ради четырёх пикселей. */}

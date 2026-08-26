@@ -1,4 +1,4 @@
-import { localized, type Field, type Relation } from "@/features/table";
+import { localized, optionOf, type Field, type Relation } from "@/features/table";
 import { relationLabel, type ViewField } from "@/shared/lib/relation-label";
 import { relationDataKey, type Item } from "./types";
 
@@ -98,7 +98,7 @@ export function valueLabelOf(
       );
     }
 
-    const option = field.options.get(value);
+    const option = optionOf(field, value);
     return option ? localized(option.labels, language, option.label || option.value) : "";
   };
 }

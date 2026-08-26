@@ -80,7 +80,6 @@ test("быстрые фильтры уходят с is_checked — по нему
     relationId: null,
     options: new Map(),
     multilanguage: false,
-    hasColor: false,
     required: false,
     validation: null,
     editable: true,

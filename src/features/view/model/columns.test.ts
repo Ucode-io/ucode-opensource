@@ -18,7 +18,6 @@ const field = (id: string, over: Partial<Field> = {}): Field => ({
     locked: false,
   raw: {},
   options: new Map(),
-  hasColor: false,
   attributes: {},
   ...over,
 });
