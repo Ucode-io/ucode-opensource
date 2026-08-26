@@ -57,6 +57,31 @@
   --color-brand-gradient-via: #0d4373;
   --color-brand-gradient-to: #0075cf;
 
+  /* ── Помощник ────────────────────────────────────────────────── */
+  /* Второй градиент в системе, и он не про бренд, а про «отвечает
+     модель»: тот же синий уходит в фиолетовый. Так помощника отличают
+     от обычных кнопок шапки, не читая подписи.
+
+     Фиолетовый берётся один на обе темы — как и заливка акцента:
+     с белым текстом он даёт 5.70:1, синий конец 4.72:1, то есть
+     проходит и самая светлая точка градиента.
+
+     Блёклые варианты мешаются с ПРОЗРАЧНЫМ, а не с фоном: кнопка
+     стоит и на шапке, и на подложке таблицы, и примесь к конкретному
+     фону в одном из этих мест дала бы прямоугольник другого цвета. */
+  --color-ai: #7c3aed;
+  --gradient-ai: linear-gradient(120deg, var(--color-accent-solid), var(--color-ai));
+  --gradient-ai-soft: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--color-accent-solid) 24%, transparent),
+    color-mix(in oklab, var(--color-ai) 24%, transparent)
+  );
+  --gradient-ai-subtle: linear-gradient(
+    120deg,
+    color-mix(in oklab, var(--color-accent-solid) 13%, transparent),
+    color-mix(in oklab, var(--color-ai) 13%, transparent)
+  );
+
   /* ── Смысловые ───────────────────────────────────────────────── */
   --color-success: #2f855a;
   --color-success-subtle: #e6f4ea;

@@ -420,12 +420,19 @@ function MenuPage() {
    * не появлялась вовсе (флаг `enable_multilanguage` для этого не годится:
    * object_builder не пишет его при вставке, см. ADR-0004).
    */
+  const orderedFields = useMemo(
+    () => orderColumns(viewFields, drawerLayout.order),
+    [viewFields, drawerLayout.order],
+  );
+
+  /*
+   * Спрятанные поля отсеяны: так карточка выглядит обычно. Сама карточка
+   * получает их полным списком и прячет уже у себя — в режиме правки
+   * раскладки они нужны видимыми, иначе вернуть их нечем.
+   */
   const drawerFields = useMemo(
-    () =>
-      orderColumns(viewFields, drawerLayout.order).filter(
-        (field) => !drawerLayout.hidden.has(field.slug),
-      ),
-    [viewFields, drawerLayout.order, drawerLayout.hidden],
+    () => orderedFields.filter((field) => !drawerLayout.hidden.has(field.slug)),
+    [orderedFields, drawerLayout.hidden],
   );
 
   /*
@@ -1982,7 +1989,8 @@ function MenuPage() {
         <ItemDrawer
           key={search.item}
           tableSlug={view.tableSlug}
-          columns={drawerFields}
+          columns={orderedFields}
+          hidden={drawerLayout.hidden}
           row={drawerRow}
           // Карточка открыта по ссылке: строки нет ни на странице, ни
           // ещё в кэше — пока она едет, «записи не существует» неправда.
@@ -2139,6 +2147,7 @@ function MenuPage() {
           onAddSection={drawerLayout.addSection}
           onRenameSection={drawerLayout.renameSection}
           onRemoveSection={drawerLayout.removeSection}
+          onToggleHidden={drawerLayout.toggleHidden}
           // Заголовок карточки — настройка раскладки: её правит тот же,
           // кто правит настройки view.
           {...(can.settings ? { onHeading: drawerLayout.setHeading } : {})}

@@ -13,6 +13,8 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconChevronsRight,
+  IconEye,
+  IconEyeOff,
   IconFileDescription,
   IconFileTypePdf,
   IconGripVertical,
@@ -20,6 +22,7 @@ import {
   IconLayoutList,
   IconLayoutSidebarRight,
   IconMaximize,
+  IconPencil,
   IconPlus,
   IconTable,
   IconX,
@@ -99,6 +102,7 @@ export function ItemDrawer({
   language,
   languages,
   sections,
+  hidden,
   heading,
   trail,
   tabs,
@@ -121,6 +125,7 @@ export function ItemDrawer({
   onAddSection,
   onRenameSection,
   onRemoveSection,
+  onToggleHidden,
   onHeading,
   onClose,
 }: {
@@ -142,6 +147,15 @@ export function ItemDrawer({
   languages: DataLanguage[];
   /** Секции карточки из раскладки: имя и слаги. Пусто — один общий список. */
   sections: { label: string; slugs: string[] }[];
+  /**
+   * Слаги полей, спрятанных из карточки (`field_hide_layout`). Обычно их
+   * не видно; в режиме правки раскладки они показаны блёклыми — иначе
+   * спрятанное поле нечем вернуть.
+   *
+   * Отбирает их карточка, а не вызывающий: показывать спрятанное или нет,
+   * решает переключатель, который живёт здесь.
+   */
+  hidden?: Set<string> | undefined;
   /** Слаг поля-заголовка. Пусто — заголовка нет, все поля идут списком. */
   heading: string;
   /**
@@ -252,6 +266,8 @@ export function ItemDrawer({
   onAddSection?: ((label: string) => void) | undefined;
   onRenameSection?: ((index: number, label: string) => void) | undefined;
   onRemoveSection?: ((index: number) => void) | undefined;
+  /** Спрятать поле из карточки или вернуть его в неё. */
+  onToggleHidden?: ((slug: string) => void) | undefined;
   /**
    * Заголовком карточки назначено другое поле. `variants` — карта
    * «язык → слаг» у мультиязычного поля: заголовок нужен на каждом языке.
@@ -266,6 +282,21 @@ export function ItemDrawer({
   const [active, setActive] = useState<{ slug: string; anchor: DOMRect } | null>(null);
   /** Поле PASSWORD, которому задают значение: у него отдельное окно. */
   const [secret, setSecret] = useState<Field | null>(null);
+  /**
+   * Правка раскладки: секции, «глаз» у каждого поля и ручки перетаскивания
+   * показаны постоянно, а спрятанные поля видны блёклыми — вернуть их
+   * иначе нечем.
+   *
+   * Состояние карточки, а не настройка в базе: это способ на неё смотреть,
+   * а не её свойство. Так же и в старой админке правка раскладки была
+   * отдельным режимом — только целым экраном (`views/Objects/LayoutSettings`),
+   * куда уходили из таблицы и возвращались обратно.
+   */
+  const [editing, setEditing] = useState(false);
+  /** Раскладку правит тот, кому это позволено: без обработчиков режима нет. */
+  const canLayout = Boolean(onRenameSection ?? onAddSection ?? onToggleHidden);
+  /** Имена секций правятся: режим включён и право на это есть. */
+  const editable = editing && Boolean(onRenameSection);
   const { drawerMode, setDrawerMode, drawerWidth, setDrawerWidth, sidebarCollapsed } = useUi();
   const panel = useRef<HTMLElement>(null);
   const side = drawerMode === "side";
@@ -280,7 +311,19 @@ export function ItemDrawer({
    * строками с одинаковой подписью.
    */
   const codes = useMemo(() => languages.map((item) => item.code), [languages]);
-  const multilingual = useMemo(() => hasMultilanguage(columns, codes), [columns, codes]);
+
+  /*
+   * Спрятанные из карточки поля (`field_hide_layout`) отсеиваются здесь,
+   * а не у вызывающего: в режиме правки они нужны — блёклыми, с «глазом»,
+   * которым их возвращают.
+   */
+  const shown = useMemo(
+    () =>
+      editing || !hidden?.size ? columns : columns.filter((field) => !hidden.has(field.slug)),
+    [columns, hidden, editing],
+  );
+
+  const multilingual = useMemo(() => hasMultilanguage(shown, codes), [shown, codes]);
 
   /*
    * Языковые колонки сводит вызывающая страница — тем же языком, что
@@ -288,8 +331,8 @@ export function ItemDrawer({
    * с полным набором полей: она идемпотентна.
    */
   const fields = useMemo(
-    () => (multilingual ? collapseLanguages(columns, codes, language) : columns),
-    [multilingual, columns, codes, language],
+    () => (multilingual ? collapseLanguages(shown, codes, language) : shown),
+    [multilingual, shown, codes, language],
   );
 
   /*
@@ -622,17 +665,19 @@ export function ItemDrawer({
          * только когда связи есть — одна вкладка «Запись» ничего
          * не переключает.
          */}
-        {row && ((tabs && tabs.length > 0) || onAddTab) && (
+        {row && ((tabs && tabs.length > 0) || onAddTab || canLayout) && (
           <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
             {/* Прокрутку и плашку активной вкладки держит сама полоса
                 (shared/ui/tabs). «+» стоит рядом с ней, а не внутри:
                 всплывашка, открытая из прокручиваемого контейнера,
-                обрезается его краями. */}
-            <Tabs
-              tabs={tabItems}
-              activeId={tab ?? ""}
-              onSelect={(id) => onTab?.(id)}
-            />
+                обрезается его краями.
+
+                Одна вкладка «Запись» не рисуется: она ничего
+                не переключает. Полоса при этом остаётся — в ней стоит
+                переключатель правки раскладки. */}
+            {(tabItems.length > 1 || onAddTab) && (
+              <Tabs tabs={tabItems} activeId={tab ?? ""} onSelect={(id) => onTab?.(id)} />
+            )}
 
             {/* Новая вкладка — это связь, которую ещё не показали:
                 бэкенд заводит вкладки сам, но только тем связям,
@@ -645,6 +690,27 @@ export function ItemDrawer({
                 types={tabTypes ?? []}
                 onAdd={onAddTab}
               />
+            )}
+
+            {/*
+             * Правка раскладки — режим, а не набор кнопок по наведению:
+             * прятать поля и переставлять их приходится подряд, а
+             * инструменты, которые появляются только под курсором,
+             * в такой работе приходится каждый раз искать заново.
+             *
+             * Стоит у правого края полосы вкладок: это переключатель
+             * вида карточки, и место у него то же, что у прочих
+             * переключателей показа.
+             */}
+            {canLayout && (
+              <div className="ml-auto shrink-0">
+                <IconButton
+                  icon={IconPencil}
+                  label={t("drawer.layoutEdit")}
+                  active={editing}
+                  onClick={() => setEditing((current) => !current)}
+                />
+              </div>
             )}
           </div>
         )}
@@ -689,20 +755,21 @@ export function ItemDrawer({
               <section key={group.label || `—${index}`}>
                 {/* Заголовок секции — только у именованной: у карточки почти
                     всегда одна безымянная секция, и пустая полоска над ней
-                    читается как сломанная вёрстка.
- 
-                    С правом на раскладку заголовок правится на месте:
-                    отдельного экрана настроек у секции нет, а имя — это
-                    всё, что у неё есть. */}
-                {(group.label || onRenameSection) && (
-                  <div className="group/section mt-4 mb-1 flex items-center gap-1 px-1">
-                    {onRenameSection && group.index >= 0 ? (
+                    читается как сломанная вёрстка. Поле для имени показано
+                    только в режиме правки — вне его пустой инпут над каждой
+                    группой полей и есть та самая полоска.
+
+                    Имя правится на месте: отдельного экрана настроек
+                    у секции нет, а имя — это всё, что у неё есть. */}
+                {(group.label || (editable && group.index >= 0)) && (
+                  <div className="mt-4 mb-1 flex items-center gap-1 px-1">
+                    {editable && group.index >= 0 ? (
                       <CommitInput
                         value={group.label}
                         label={t("drawer.sectionName")}
                         placeholder={t("drawer.sectionUnnamed")}
                         allowEmpty
-                        onCommit={(label) => onRenameSection(group.index, label)}
+                        onCommit={(label) => onRenameSection?.(group.index, label)}
                         className="h-6 border-transparent bg-transparent px-1 text-2xs font-medium tracking-wide uppercase"
                       />
                     ) : (
@@ -711,13 +778,13 @@ export function ItemDrawer({
                       </h3>
                     )}
 
-                    {onRemoveSection && group.index > 0 && (
+                    {editing && onRemoveSection && group.index > 0 && (
                       <button
                         type="button"
                         onClick={() => onRemoveSection(group.index)}
                         aria-label={t("drawer.sectionRemove")}
                         title={t("drawer.sectionRemove")}
-                        className="grid size-5 shrink-0 place-items-center rounded text-fg-subtle opacity-0 transition hover:bg-surface-hover hover:text-danger group-hover/section:opacity-100"
+                        className="grid size-5 shrink-0 place-items-center rounded text-fg-subtle transition hover:bg-surface-hover hover:text-danger"
                       >
                         <Icon as={IconX} size={12} />
                       </button>
@@ -755,8 +822,11 @@ export function ItemDrawer({
                     }}
                     /* group/row — для кнопок по наведению внутри ячейки:
                        «скопировать» у текста, переходы у ссылки и карты. */
+                    /* Спрятанное поле видно только в режиме правки и только
+                       блёклым: иначе его не отличить от показанных, и «глаз»
+                       у него читался бы как «спрятать». */
                     className={`group/row relative flex items-start gap-2 py-0.5 transition-opacity ${
-                      dragged === field.slug ? "opacity-40" : ""
+                      dragged === field.slug || hidden?.has(field.slug) ? "opacity-40" : ""
                     }`}
                   >
                     {over?.slug === field.slug && (
@@ -777,6 +847,7 @@ export function ItemDrawer({
                       )}
                       field={field}
                       draggable={Boolean(onReorder)}
+                      grip={editing}
                       onDragStart={(event) => {
                         // Без данных в dataTransfer Firefox не начинает
                         // перетаскивание вовсе.
@@ -836,14 +907,33 @@ export function ItemDrawer({
                         />
                       </button>
                     )}
+
+                    {/*
+                     * «Глаз»: убрать поле из карточки или вернуть его.
+                     * Колонкой таблицы оно остаётся — это настройка
+                     * раскладки, а не поля (`field_hide_layout`).
+                     */}
+                    {editing && onToggleHidden && (
+                      <span className="mt-0.5 shrink-0">
+                        <IconButton
+                          icon={hidden?.has(field.slug) ? IconEyeOff : IconEye}
+                          label={t(
+                            hidden?.has(field.slug) ? "drawer.fieldShow" : "drawer.fieldHide",
+                          )}
+                          onClick={() => onToggleHidden(field.slug)}
+                        />
+                      </span>
+                    )}
                   </div>
                 ))}
               </section>
             ))}
 
             {/* Новая секция заводится пустой и тут же видна: в неё
-                переносят поля мышью. */}
-            {onAddSection && (
+                переносят поля мышью. Только в режиме правки: вне его
+                у безымянной секции нет заголовка, и заведённая секция
+                выглядела бы так, будто нажатие ничего не сделало. */}
+            {editing && onAddSection && (
               <button
                 type="button"
                 onClick={() => onAddSection("")}
@@ -1262,12 +1352,19 @@ function FieldLabel({
   label,
   field,
   draggable,
+  grip,
   onDragStart,
   onDragEnd,
 }: {
   label: string;
   field: Field;
   draggable: boolean;
+  /**
+   * Ручка перетаскивания показана постоянно, а не по наведению: в режиме
+   * правки поля двигают подряд, и ручка, которую видно только под курсором,
+   * заставляет искать её у каждой строки заново.
+   */
+  grip: boolean;
   onDragStart: (event: DragEvent<HTMLElement>) => void;
   onDragEnd: () => void;
 }) {
@@ -1284,12 +1381,14 @@ function FieldLabel({
         <Icon
           as={fieldIcon(field.type)}
           size={14}
-          className="transition-opacity group-hover/label:opacity-0"
+          className={`transition-opacity ${grip ? "opacity-0" : "group-hover/label:opacity-0"}`}
         />
         <Icon
           as={IconGripVertical}
           size={14}
-          className="absolute opacity-0 transition-opacity group-hover/label:opacity-100"
+          className={`absolute transition-opacity ${
+            grip ? "opacity-100" : "opacity-0 group-hover/label:opacity-100"
+          }`}
         />
       </span>
 
@@ -1306,10 +1405,13 @@ function FieldLabel({
 function IconButton({
   icon,
   label,
+  active,
   onClick,
 }: {
   icon: typeof IconChevronsRight;
   label: string;
+  /** Кнопка-переключатель: задан — нажатое состояние видно и читается вслух. */
+  active?: boolean | undefined;
   onClick: () => void;
 }) {
   return (
@@ -1318,7 +1420,12 @@ function IconButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="grid size-7 place-items-center rounded-md text-fg-muted transition-colors hover:bg-surface-hover hover:text-fg"
+      {...(active === undefined ? {} : { "aria-pressed": active })}
+      className={`grid size-7 place-items-center rounded-md transition-colors ${
+        active
+          ? "bg-surface-active text-fg"
+          : "text-fg-muted hover:bg-surface-hover hover:text-fg"
+      }`}
     >
       <Icon as={icon} size={16} />
     </button>

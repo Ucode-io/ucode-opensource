@@ -326,6 +326,61 @@ export function moveField(
   return withSections(layout, tab, sections);
 }
 
+/**
+ * Поле спрятано из карточки или возвращено в неё (`field_hide_layout`).
+ *
+ * Настройка РАСКЛАДКИ, а не поля: колонкой таблицы то же поле остаётся —
+ * см. LayoutField.
+ *
+ * Поля нет в раскладке — оно дописывается в последнюю секцию спрятанным.
+ * Новые поля бэкенд дописывает туда же (field.go, Create), но не мгновенно,
+ * и без этого кнопка «скрыть» у только что заведённого поля молча
+ * не делала бы ничего.
+ */
+export function toggleHidden(layout: Layout, slug: string): Layout {
+  const tab = sectionTab(layout);
+  if (!tab || !slug) return layout;
+
+  const sections = tab.sections ?? [];
+  const known = sections.some((section) =>
+    (section.fields ?? []).some((field) => field.slug === slug),
+  );
+
+  if (!known) {
+    const last = Math.max(sections.length - 1, 0);
+    const appended = { slug, attributes: { field_hide_layout: true } };
+
+    return withSections(
+      layout,
+      tab,
+      sections.length
+        ? sections.map((section, at) =>
+            at === last ? { ...section, fields: [...(section.fields ?? []), appended] } : section,
+          )
+        : [{ fields: [appended] }],
+    );
+  }
+
+  return withSections(
+    layout,
+    tab,
+    sections.map((section) => ({
+      ...section,
+      fields: (section.fields ?? []).map((field) =>
+        field.slug === slug
+          ? {
+              ...field,
+              attributes: {
+                ...field.attributes,
+                field_hide_layout: !field.attributes?.field_hide_layout,
+              },
+            }
+          : field,
+      ),
+    })),
+  );
+}
+
 /** Новая секция в конце карточки. Пустая: поля в неё переносят мышью. */
 export function addSection(layout: Layout, label: string): Layout {
   const tab = sectionTab(layout);

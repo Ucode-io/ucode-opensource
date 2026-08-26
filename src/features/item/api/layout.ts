@@ -15,6 +15,7 @@ import {
   renameSection,
   sections,
   setHeading,
+  toggleHidden,
   type Layout,
 } from "../model/layout";
 
@@ -101,6 +102,13 @@ export function useDrawerLayout({
      */
     setHeading: (slug: string, variants: Record<string, string> | null) => {
       if (query.data) update.mutate(setHeading(query.data, slug, variants));
+    },
+    /**
+     * Спрятать поле из карточки или вернуть его в неё. Колонкой таблицы
+     * оно остаётся: это настройка раскладки, а не поля.
+     */
+    toggleHidden: (slug: string) => {
+      if (query.data) update.mutate(toggleHidden(query.data, slug));
     },
     /** Новая секция в конце карточки. Пустая: поля переносят мышью. */
     addSection: (label: string) => {

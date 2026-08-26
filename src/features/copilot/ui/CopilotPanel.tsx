@@ -177,10 +177,20 @@ export function CopilotButton() {
       onClick={toggleCopilot}
       aria-pressed={copilotOpen}
       title={t("copilot.title")}
-      className={`flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm font-medium transition-colors ${
+      /*
+       * Единственная кнопка в шапке с градиентом — по нему помощника
+       * и узнают: остальные кнопки там плоские и серые. Цвета из
+       * токенов (`--gradient-ai`), иначе тёмная тема получила бы
+       * фиолетовый по фиолетовому.
+       *
+       * Открытый помощник залит целиком, закрытый — только намёком:
+       * заливка во всю силу у выключенной кнопки читается как
+       * «включено», и вся шапка тянула бы взгляд на себя.
+       */
+      className={`flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-sm font-medium transition-[background-image,color] ${
         copilotOpen
-          ? "bg-accent-subtle text-accent-text"
-          : "text-fg-muted hover:bg-surface-hover hover:text-fg"
+          ? "text-accent-fg [background-image:var(--gradient-ai)]"
+          : "text-fg-muted [background-image:var(--gradient-ai-subtle)] hover:text-fg hover:[background-image:var(--gradient-ai-soft)]"
       }`}
     >
       <Icon as={IconSparkles} size={16} />

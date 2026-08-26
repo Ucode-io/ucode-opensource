@@ -14,6 +14,7 @@ import {
   renameSection,
   sections,
   setHeading,
+  toggleHidden,
   type Layout,
 } from "./layout";
 
@@ -264,4 +265,20 @@ test("последнюю секцию удалить нельзя: полям н
   };
 
   expect(removeSection(single, 0)).toBe(single);
+});
+
+test("«глаз» прячет поле и возвращает его", () => {
+  const hidden = toggleHidden(layout(), "b");
+  expect(hiddenFields(hidden)).toEqual(["b"]);
+  // Порядок не трогается: спрятанное поле остаётся на своём месте.
+  expect(order(hidden)).toBe("abcd");
+  expect(hiddenFields(toggleHidden(hidden, "b"))).toEqual([]);
+});
+
+test("поле, которого нет в раскладке, дописывается спрятанным", () => {
+  // Новое поле бэкенд дописывает в последнюю секцию сам, но не мгновенно:
+  // без этого «глаз» у только что заведённого поля не делал бы ничего.
+  const next = toggleHidden(layout(), "e");
+  expect(order(next)).toBe("abcde");
+  expect(hiddenFields(next)).toEqual(["e"]);
 });
