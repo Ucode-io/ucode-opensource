@@ -71,6 +71,18 @@ test("страницы склеиваются в один список, счёт
   });
 });
 
+test("строка, приехавшая в двух кусках, в списке одна", () => {
+  // Куски приходят внахлёст: см. toPages и docs/backend-notes.md.
+  const first = { data: { count: 3, response: [{ guid: "a" }, { guid: "b" }] } };
+  const second = { data: { count: 3, response: [{ guid: "b" }, { guid: "c" }] } };
+
+  expect(toPages({ pages: [first, second] }).rows).toEqual([
+    { guid: "a" },
+    { guid: "b" },
+    { guid: "c" },
+  ]);
+});
+
 /*
  * В кэше лежат куски бесконечного запроса, а не один ответ: useItems —
  * всегда useInfiniteQuery. Правка, не умеющая их разбирать, просто

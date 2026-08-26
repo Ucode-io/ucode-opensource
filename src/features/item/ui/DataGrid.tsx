@@ -717,7 +717,7 @@ export function DataGrid({
               const isFolded = folded.has(entry.key);
 
               return (
-                <tr key={`group:${entry.row}`} className="bg-surface-hover">
+                <tr key={virtual.key} className="bg-surface-hover">
                   <td colSpan={span} className={`${cellBase} p-0`}>
                     <button
                       type="button"
@@ -787,7 +787,15 @@ export function DataGrid({
 
             return (
               <tr
-                key={id}
+                /*
+                 * Ключ — место в окне виртуализатора, а не guid строки.
+                 * guid обязан быть уникальным, но бэкенд отдаёт страницы
+                 * внахлёст (см. docs/backend-notes.md), и одна и та же
+                 * строка приезжает дважды. Два одинаковых ключа React
+                 * не сверяет — старые <tr> зависают в DOM поверх окна,
+                 * а на их месте появляются пустые полосы.
+                 */
+                key={virtual.key}
                 className={`group/row ${
                   isSelected
                     ? "bg-accent-subtle"

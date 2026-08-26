@@ -159,9 +159,30 @@ export function nextPage(pages: ItemsResponseDto[]): number | undefined {
  * `count` берётся у последней: пока человек листает, строки добавляют
  * и удаляют, и свежее число честнее того, что приехало со стартовой
  * страницей.
+ *
+ * Повторы отбрасываются по guid. Куски приходят внахлёст: get-list
+ * сортирует по `created_at` без добивки уникальным ключом
+ * (build_query.go:130), а у импортированной таблицы created_at
+ * одинаков у тысяч строк — тогда LIMIT/OFFSET по неоднозначному
+ * порядку выдаёт одну и ту же строку в нескольких кусках, а другие
+ * не выдаёт вовсе. См. docs/backend-notes.md.
  */
 export function toPages(data: { pages: ItemsResponseDto[] }): ItemsPage {
-  const rows = data.pages.flatMap((page) => page.data?.response ?? []);
+  const seen = new Set<string>();
+  const rows: Item[] = [];
+
+  for (const page of data.pages) {
+    for (const row of page.data?.response ?? []) {
+      const guid = typeof row.guid === "string" ? row.guid : "";
+      // Без guid не сверить — такая строка проходит как есть.
+      if (guid) {
+        if (seen.has(guid)) continue;
+        seen.add(guid);
+      }
+      rows.push(row);
+    }
+  }
+
   const last = data.pages[data.pages.length - 1];
 
   return { rows, count: last?.data?.count ?? rows.length };
