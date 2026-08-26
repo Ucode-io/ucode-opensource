@@ -18,9 +18,11 @@ import {
   type CreatableType,
   type MenuFormValue,
 } from "./MenuFormDialog";
+import { MoveMenuDialog } from "./MoveMenuDialog";
 
 type Dialog =
   | { kind: "edit" }
+  | { kind: "move" }
   /** existing — пункт заводят на уже существующую таблицу, а не на новую. */
   | { kind: "create"; type: CreatableType; existing?: boolean }
   | { kind: "delete" }
@@ -55,6 +57,7 @@ export function MenuRowActions({ node }: { node: MenuNode }) {
   const run = (id: MenuActionId, close: () => void) => {
     close();
     if (id === "edit") setDialog({ kind: "edit" });
+    if (id === "move") setDialog({ kind: "move" });
     if (id === "create-folder") setDialog({ kind: "create", type: "FOLDER" });
     if (id === "create-table") setDialog({ kind: "create", type: "TABLE" });
     if (id === "link-table") setDialog({ kind: "create", type: "TABLE", existing: true });
@@ -162,6 +165,10 @@ export function MenuRowActions({ node }: { node: MenuNode }) {
           onSubmit={submitForm}
           onClose={() => setDialog(null)}
         />
+      )}
+
+      {dialog?.kind === "move" && (
+        <MoveMenuDialog node={node} onClose={() => setDialog(null)} />
       )}
 
       {dialog?.kind === "template" && (

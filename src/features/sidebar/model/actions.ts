@@ -1,5 +1,5 @@
 import type { TranslationKey } from "@/shared/lib/i18n";
-import type { MenuNode } from "./types";
+import { showsTable, type MenuNode } from "./types";
 
 /**
  * Реестр действий над пунктом меню.
@@ -18,6 +18,7 @@ export type MenuActionId =
   | "create-files"
   | "create-microfrontend"
   | "edit"
+  | "move"
   | "settings"
   | "make-template"
   | "delete";
@@ -46,6 +47,18 @@ const ALL: readonly MenuAction[] = [
   { id: "create-files", labelKey: "menuAction.createFiles", requires: "write" },
   { id: "create-microfrontend", labelKey: "menuAction.createMicrofrontend", requires: "write" },
   { id: "edit", labelKey: "menuAction.edit", requires: "update" },
+  /*
+   * «Перенести» — старое «Move table / Move microfrontend»
+   * (MenuButtons.jsx:270, 432): выбрать новую папку списком, а не тащить
+   * мышью. Тому же и служит: перетаскивание не достаёт до свёрнутой папки
+   * на другом конце дерева и требует глобального права `menu_drag`.
+   *
+   * Право — `update`: смена родителя уходит тем же PUT /v3/menus, что
+   * и переименование. Старая админка спрашивала здесь `menu_settings`,
+   * который в базе по умолчанию false, — и пункт не показывался никому,
+   * кроме DEFAULT ADMIN, которому права не проверяли вовсе.
+   */
+  { id: "move", labelKey: "menuAction.move", requires: "update" },
   { id: "make-template", labelKey: "menuAction.makeTemplate", requires: "update" },
   /*
    * «Настройки пункта» здесь была и ничего не делала: обработчика у неё
@@ -64,7 +77,6 @@ const ONLY_GROUPS = new Set<MenuActionId>([
   "create-link",
   "create-files",
   "create-microfrontend",
-  "make-template",
 ]);
 
 /**
@@ -76,10 +88,39 @@ const UNIMPLEMENTED = new Set<MenuActionId>(["settings"]);
 export function actionsFor(node: MenuNode, isAdmin: boolean): MenuAction[] {
   return ALL.filter((action) => {
     if (UNIMPLEMENTED.has(action.id)) return false;
-    if (!node.can[action.requires]) return false;
+    /*
+     * Суперадмину права на пункт не проверяются — так же, как права
+     * на таблицу и глобальные права роли (features/auth/model/permissions).
+     * Строка в menu_permission у него может быть какой угодно: сервер
+     * его всё равно не остановит, а меню без единого действия выглядит
+     * поломкой.
+     *
+     * Из-за этого у микрофронтендов всплывашка бывала пустой: старая
+     * админка спрашивала там `menu_settings || DEFAULT ADMIN`
+     * (MenuButtons.jsx:430), а мы — только `update`, который у этих
+     * пунктов часто снят.
+     */
+    if (!isAdmin && !node.can[action.requires]) return false;
     if (ONLY_GROUPS.has(action.id) && node.kind !== "group") return false;
-    // Шаблон из папки делает только администратор — так было и раньше.
+    // Шаблон делает только администратор — так было и раньше.
     if (action.id === "make-template" && !isAdmin) return false;
+    /*
+     * Шаблон делают из папки и из таблицы (MenuButtons.jsx:320 —
+     * в старом меню TABLE он тоже был). Список таблиц шаблона задают
+     * в самой форме, а `menu_id` решает только, какое дерево пунктов
+     * уедет вместе с ними (шлюз, template.go:201 — GetMenuTree);
+     * у таблицы это дерево из одного пункта, и оно осмысленно.
+     *
+     * У ссылки, микрофронтенда и папки хранилища таблиц нет вовсе —
+     * шаблон из них был бы пустым.
+     */
+    if (
+      action.id === "make-template" &&
+      node.kind !== "group" &&
+      !showsTable(node)
+    ) {
+      return false;
+    }
     // Системные пункты бэкенд удалять запрещает (STATIC_MENU_IDS),
     // поэтому кнопки, которая всегда вернёт ошибку, быть не должно.
     if (action.id === "delete" && node.isStatic) return false;

@@ -1138,36 +1138,57 @@ function MenuPage() {
    */
   const chromeLoading = !menu || viewsLoading;
 
+  /* Тип проверяется наравне с идентификатором: у пункта без выбранного
+     приложения экран ЕСТЬ, и сказать он должен «приложение не выбрано»,
+     а не «экрана нет». */
+  const isMicrofrontend = menu?.type === "MICROFRONTEND" || Boolean(menu?.microfrontendId);
+
   return (
     /*
      * key — чтобы появление проигрывалось на КАЖДЫЙ пункт меню, а не
      * один раз за жизнь экрана: анимация привязана к созданию элемента,
      * а сам компонент при переходе между пунктами остаётся тем же.
      */
-    <div key={menuId} className="animate-page flex h-full flex-col">
-      <header className="flex h-header shrink-0 items-center gap-2 border-b border-border px-4">
-        <SidebarToggleButton />
-        {menu ? (
-          <span className="text-sm font-medium">{menu.label || t("menu.title")}</span>
-        ) : (
-          <Bar className="h-3.5 w-32" />
-        )}
-        {/* Число без слова: «16 записей» требует согласования по падежу
-            в русском и узбекском, а множественные формы i18next стоят
-            трёх ключей на язык ради одного счётчика. */}
-        {supportedView && !treeView && (
-          <span className="text-xs text-fg-muted">· {rows.count}</span>
-        )}
-        {isFetching && !rowsLoading && (
-          <span className="text-xs text-fg-subtle">{t("common.loading")}</span>
-        )}
+    <div
+      key={menuId}
+      className="animate-page flex h-full flex-col"
+      /*
+       * Чужое приложение занимает всю область содержимого: у него своя
+       * шапка, свои отступы и своя рамка, и наша карточка вокруг них —
+       * вторая рамка. Атрибут читает оболочка (app/styles.css), чтобы
+       * не тянуть это знание через контекст ради одного пункта меню.
+       */
+      {...(isMicrofrontend ? { "data-fullbleed": "" } : {})}
+    >
+      {/* У чужого экрана своя шапка, свои заголовки и свои кнопки —
+          наша была бы второй. Свёрнутый сайдбар при этом не теряется:
+          он возвращается своей кнопкой при наведении (WorkspaceHeader,
+          CollapseButton), а не только этой. */}
+      {!isMicrofrontend && (
+        <header className="flex h-header shrink-0 items-center gap-2 border-b border-border px-4">
+          <SidebarToggleButton />
+          {menu ? (
+            <span className="text-sm font-medium">{menu.label || t("menu.title")}</span>
+          ) : (
+            <Bar className="h-3.5 w-32" />
+          )}
+          {/* Число без слова: «16 записей» требует согласования по падежу
+              в русском и узбекском, а множественные формы i18next стоят
+              трёх ключей на язык ради одного счётчика. */}
+          {supportedView && !treeView && (
+            <span className="text-xs text-fg-muted">· {rows.count}</span>
+          )}
+          {isFetching && !rowsLoading && (
+            <span className="text-xs text-fg-subtle">{t("common.loading")}</span>
+          )}
 
-        {/* Помощник — справа в шапке, как и в старой админке. Сама панель
-            живёт в оболочке приложения: она шире одной страницы. */}
-        <div className="ml-auto">
-          <CopilotButton />
-        </div>
-      </header>
+          {/* Помощник — справа в шапке, как и в старой админке. Сама панель
+              живёт в оболочке приложения: она шире одной страницы. */}
+          <div className="ml-auto">
+            <CopilotButton />
+          </div>
+        </header>
+      )}
 
       {/* Полоса вкладок живёт и при открытом view неподдержанного типа:
           иначе доска прячет вкладки вместе с собой, и вернуться к таблице
@@ -1390,14 +1411,11 @@ function MenuPage() {
         /* Право на запись берём с самого пункта меню: таблицы за ним
            нет, а значит нет и прав на таблицу. */
         <FileBrowser folder={filesFolder} canWrite={menu.can.write} />
-      ) : menu?.type === "MICROFRONTEND" || menu?.microfrontendId ? (
+      ) : isMicrofrontend ? (
         /* Чужое приложение внутри админки. Не рамкой, а модулем федерации
            — ему нужны наш токен, язык и окружение; цена этого решения
-           записана в docs/adr/0005.
-           Тип проверяется наравне с идентификатором: у пункта без
-           выбранного приложения экран ЕСТЬ, и сказать он должен
-           «приложение не выбрано», а не «экрана нет». */
-        <MicrofrontendPage id={menu.microfrontendId} params={menu.params} />
+           записана в docs/adr/0005. */
+        <MicrofrontendPage id={menu?.microfrontendId ?? ""} params={menu?.params ?? {}} />
       ) : !supported ? (
         <Notice text={t("menu.notImplemented")} />
       ) : viewsLoading ? (

@@ -91,6 +91,13 @@ export function Dropdown({
 
   return (
     <Popover
+      /* Ширина уезжает на обёртку, а не на кнопку. Две причины, и обе
+         одинаково ломают вид: у `<button>` ширина `auto` считается
+         по содержимому даже когда он блочный (кнопка сжималась
+         в горошину), а `w-40` снаружи всё равно не победил бы `w-full`
+         в базовом классе — у Tailwind выигрывает не тот класс, что
+         стоит позже в атрибуте, а тот, что позже в собранном CSS. */
+      className={className}
       trigger={({ open, toggle }) => (
         <button
           type="button"
@@ -99,14 +106,9 @@ export function Dropdown({
           aria-expanded={open}
           aria-haspopup="menu"
           {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
-          /* Ширины здесь нет намеренно: `w-full` в базовом классе
-             побеждал бы `w-40` снаружи — у Tailwind выигрывает не тот
-             класс, что стоит позже в атрибуте, а тот, что позже в CSS.
-             В колонке кнопка растягивается сама, в строке ширину задаёт
-             flex-1 или явный класс. */
-          className={`flex items-center gap-2 rounded-md border bg-surface text-left transition-colors disabled:opacity-50 ${
+          className={`flex w-full items-center gap-2 rounded-md border bg-surface text-left transition-colors disabled:opacity-50 ${
             size === "sm" ? "h-7 px-1.5 text-xs" : "h-(--spacing-input) px-2.5 text-sm"
-          } ${open ? "border-accent" : "border-border-strong hover:border-fg-subtle"} ${className}`}
+          } ${open ? "border-accent" : "border-border-strong hover:border-fg-subtle"}`}
         >
           {/* Значок выбранного — на кнопке, а не только в раскрытом
               списке: иначе он виден ровно в тот момент, когда уже

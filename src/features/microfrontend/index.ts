@@ -21,5 +21,6 @@ export {
 export type { LoginMicrofront } from "./api/login-microfront";
 export { LoginMicrofrontend } from "./ui/LoginMicrofrontend";
 export { entryUrl, remoteName } from "./model/remote";
+export { clearLegacyMirror } from "./model/legacy-mirror";
 export type { RemotePageProps } from "./model/remote";
 export { MicrofrontendPage } from "./ui/MicrofrontendPage";

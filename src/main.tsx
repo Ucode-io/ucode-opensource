@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { installRefreshHandler } from "./features/auth";
+import { clearLegacyMirror } from "./features/microfrontend";
 import { session } from "./shared/api/session";
 import { queryClient } from "./app/query-client";
 import { applyTheme, useUi } from "./shared/lib/ui-store";
@@ -13,6 +14,16 @@ import "./app/styles.css";
 
 // Клиент узнаёт, как обновлять токен, ровно один раз при старте.
 installRefreshHandler();
+
+/*
+ * Зеркало сессии для микрофронтендов живёт только пока открыт их экран,
+ * но вкладку закрывают и посреди работы. Стираем хвост на старте.
+ *
+ * Заодно уносит и хвост СТАРОЙ админки: ключи те же, а её дев-сервер
+ * слушает тот же порт 7777. Именно оттуда ремоут однажды подобрал токен
+ * восьмидневной давности — см. docs/adr/0005.
+ */
+clearLegacyMirror();
 
 applyTheme(useUi.getState().theme);
 useUi.subscribe((state) => applyTheme(state.theme));

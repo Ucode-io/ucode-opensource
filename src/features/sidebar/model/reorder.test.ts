@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { planMove } from "./reorder";
+import { moveTargets, planMove } from "./reorder";
 import type { MenuNode } from "./types";
 
 const node = (id: string, over: Partial<MenuNode> = {}): MenuNode => ({
@@ -124,4 +124,21 @@ test("приход из другой папки помечается смено�
   expect(plan?.parentId).toBe("root");
   expect(plan?.siblings.map((n) => n.id)).toEqual(["a", "z", "b", "c", "f"]);
   expect(plan?.movedId).toBe("z");
+});
+
+test("переносить некуда внутрь себя и своих потомков", () => {
+  // Та же защита, что у перетаскивания: ветка, ставшая родителем самой
+  // себе, пропадает из сайдбара — от корня до неё больше не дойти.
+  const inner = folder("inner");
+  const other = folder("other");
+  const tree = [
+    { node: f, trail: [] },
+    { node: inner, trail: [{ id: "f", label: "f" }] },
+    { node: other, trail: [] },
+    // Лист папкой не бывает: класть в него нечего.
+    { node: a, trail: [] },
+  ];
+
+  expect(moveTargets(tree, f).map((match) => match.node.id)).toEqual(["other"]);
+  expect(moveTargets(tree, a).map((match) => match.node.id)).toEqual(["f", "inner", "other"]);
 });

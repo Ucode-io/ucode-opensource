@@ -1,6 +1,27 @@
+import type { MenuMatch } from "./search";
 import type { MenuNode } from "./types";
 
 export type DropPosition = "before" | "after" | "inside";
+
+/**
+ * Куда пункт можно перенести списком («Перенести …»): папки дерева,
+ * кроме себя самого и собственных потомков.
+ *
+ * Потомки отсекаются по той же причине, что и при перетаскивании
+ * (см. planMove): ветка, ставшая родителем самой себе, замыкается
+ * в кольцо и пропадает из сайдбара — от корня до неё больше не дойти.
+ *
+ * Корня в списке нет: он не пункт меню, и добавляет его экран отдельной
+ * строкой — см. MoveMenuDialog.
+ */
+export function moveTargets(items: MenuMatch[], node: MenuNode): MenuMatch[] {
+  return items.filter(
+    (match) =>
+      match.node.kind === "group" &&
+      match.node.id !== node.id &&
+      !match.trail.some((step) => step.id === node.id),
+  );
+}
 
 /** Откуда тащим: узел и его уровень. Уровень знает только тот список, который загружен. */
 export type DragSource = {

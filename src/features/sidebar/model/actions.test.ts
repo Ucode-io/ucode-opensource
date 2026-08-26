@@ -57,6 +57,32 @@ test("создание вложенного идёт по праву write", () 
   expect(ids(folder)).not.toContain("create-link");
 });
 
+test("у микрофронтенда есть перенос, правка и удаление", () => {
+  // Старое меню MICROFRONTEND: Move, Edit, разделитель, Delete
+  // (MenuButtons.jsx:428). Тип на набор не влияет — влияют только права.
+  expect(ids(node({ type: "MICROFRONTEND" }))).toEqual(["edit", "move", "delete"]);
+});
+
+test("перенести можно и лист, и папку", () => {
+  // Перетаскивание умеет то же самое, но до свёрнутой папки на другом
+  // конце дерева им не дотянуться.
+  expect(ids(node({ type: "FOLDER", kind: "group" }))).toContain("move");
+  expect(ids(node({ type: "TABLE" }))).toContain("move");
+});
+
+test("суперадмину права на пункт не проверяются", () => {
+  // Ровно так вела себя старая админка на микрофронтендах:
+  // `menu_settings || DEFAULT ADMIN` (MenuButtons.jsx:430). У этих пунктов
+  // права часто сняты, и всплывашка оставалась пустой.
+  const locked = node({
+    type: "MICROFRONTEND",
+    can: { read: true, write: false, update: false, delete: false, settings: false },
+  });
+
+  expect(ids(locked, true)).toEqual(["edit", "move", "delete"]);
+  expect(ids(locked, false)).toEqual([]);
+});
+
 test("без права действие не показывается", () => {
   const readOnly = node({
     can: { ...all, write: false, update: false, delete: false, settings: false },
@@ -72,14 +98,18 @@ test("действия без своего экрана не показываю�
   expect(ids(node({ type: "FOLDER", kind: "group" }), true)).not.toContain("settings");
 });
 
-test("шаблон делают из папки и только администратор", () => {
+test("шаблон делают из папки и из таблицы, и только администратор", () => {
   const folder = node({ type: "FOLDER", kind: "group" });
 
   expect(ids(folder, true)).toContain("make-template");
   // Не администратору шаблоны недоступны — так было и в старой админке.
   expect(ids(folder, false)).not.toContain("make-template");
-  // У таблицы шаблонить нечего: в тело уезжает дерево пункта.
-  expect(ids(node({ type: "TABLE" }), true)).not.toContain("make-template");
+  // В старом меню TABLE «Make Template» был (MenuButtons.jsx:320): таблицы
+  // шаблона выбирают в форме, а от пункта нужно только его дерево.
+  expect(ids(node({ type: "TABLE" }), true)).toContain("make-template");
+  // У микрофронтенда и ссылки таблиц нет — шаблон вышел бы пустым.
+  expect(ids(node({ type: "MICROFRONTEND" }), true)).not.toContain("make-template");
+  expect(ids(node({ type: "LINK", kind: "link" }), true)).not.toContain("make-template");
 });
 
 test("у системного пункта нет удаления", () => {

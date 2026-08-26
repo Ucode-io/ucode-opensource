@@ -117,6 +117,17 @@ function useInvalidate() {
  * (`IsValidFunctionName`), иначе отказ словами. По этому пути он
  * форкает шаблон в GitLab и записывает номер получившегося
  * репозитория; адрес сборки тоже придумывает он.
+ *
+ * `framework_type` обязателен и может быть только `REACT`: всё
+ * остальное бэкенд отклоняет 501-м ещё до форка
+ * (`function_service/api/handlers/microfrontend.go:166`). Выбора нет —
+ * поэтому поля в форме нет, а значение зашито.
+ *
+ * КАКОЙ шаблон форкается — фронт не решает и передать не может: это
+ * один номер проекта GitLab из конфига сервиса
+ * (`GITLAB_MICROFRONT_REACT_PROJECT_ID`), общий для ручного создания,
+ * генератора и публикации из MCP. Наше содержимое шаблона лежит
+ * в `packages/ucode-remote-sdk/template`.
  */
 export function useCreateMicrofrontend() {
   const invalidate = useInvalidate();
@@ -127,6 +138,7 @@ export function useCreateMicrofrontend() {
         name: name.trim(),
         path: path.trim(),
         description: description.trim(),
+        framework_type: "REACT",
       }),
     onError: (error) => reportError(error, "common.createFailed"),
     onSuccess: async () => {

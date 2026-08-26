@@ -1,8 +1,9 @@
-import { Suspense, lazy, useMemo, type ReactNode } from "react";
+import { Suspense, lazy, useMemo, type ComponentType, type ReactNode } from "react";
 import i18n from "@/shared/lib/i18n";
 import { loginSubdomain, useLoginMicrofront } from "../api/login-microfront";
 import { loadRemotePage, type LoginRemoteProps } from "../model/remote";
 import { RemoteBoundary } from "./RemoteBoundary";
+import { RemoteHost } from "./RemoteHost";
 
 /**
  * Экран входа проекта: чужая форма логина вместо нашей.
@@ -39,7 +40,15 @@ export function LoginMicrofrontend({
 
   const Page = useMemo(() => {
     if (!id || !url) return null;
-    return lazy(async () => ({ default: await loadRemotePage<LoginRemoteProps>(id, url) }));
+
+    // Две ветки те же, что у пункта меню (см. MicrofrontendPage):
+    // новый ремоут — наш компонент, старый — свой корень React 18.
+    return lazy(async () => {
+      const { page, meta } = await loadRemotePage(id, url);
+
+      if (meta) return { default: page as ComponentType<LoginRemoteProps> };
+      return { default: (props: LoginRemoteProps) => <RemoteHost page={page} props={props} /> };
+    });
   }, [id, url]);
 
   if (!Page) return fallback;

@@ -280,7 +280,6 @@ function TableFilter({ value, onChange }: { value: string; onChange: (slug: stri
       onLoadMore={tables.loadMore}
       onChange={onChange}
       size="sm"
-      className="w-full"
     />
   );
 }

@@ -82,10 +82,20 @@ export function Popover({
   trigger,
   children,
   align = "start",
+  className = "",
 }: {
   trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: "start" | "end";
+  /**
+   * Классы обёртки кнопки — ширина и место в раскладке.
+   *
+   * Именно обёртки, а не кнопки: у `<button>` ширина `auto` считается
+   * по содержимому даже когда он блочный, поэтому кнопка с `w-40`
+   * и кнопка без неё обе сжимаются в горошину. Обёртка — обычный div,
+   * она и растягивается сама, и слушается flex-1.
+   */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -188,7 +198,7 @@ export function Popover({
   }, [open]);
 
   return (
-    <div ref={root} className="relative">
+    <div ref={root} className={`relative ${className}`}>
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
 
       {open &&
