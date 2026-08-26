@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Anchored } from "@/shared/ui/anchored";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { CHIP_COLORS, Chip } from "@/shared/ui/chip";
+import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import { LanguageInput } from "@/shared/ui/language-input";
 import { SelectMenu } from "@/shared/ui/select-menu";
@@ -52,7 +53,7 @@ import { localized, type Field, type Relation } from "../model/types";
 import { useTableFields, useTables } from "../api/tables";
 import { AutofillSettings } from "./AutofillSettings";
 import { ButtonSettings } from "./ButtonSettings";
-import { FormulaSettings } from "./FormulaSettings";
+import { FormulaSettings, Labeled } from "./FormulaSettings";
 import { CascadeSettings } from "./CascadeSettings";
 import { TypeSettings } from "./TypeSettings";
 import { VisibilitySettings } from "./VisibilitySettings";
@@ -1109,39 +1110,45 @@ function AutoFilterRow({
     .map((field) => ({ value: field.slug, label: field.label || field.slug }));
 
   return (
+    /* Оба списка — `Dropdown`, а не `SelectMenu`: тот раскрывается
+       на месте и в строке из двух колонок распирал её, утаскивая
+       соседний список вниз. Всплывающий слой строку не трогает. */
     <div className="flex items-end gap-1 px-1 pb-1">
       <div className="min-w-0 flex-1">
-        <SelectMenu
-          label={t("relationForm.autoFilterFrom")}
-          placeholder={t("relationForm.pickField")}
-          searchPlaceholder={t("table.searchField")}
-          emptyText={t("table.noFields")}
-          items={ours}
-          selected={new Set(pair.fieldFrom ? [pair.fieldFrom] : [])}
-          search={ourSearch}
-          onSearch={setOurSearch}
-          onLoadMore={() => {}}
-          onPick={(slug) => onChange({ ...pair, fieldFrom: slug })}
-        />
+        <Labeled label={t("relationForm.autoFilterFrom")}>
+          <Dropdown
+            size="sm"
+            value={pair.fieldFrom}
+            placeholder={t("relationForm.pickField")}
+            searchPlaceholder={t("table.searchField")}
+            emptyText={t("table.noFields")}
+            items={ours}
+            search={ourSearch}
+            onSearch={setOurSearch}
+            onChange={(slug) => onChange({ ...pair, fieldFrom: slug })}
+          />
+        </Labeled>
       </div>
 
       <div className="min-w-0 flex-1">
-        <SelectMenu
-          label={t("relationForm.autoFilterTo")}
-          placeholder={t("relationForm.pickField")}
-          searchPlaceholder={t("table.searchField")}
-          emptyText={t("table.noFields")}
-          /* Слаг, а не id: в `auto_filters` лежат слаги, и по ним же
-             собирается запрос строк. */
-          items={theirs.items.map((field) => ({ value: field.slug, label: field.label }))}
-          selected={new Set(pair.fieldTo ? [pair.fieldTo] : [])}
-          search={theirSearch}
-          loading={theirs.isLoading}
-          hasMore={theirs.hasMore}
-          onSearch={setTheirSearch}
-          onLoadMore={theirs.loadMore}
-          onPick={(slug) => onChange({ ...pair, fieldTo: slug })}
-        />
+        <Labeled label={t("relationForm.autoFilterTo")}>
+          <Dropdown
+            size="sm"
+            value={pair.fieldTo}
+            placeholder={t("relationForm.pickField")}
+            searchPlaceholder={t("table.searchField")}
+            emptyText={t("table.noFields")}
+            /* Слаг, а не id: в `auto_filters` лежат слаги, и по ним же
+               собирается запрос строк. */
+            items={theirs.items.map((field) => ({ value: field.slug, label: field.label }))}
+            search={theirSearch}
+            loading={theirs.isLoading}
+            hasMore={theirs.hasMore}
+            onSearch={setTheirSearch}
+            onLoadMore={theirs.loadMore}
+            onChange={(slug) => onChange({ ...pair, fieldTo: slug })}
+          />
+        </Labeled>
       </div>
 
       <button
