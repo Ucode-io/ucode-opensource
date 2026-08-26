@@ -207,12 +207,20 @@ export function Popover({
           /* Колонка со своей прокруткой: пункты, которых больше, чем места,
              прокручиваются здесь. Содержимое со своим прокручиваемым куском
              (список у Dropdown) забирает остаток высоты через flex-1
-             и прокручивается внутри себя — так поиск над ним не уезжает. */
+             и прокручивается внутри себя — так поиск над ним не уезжает.
+
+             z-56, а не 50: выше выехавшего по наведению сайдбара (z-55,
+             см. лестницу слоёв в app/styles.css). Меню его собственных
+             кнопок уходит порталом в <body> и на пятидесятом пряталось
+             под самой панелью. Переехать порталом В панель, как в модальное
+             окно, оно не может: выехавшая панель сдвинута `translate`,
+             а сдвинутый предок становится точкой отсчёта для `fixed` —
+             координаты уехали бы на её ширину. */
           <div
             ref={menu}
             role="menu"
             data-popover
-            className="fixed z-50 flex flex-col overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-popover"
+            className="fixed z-56 flex flex-col overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-popover"
           >
             {children(() => setOpen(false))}
           </div>,
