@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconHistory, IconPlus, IconSparkles } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useGlobalRight } from "@/features/auth";
 import { SidebarToggleButton } from "@/features/sidebar";
 import { Icon } from "@/shared/ui/icon";
 import { Popover } from "@/shared/ui/popover";
@@ -22,6 +23,7 @@ import { Conversation } from "./Conversation";
  */
 export function CopilotPage() {
   const { t } = useTranslation();
+  const allowed = useGlobalRight("chat");
   const chat = useCopilotChat();
   const box = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
@@ -40,6 +42,9 @@ export function CopilotPage() {
     setInput(prompt);
     box.current?.focus();
   };
+
+  /* Экран открывается по прямой ссылке — право проверяем и здесь. */
+  if (!allowed) return null;
 
   return (
     <div className="animate-page flex h-full flex-col">

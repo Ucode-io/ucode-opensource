@@ -15,6 +15,7 @@ import {
   type Icon as TablerIcon,
 } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { useGlobalRight } from "@/features/auth";
 import { COPILOT_MAX_WIDTH, COPILOT_MIN_WIDTH, useUi } from "@/shared/lib/ui-store";
 import type { TranslationKey } from "@/shared/lib/i18n";
 import { Icon } from "@/shared/ui/icon";
@@ -37,6 +38,7 @@ import { Conversation } from "./Conversation";
  */
 export function CopilotPanel() {
   const { t } = useTranslation();
+  const allowed = useGlobalRight("chat");
   const { copilotOpen, copilotWidth, setCopilotWidth, closeCopilot, sidebarCollapsed } = useUi();
   const chat = useCopilotChat();
 
@@ -76,6 +78,9 @@ export function CopilotPanel() {
     setInput(prompt);
     box.current?.focus();
   };
+
+  /* Роль без права `chat` помощника не видит — ни панели, ни кнопки. */
+  if (!allowed) return null;
 
   return (
     <aside
@@ -169,7 +174,10 @@ export function CopilotPanel() {
  */
 export function CopilotButton() {
   const { t } = useTranslation();
+  const allowed = useGlobalRight("chat");
   const { copilotOpen, toggleCopilot } = useUi();
+
+  if (!allowed) return null;
 
   return (
     <button
