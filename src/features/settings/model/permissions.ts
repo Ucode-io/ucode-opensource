@@ -64,9 +64,12 @@ export type OtherScreenRight = (typeof OTHER_SCREEN_RIGHTS)[number];
  * настройки, проекты, окружения, ключи, биллинг.
  *
  * Значения здесь БУЛЕВЫ, в отличие от прав на таблицы: у них своя
- * таблица в базе (`global_permission`) и своя форма. Список взят
- * из живого ответа, а не из старого экрана: там их рисуют семнадцать,
- * и ровно столько же приходит.
+ * таблица в базе (`global_permission`) и своя форма. Имена — поля
+ * proto `GlobalPermission` (permission.pb.go:609).
+ *
+ * `chat` — право на помощника; его читает features/copilot. Не
+ * `gpt_button`: тот в proto есть, но его не читает никто — ни этот
+ * фронт, ни старая админка, ни сам бэкенд.
  */
 export const GLOBAL_RIGHTS = [
   "menu_button",
@@ -85,7 +88,7 @@ export const GLOBAL_RIGHTS = [
   "billing",
   "gitbook_button",
   "chatwoot_button",
-  "gpt_button",
+  "chat",
 ] as const;
 export type GlobalRight = (typeof GLOBAL_RIGHTS)[number];
 
@@ -144,9 +147,17 @@ type TableDto = {
   field_permissions?: FieldPermissionDto[];
 };
 
-/** Глобальные права булевы: `false` — запрет, остальное — разрешение. */
+/**
+ * Глобальное право есть, только когда пришло `true`.
+ *
+ * Не как у прав на таблицы, где «ключа нет» значит «разрешено»: здесь
+ * `false` до нас не доезжает вовсе — поля proto с omitempty
+ * (permission.pb.go:609). Считать отсутствие разрешением значит рисовать
+ * галку там, где кнопка скрыта: features/auth/model/permissions читает
+ * те же права строго через `=== true`.
+ */
 function globalAllowed(value: unknown): boolean {
-  return value !== false && value !== "No";
+  return value === true;
 }
 
 /**

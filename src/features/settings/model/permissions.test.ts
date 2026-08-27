@@ -103,8 +103,11 @@ test("глобальные права булевы и живут в своём �
 
   expect(before.global.billing).toBe(true);
   expect(before.global.sms_button).toBe(false);
-  // Ключа нет вовсе — право есть: так же читаются права на таблицы.
-  expect(before.global.menu_button).toBe(true);
+  // Ключа нет — права нет: `false` бэкенд режет omitempty, и так же
+  // читает эти права features/auth (галка не должна врать про кнопку).
+  expect(before.global.menu_button).toBe(false);
+  // Право на помощника — `chat`, его читает features/copilot.
+  expect(before.global.chat).toBe(false);
 
   const after = toggleGlobalRight(before, "billing", false);
 
