@@ -152,6 +152,8 @@ export const keys = {
       [...keys.settings.activityAll(), envId, filters] as const,
     activityEntry: (envId: string, id: string) =>
       [...keys.settings.activityAll(), envId, "entry", id] as const,
+    /** Расход API-запросов: лимит месяца и разбивка по маршрутам. На проект. */
+    usage: (projectId: string) => [...keys.settings.all, "usage", projectId] as const,
     /** Свои эндпоинты (`/x-api/...`): список на проект и окружение. */
     endpoints: (projectId: string, envId: string) =>
       [...keys.settings.all, "endpoints", projectId, envId] as const,

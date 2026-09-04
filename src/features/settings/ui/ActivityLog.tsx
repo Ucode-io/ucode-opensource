@@ -21,6 +21,7 @@ import {
 import { unwrapEntry } from "../model/activity";
 import { FunctionLogs } from "./FunctionLogs";
 import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
+import { Usage } from "./Usage";
 
 /**
  * Журнал изменений: кто, когда и что поменял.
@@ -39,6 +40,9 @@ import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
  * отработал вызов, а не что поменялось в проекте), и общих колонок
  * с этим списком нет ни одной, кроме даты, — поэтому вкладка,
  * а не строки вперемешку. См. FunctionLogs.
+ *
+ * Третья вкладка — расход API-лимита: тоже журнал активности проекта,
+ * только просуммированный по маршрутам. См. Usage.
  */
 export function ActivityLog() {
   const { t } = useTranslation();
@@ -51,13 +55,16 @@ export function ActivityLog() {
           tabs={[
             { id: "changes", label: t("activity.tabChanges") },
             { id: "functions", label: t("activity.tabFunctions") },
+            { id: "usage", label: t("activity.tabUsage") },
           ]}
           activeId={tab}
           onSelect={setTab}
         />
       </div>
 
-      {tab === "changes" ? <ChangesLog /> : <FunctionLogs />}
+      {tab === "changes" && <ChangesLog />}
+      {tab === "functions" && <FunctionLogs />}
+      {tab === "usage" && <Usage />}
     </div>
   );
 }
