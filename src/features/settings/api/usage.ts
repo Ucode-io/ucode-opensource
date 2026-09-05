@@ -22,12 +22,20 @@ const BREAKDOWN = "/v1/pricing/api-call/breakdown";
 /** Больше строк не просим: хвост ручка сама складывает в `other`. */
 const TOP = 10;
 
+/*
+ * До базы цифры доезжают раз в десять минут, а каждый запрос сюда
+ * сам расходует лимит: перезапрашивать чаще минуты нет смысла.
+ */
+const FRESH_FOR = 60_000;
+
 type RowDto = {
   source?: string;
   auth_type?: string;
   method?: string;
   route?: string;
   collection?: string;
+  actor_id?: string;
+  actor_name?: string;
   count?: number;
   percent?: number;
 };
@@ -42,22 +50,17 @@ type BreakdownDto = {
   other?: number;
 };
 
-export type UsagePart = {
-  /** Чем авторизован запрос: `bearer`, `api_key`. Пусто — не записано. */
-  authType: string;
-  count: number;
-  percent: number;
-};
-
 export type UsageRow = {
   /** `admin` — работа в админке: лимит расходует, но не блокируется. */
   source: "admin" | "client";
   /** `GET /v2/items/deal`: шаблон маршрута с подставленной таблицей. */
   label: string;
+  /** Сырые части маршрута — ими строка раскрывается в список отправителей. */
+  method: string;
+  route: string;
+  collection: string;
   count: number;
   percent: number;
-  /** Разбивка строки по типу авторизации — раскрывается аккордеоном. */
-  parts: UsagePart[];
 };
 
 export type Usage = {
@@ -76,18 +79,20 @@ export type Usage = {
   other: number;
 };
 
-export function useUsage() {
+export function useUsage(clientOnly: boolean) {
   const projectId = useSession().getProjectId() ?? "";
 
+  const params = {
+    group_by: "route",
+    limit: TOP,
+    ...(clientOnly ? { source: "client" } : {}),
+  };
+
   const query = useQuery({
-    queryKey: keys.settings.usage(projectId),
-    queryFn: () => api.get<BreakdownDto>(BREAKDOWN, { params: { limit: TOP } }),
+    queryKey: keys.settings.usage(projectId, params),
+    queryFn: () => api.get<BreakdownDto>(BREAKDOWN, { params }),
     enabled: Boolean(projectId),
-    /*
-     * До базы цифры доезжают раз в десять минут, а каждый запрос сюда
-     * сам расходует лимит: перезапрашивать чаще минуты нет смысла.
-     */
-    staleTime: 60_000,
+    staleTime: FRESH_FOR,
     select: toUsage,
   });
 
@@ -114,7 +119,7 @@ export function toUsage(dto: BreakdownDto): Usage {
 /**
  * Один маршрут ручка отдаёт несколькими строками — по строке на тип
  * авторизации. Человек спрашивает «кто ест лимит», а не «каким токеном»,
- * поэтому строки складываются в одну, а разбивка прячется в аккордеон.
+ * поэтому строки складываются в одну; кто вызывал — по раскрытию строки.
  */
 function groupRows(dtos: RowDto[]): UsageRow[] {
   const groups = new Map<string, UsageRow>();
@@ -132,28 +137,75 @@ function groupRows(dtos: RowDto[]): UsageRow[] {
       .filter(Boolean)
       .join(" ");
 
-    const part: UsagePart = {
-      authType: dto.auth_type ?? "",
-      count: dto.count ?? 0,
-      percent: dto.percent ?? 0,
-    };
-
     const group = groups.get(`${source} ${label}`);
     if (group) {
-      group.count += part.count;
+      group.count += dto.count ?? 0;
       // Складываются готовые доли: до сотых, чтобы не тащить хвост float.
-      group.percent = Math.round((group.percent + part.percent) * 100) / 100;
-      group.parts.push(part);
+      group.percent = Math.round((group.percent + (dto.percent ?? 0)) * 100) / 100;
     } else {
       groups.set(`${source} ${label}`, {
         source,
         label,
-        count: part.count,
-        percent: part.percent,
-        parts: [part],
+        method: dto.method ?? "",
+        route,
+        collection,
+        count: dto.count ?? 0,
+        percent: dto.percent ?? 0,
       });
     }
   }
 
   return [...groups.values()].sort((a, b) => b.count - a.count);
+}
+
+export type UsageActor = {
+  /** Чем авторизован запрос: `bearer`, `api_key`. Пусто — не записано. */
+  authType: string;
+  /** Имя ключа, а для людей — короткий id: имён у ручки нет. */
+  name: string;
+  count: number;
+  /** Доля от запросов ЭТОГО маршрута, а не от всего месяца. */
+  percent: number;
+};
+
+/**
+ * Кто вызывал один маршрут: та же ручка с `group_by=actor` и фильтром
+ * по маршруту. Запрос уходит при раскрытии строки — свой хук, чтобы
+ * закрытые строки ничего не тянули.
+ */
+export function useUsageActors(row: UsageRow | null, clientOnly: boolean) {
+  const projectId = useSession().getProjectId() ?? "";
+
+  const params = {
+    group_by: "actor",
+    limit: TOP,
+    method: row?.method ?? "",
+    route: row?.route ?? "",
+    ...(row?.collection ? { collection: row.collection } : {}),
+    ...(clientOnly ? { source: "client" } : {}),
+  };
+
+  const query = useQuery({
+    queryKey: keys.settings.usageActors(projectId, params),
+    queryFn: () => api.get<BreakdownDto>(BREAKDOWN, { params }),
+    enabled: Boolean(projectId && row),
+    staleTime: FRESH_FOR,
+    select: toActors,
+  });
+
+  return { actors: query.data ?? NO_ACTORS, isLoading: query.isLoading };
+}
+
+const NO_ACTORS: UsageActor[] = [];
+
+export function toActors(dto: BreakdownDto): UsageActor[] {
+  return (dto.top ?? []).map((row) => ({
+    authType: row.auth_type ?? "",
+    name:
+      row.actor_name?.trim() ||
+      // Идентификатор режется до узнаваемого: целиком он никому не нужен.
+      (row.actor_id ? `${row.actor_id.slice(0, 8)}…` : ""),
+    count: row.count ?? 0,
+    percent: row.percent ?? 0,
+  }));
 }

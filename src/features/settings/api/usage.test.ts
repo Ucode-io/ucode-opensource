@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toUsage } from "./usage";
+import { toActors, toUsage } from "./usage";
 
 test("таблица подставляется в шаблон маршрута", () => {
   const usage = toUsage({
@@ -30,12 +30,8 @@ test("один маршрут с разными типами авторизац�
   expect(usage.top).toHaveLength(2);
   expect(usage.top.map((row) => row.count)).toEqual([43, 14]);
   expect(usage.top.map((row) => row.percent)).toEqual([17.55, 5.71]);
-  expect(usage.top.map((row) => row.parts.length)).toEqual([2, 1]);
-  expect(usage.top.flatMap((row) => row.parts.map((part) => part.authType))).toEqual([
-    "bearer",
-    "",
-    "api_key",
-  ]);
+  // Сырые части маршрута переживают склейку: ими строка раскрывается.
+  expect(usage.top.map((row) => row.route)).toEqual(["/v3/menus", "/v1/table/:table_id"]);
 });
 
 /* Безлимит приходит двумя способами: флагом и нулевым лимитом. */
@@ -47,4 +43,17 @@ test("без лимита процент не считается", () => {
 /* Флаг блокировки и счётчик — разные снимки: перерасход возможен. */
 test("процент не выходит за сотню", () => {
   expect(toUsage({ limit: 100, used: 250 }).percentUsed).toBe(100);
+});
+
+/* actor_name есть только у ключей; людям достаётся короткий id. */
+test("отправитель: имя ключа важнее идентификатора, длинный id режется", () => {
+  const actors = toActors({
+    top: [
+      { auth_type: "api_key", actor_name: "Function", actor_id: "ignored", count: 5, percent: 9.43 },
+      { auth_type: "bearer", actor_id: "eb4675e9-03d8-400e-aad7-e8c76af95480", count: 31, percent: 58.49 },
+      { auth_type: "", count: 11, percent: 20.75 },
+    ],
+  });
+
+  expect(actors.map((actor) => actor.name)).toEqual(["Function", "eb4675e9…", ""]);
 });

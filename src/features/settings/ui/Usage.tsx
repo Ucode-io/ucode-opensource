@@ -3,7 +3,7 @@ import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
 import { Tabs } from "@/shared/ui/tabs";
-import { useUsage } from "../api/usage";
+import { useUsage, useUsageActors, type UsageRow } from "../api/usage";
 import { Empty, SectionHeader, Td, Th } from "./parts";
 
 /**
@@ -15,23 +15,24 @@ import { Empty, SectionHeader, Td, Th } from "./parts";
  * на «откуда сто тысяч запросов». Поэтому — вкладка журнала, рядом
  * с изменениями и функциями, а не собственный раздел.
  *
- * Переключатель «только клиентский» фильтрует на фронте: параметра
- * source у ручки нет. Он тут главный: админский трафик (клики
- * по билдеру, включая сам этот экран) лимит расходует, но не
- * блокируется никогда — режется только клиентское API.
+ * Один экран без видов и фильтров: таблица маршрутов, строка
+ * раскрывается и показывает, кто вызывал. Ручка умеет больше
+ * (group_by по таблицам и времени, произвольные фильтры), но каждый
+ * лишний разрез — это вкладки и чипы, в которых вопрос «кто ест
+ * лимит» тонет; ровно так случилось с первой версией этого экрана.
+ *
+ * Срез «только клиентское API» — главный переключатель: админский
+ * трафик (клики по билдеру, включая сам этот экран) лимит расходует,
+ * но не блокируется никогда — режется только клиентское API.
  */
 export function Usage() {
   const { t, i18n } = useTranslation();
   const [scope, setScope] = useState("all");
   const [opened, setOpened] = useState<Record<string, boolean>>({});
-  const { usage, isLoading } = useUsage();
 
   const clientOnly = scope === "client";
-  const rows = usage
-    ? clientOnly
-      ? usage.top.filter((row) => row.source === "client")
-      : usage.top
-    : [];
+  const { usage, isLoading } = useUsage(clientOnly);
+  const rows = usage?.top ?? [];
 
   const amount = (value: number) => value.toLocaleString(i18n.language);
 
@@ -102,38 +103,19 @@ export function Usage() {
                     <Td className="text-right tabular-nums text-fg-muted">{row.percent}%</Td>
                   </tr>
 
-                  {/* Раскрытая строка — та же цифра, разложенная по типу
-                      авторизации: bearer — человек, api_key — интеграция. */}
-                  {open &&
-                    row.parts.map((part, index) => (
-                      <tr key={index} className="bg-bg">
-                        <Td />
-                        <Td className="text-xs text-fg-muted">
-                          {part.authType === "bearer" && t("usage.authBearer")}
-                          {part.authType === "api_key" && t("usage.authApiKey")}
-                          {part.authType !== "bearer" && part.authType !== "api_key" && "—"}
-                        </Td>
-                        <Td className="text-right text-xs tabular-nums text-fg-muted">
-                          {amount(part.count)}
-                        </Td>
-                        <Td className="text-right text-xs tabular-nums text-fg-muted">
-                          {part.percent}%
-                        </Td>
-                      </tr>
-                    ))}
+                  {open && <RouteSenders row={row} clientOnly={clientOnly} />}
                 </Fragment>
               );
             })}
 
             {/*
               «Прочее» — хвост за пределами десятки плюс трафик до выката
-              разбивки. Источника у него нет, поэтому в клиентском срезе
-              строка не рисуется, а не притворяется клиентской.
+              разбивки. Маршрута у него нет — раскрывать нечего.
             */}
-            {!clientOnly && usage && usage.other > 0 && (
+            {usage && usage.other > 0 && (
               <tr>
-                <Td />
                 <Td className="text-fg-muted">{t("usage.other")}</Td>
+                <Td />
                 <Td className="text-right tabular-nums">{amount(usage.other)}</Td>
                 <Td />
               </tr>
@@ -142,5 +124,57 @@ export function Usage() {
         </table>
       </div>
     </div>
+  );
+}
+
+/**
+ * Кто вызывал раскрытый маршрут. Свой компонент — свой запрос: он уходит
+ * только при раскрытии строки, закрытые строки ничего не тянут.
+ *
+ * Доли здесь — от запросов этого маршрута, а не от всего месяца:
+ * так их отдаёт ручка под фильтром, и так они отвечают на вопрос
+ * «кто из вызывающих главный».
+ */
+function RouteSenders({ row, clientOnly }: { row: UsageRow; clientOnly: boolean }) {
+  const { t, i18n } = useTranslation();
+  const { actors, isLoading } = useUsageActors(row, clientOnly);
+
+  if (isLoading) {
+    return (
+      <tr>
+        <Td />
+        <Td className="text-xs text-fg-muted">{t("common.loading")}</Td>
+        <Td />
+        <Td />
+      </tr>
+    );
+  }
+
+  return (
+    <>
+      {actors.map((actor, index) => {
+        const auth =
+          actor.authType === "bearer"
+            ? t("usage.authBearer")
+            : actor.authType === "api_key"
+              ? t("usage.authApiKey")
+              : "";
+        const label =
+          auth && actor.name
+            ? `${auth} · ${actor.name}`
+            : auth || actor.name || t("usage.senderUnknown");
+
+        return (
+          <tr key={index} className="bg-bg">
+            <Td />
+            <Td className="text-xs text-fg-muted">{label}</Td>
+            <Td className="text-right text-xs tabular-nums text-fg-muted">
+              {actor.count.toLocaleString(i18n.language)}
+            </Td>
+            <Td className="text-right text-xs tabular-nums text-fg-muted">{actor.percent}%</Td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
