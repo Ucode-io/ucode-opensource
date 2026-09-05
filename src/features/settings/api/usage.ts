@@ -24,6 +24,7 @@ const TOP = 10;
 
 type RowDto = {
   source?: string;
+  auth_type?: string;
   method?: string;
   route?: string;
   collection?: string;
@@ -41,13 +42,22 @@ type BreakdownDto = {
   other?: number;
 };
 
+export type UsagePart = {
+  /** Чем авторизован запрос: `bearer`, `api_key`. Пусто — не записано. */
+  authType: string;
+  count: number;
+  percent: number;
+};
+
 export type UsageRow = {
-  /** `admin` — работа в билдере: лимит расходует, но не блокируется. */
+  /** `admin` — работа в админке: лимит расходует, но не блокируется. */
   source: "admin" | "client";
   /** `GET /v2/items/deal`: шаблон маршрута с подставленной таблицей. */
   label: string;
   count: number;
   percent: number;
+  /** Разбивка строки по типу авторизации — раскрывается аккордеоном. */
+  parts: UsagePart[];
 };
 
 export type Usage = {
@@ -96,26 +106,54 @@ export function toUsage(dto: BreakdownDto): Usage {
     unlimited,
     blocked: Boolean(dto.blocked),
     percentUsed: unlimited ? null : Math.min(100, (used / limit) * 100),
-    top: (dto.top ?? []).map(toRow),
+    top: groupRows(dto.top ?? []),
     other: dto.other ?? 0,
   };
 }
 
-function toRow(dto: RowDto): UsageRow {
-  const route = dto.route ?? "";
-  const collection = dto.collection ?? "";
+/**
+ * Один маршрут ручка отдаёт несколькими строками — по строке на тип
+ * авторизации. Человек спрашивает «кто ест лимит», а не «каким токеном»,
+ * поэтому строки складываются в одну, а разбивка прячется в аккордеон.
+ */
+function groupRows(dtos: RowDto[]): UsageRow[] {
+  const groups = new Map<string, UsageRow>();
 
-  return {
-    source: dto.source === "admin" ? "admin" : "client",
+  for (const dto of dtos) {
+    const source = dto.source === "admin" ? "admin" : "client";
+    const route = dto.route ?? "";
+    const collection = dto.collection ?? "";
     /*
      * В `route` лежит шаблон (`/v2/items/:collection`), таблица —
      * отдельным полем: иначе на каждый id заводилась бы своя строка.
      * Человеку показываем уже собранный адрес.
      */
-    label: [dto.method, collection ? route.replace(":collection", collection) : route]
+    const label = [dto.method, collection ? route.replace(":collection", collection) : route]
       .filter(Boolean)
-      .join(" "),
-    count: dto.count ?? 0,
-    percent: dto.percent ?? 0,
-  };
+      .join(" ");
+
+    const part: UsagePart = {
+      authType: dto.auth_type ?? "",
+      count: dto.count ?? 0,
+      percent: dto.percent ?? 0,
+    };
+
+    const group = groups.get(`${source} ${label}`);
+    if (group) {
+      group.count += part.count;
+      // Складываются готовые доли: до сотых, чтобы не тащить хвост float.
+      group.percent = Math.round((group.percent + part.percent) * 100) / 100;
+      group.parts.push(part);
+    } else {
+      groups.set(`${source} ${label}`, {
+        source,
+        label,
+        count: part.count,
+        percent: part.percent,
+        parts: [part],
+      });
+    }
+  }
+
+  return [...groups.values()].sort((a, b) => b.count - a.count);
 }

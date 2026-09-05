@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
+import { Icon } from "@/shared/ui/icon";
 import { Tabs } from "@/shared/ui/tabs";
 import { useUsage } from "../api/usage";
 import { Empty, SectionHeader, Td, Th } from "./parts";
@@ -21,6 +23,7 @@ import { Empty, SectionHeader, Td, Th } from "./parts";
 export function Usage() {
   const { t, i18n } = useTranslation();
   const [scope, setScope] = useState("all");
+  const [opened, setOpened] = useState<Record<string, boolean>>({});
   const { usage, isLoading } = useUsage();
 
   const clientOnly = scope === "client";
@@ -77,17 +80,50 @@ export function Usage() {
             {isLoading && <Empty text={t("common.loading")} colSpan={4} />}
             {!isLoading && !rows.length && <Empty text={t("usage.empty")} colSpan={4} />}
 
-            {rows.map((row) => (
+            {rows.map((row) => {
               // Источник входит в ключ: один маршрут виден с обеих сторон.
-              <tr key={`${row.source} ${row.label}`}>
-                <Td className="text-fg-muted">
-                  {row.source === "admin" ? t("usage.sourceAdmin") : t("usage.sourceClient")}
-                </Td>
-                <Td className="font-mono text-xs">{row.label}</Td>
-                <Td className="text-right tabular-nums">{amount(row.count)}</Td>
-                <Td className="text-right tabular-nums text-fg-muted">{row.percent}%</Td>
-              </tr>
-            ))}
+              const key = `${row.source} ${row.label}`;
+              const open = Boolean(opened[key]);
+
+              return (
+                <Fragment key={key}>
+                  <tr
+                    onClick={() => setOpened((state) => ({ ...state, [key]: !open }))}
+                    className="cursor-pointer hover:bg-surface-hover"
+                  >
+                    <Td className="text-fg-muted">
+                      <span className="flex items-center gap-1">
+                        <Icon as={open ? IconChevronDown : IconChevronRight} size={14} />
+                        {row.source === "admin" ? t("usage.sourceAdmin") : t("usage.sourceClient")}
+                      </span>
+                    </Td>
+                    <Td className="font-mono text-xs">{row.label}</Td>
+                    <Td className="text-right tabular-nums">{amount(row.count)}</Td>
+                    <Td className="text-right tabular-nums text-fg-muted">{row.percent}%</Td>
+                  </tr>
+
+                  {/* Раскрытая строка — та же цифра, разложенная по типу
+                      авторизации: bearer — человек, api_key — интеграция. */}
+                  {open &&
+                    row.parts.map((part, index) => (
+                      <tr key={index} className="bg-bg">
+                        <Td />
+                        <Td className="text-xs text-fg-muted">
+                          {part.authType === "bearer" && t("usage.authBearer")}
+                          {part.authType === "api_key" && t("usage.authApiKey")}
+                          {part.authType !== "bearer" && part.authType !== "api_key" && "—"}
+                        </Td>
+                        <Td className="text-right text-xs tabular-nums text-fg-muted">
+                          {amount(part.count)}
+                        </Td>
+                        <Td className="text-right text-xs tabular-nums text-fg-muted">
+                          {part.percent}%
+                        </Td>
+                      </tr>
+                    ))}
+                </Fragment>
+              );
+            })}
 
             {/*
               «Прочее» — хвост за пределами десятки плюс трафик до выката
