@@ -1003,6 +1003,7 @@
   "usage.hint": "Oylik API so'rovlar limiti va uni sarflayotgan marshrutlar. Raqamlar o'n minutgacha kechikadi.",
   "usage.other": "Boshqa",
   "usage.route": "So'rov",
+  "usage.senderNoAuth": "Avtorizatsiyasiz",
   "usage.senderUnknown": "Aniqlanmagan",
   "usage.share": "Ulush",
   "usage.source": "Manba",

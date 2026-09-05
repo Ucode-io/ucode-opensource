@@ -1003,6 +1003,7 @@
   "usage.hint": "The monthly API request limit and the routes consuming it. Figures lag by up to ten minutes.",
   "usage.other": "Other",
   "usage.route": "Request",
+  "usage.senderNoAuth": "No authorization",
   "usage.senderUnknown": "Not identified",
   "usage.share": "Share",
   "usage.source": "Source",

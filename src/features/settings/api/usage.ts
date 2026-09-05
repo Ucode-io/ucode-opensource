@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/shared/api/client";
+import { api, authApi } from "@/shared/api/client";
 import { useSession } from "@/shared/api/use-session";
 import { keys } from "@/shared/lib/query-keys";
 
@@ -161,7 +161,7 @@ function groupRows(dtos: RowDto[]): UsageRow[] {
 export type UsageActor = {
   /** Чем авторизован запрос: `bearer`, `api_key`. Пусто — не записано. */
   authType: string;
-  /** Имя ключа, а для людей — короткий id: имён у ручки нет. */
+  /** Кто: имя ключа или имя пользователя; пусто — автор не записан. */
   name: string;
   count: number;
   /** Доля от запросов ЭТОГО маршрута, а не от всего месяца. */
@@ -175,6 +175,7 @@ export type UsageActor = {
  */
 export function useUsageActors(row: UsageRow | null, clientOnly: boolean) {
   const projectId = useSession().getProjectId() ?? "";
+  const names = useSenderNames();
 
   const params = {
     group_by: "actor",
@@ -193,19 +194,73 @@ export function useUsageActors(row: UsageRow | null, clientOnly: boolean) {
     select: toActors,
   });
 
-  return { actors: query.data ?? NO_ACTORS, isLoading: query.isLoading };
+  return { actors: withNames(query.data ?? NO_ACTORS, names), isLoading: query.isLoading };
 }
 
-const NO_ACTORS: UsageActor[] = [];
+const NO_ACTORS: RawActor[] = [];
 
-export function toActors(dto: BreakdownDto): UsageActor[] {
+type RawActor = UsageActor & {
+  /** Идентификатор пользователя auth-сервиса — по нему ищется имя. */
+  actorId: string;
+};
+
+export function toActors(dto: BreakdownDto): RawActor[] {
   return (dto.top ?? []).map((row) => ({
     authType: row.auth_type ?? "",
-    name:
-      row.actor_name?.trim() ||
-      // Идентификатор режется до узнаваемого: целиком он никому не нужен.
-      (row.actor_id ? `${row.actor_id.slice(0, 8)}…` : ""),
+    name: row.actor_name?.trim() ?? "",
+    actorId: row.actor_id ?? "",
     count: row.count ?? 0,
     percent: row.percent ?? 0,
   }));
 }
+
+/**
+ * Имя отправителя: своё из записи (ключи), иначе из списка пользователей
+ * проекта, иначе — узнаваемый кусок идентификатора. Пусто — автора нет.
+ */
+export function withNames(actors: RawActor[], names: Map<string, string>): UsageActor[] {
+  return actors.map(({ actorId, ...actor }) => ({
+    ...actor,
+    name:
+      actor.name ||
+      names.get(actorId) ||
+      (actorId ? `${actorId.slice(0, 8)}…` : ""),
+  }));
+}
+
+type UserDto = { id?: string; name?: string; email?: string; login?: string };
+
+/**
+ * Пользователи проекта одним списком: id → имя.
+ *
+ * Резолвим на фронте, потому что ручка разбивки отдаёт для bearer только
+ * идентификатор: auth-сервис не селектит `name` в GetUserByID, и бэк
+ * не ходит за ним на каждый запрос. Список маленький и меняется редко —
+ * пять минут кэша достаточно. Упал запрос — подписи откатываются
+ * к короткому идентификатору, ошибкой это не считается.
+ */
+function useSenderNames(): Map<string, string> {
+  const projectId = useSession().getProjectId() ?? "";
+
+  const query = useQuery({
+    queryKey: keys.settings.usageSenderNames(projectId),
+    queryFn: () =>
+      authApi.get<{ users?: UserDto[] }>("/v2/user", {
+        params: { "project-id": projectId, limit: 1000 },
+      }),
+    enabled: Boolean(projectId),
+    staleTime: 300_000,
+    select: (dto) =>
+      new Map(
+        (dto.users ?? []).flatMap((user) =>
+          user.id
+            ? [[user.id, user.name?.trim() || user.email?.trim() || user.login?.trim() || ""] as const]
+            : [],
+        ),
+      ),
+  });
+
+  return query.data ?? NO_NAMES;
+}
+
+const NO_NAMES = new Map<string, string>();

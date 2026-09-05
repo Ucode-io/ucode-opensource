@@ -158,6 +158,9 @@ export const keys = {
     /** Отправители одного маршрута — фильтр маршрута входит в params. */
     usageActors: (projectId: string, params: Record<string, string | number>) =>
       [...keys.settings.all, "usage", projectId, "actors", params] as const,
+    /** Справочник «id пользователя → имя» для подписей отправителей. */
+    usageSenderNames: (projectId: string) =>
+      [...keys.settings.all, "usage", projectId, "senderNames"] as const,
     /** Свои эндпоинты (`/x-api/...`): список на проект и окружение. */
     endpoints: (projectId: string, envId: string) =>
       [...keys.settings.all, "endpoints", projectId, envId] as const,

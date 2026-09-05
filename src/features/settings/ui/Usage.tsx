@@ -159,10 +159,16 @@ function RouteSenders({ row, clientOnly }: { row: UsageRow; clientOnly: boolean 
             : actor.authType === "api_key"
               ? t("usage.authApiKey")
               : "";
-        const label =
-          auth && actor.name
+        /*
+         * Без auth — служебный трафик, автора у него не бывает.
+         * С auth, но без имени — автор был, но запись его не сохранила:
+         * говорим и то, и другое, а не одно слово «User».
+         */
+        const label = !auth
+          ? t("usage.senderNoAuth")
+          : actor.name
             ? `${auth} · ${actor.name}`
-            : auth || actor.name || t("usage.senderUnknown");
+            : `${auth} — ${t("usage.senderUnknown")}`;
 
         return (
           <tr key={index} className="bg-bg">

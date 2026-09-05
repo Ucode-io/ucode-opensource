@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toActors, toUsage } from "./usage";
+import { toActors, toUsage, withNames } from "./usage";
 
 test("таблица подставляется в шаблон маршрута", () => {
   const usage = toUsage({
@@ -45,15 +45,18 @@ test("процент не выходит за сотню", () => {
   expect(toUsage({ limit: 100, used: 250 }).percentUsed).toBe(100);
 });
 
-/* actor_name есть только у ключей; людям достаётся короткий id. */
-test("отправитель: имя ключа важнее идентификатора, длинный id режется", () => {
+/* actor_name есть только у ключей; людей резолвит список пользователей. */
+test("отправитель: своё имя, потом справочник, потом короткий id", () => {
   const actors = toActors({
     top: [
-      { auth_type: "api_key", actor_name: "Function", actor_id: "ignored", count: 5, percent: 9.43 },
-      { auth_type: "bearer", actor_id: "eb4675e9-03d8-400e-aad7-e8c76af95480", count: 31, percent: 58.49 },
+      { auth_type: "api_key", actor_name: "Function", actor_id: "in-map", count: 5, percent: 9.43 },
+      { auth_type: "bearer", actor_id: "in-map", count: 31, percent: 58.49 },
+      { auth_type: "bearer", actor_id: "eb4675e9-03d8-400e-aad7-e8c76af95480", count: 4, percent: 6.15 },
       { auth_type: "", count: 11, percent: 20.75 },
     ],
   });
 
-  expect(actors.map((actor) => actor.name)).toEqual(["Function", "eb4675e9…", ""]);
+  const named = withNames(actors, new Map([["in-map", "Aziz"]]));
+
+  expect(named.map((actor) => actor.name)).toEqual(["Function", "Aziz", "eb4675e9…", ""]);
 });
