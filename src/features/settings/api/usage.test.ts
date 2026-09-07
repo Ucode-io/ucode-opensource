@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { toActors, toTimeline, toUsage, withNames } from "./usage";
+import { toActors, toTimes, toUsage, withNames } from "./usage";
 
 test("таблица подставляется в шаблон маршрута", () => {
   const usage = toUsage({
@@ -61,23 +61,18 @@ test("отправитель: своё имя, потом справочник, 
   expect(named.map((actor) => actor.name)).toEqual(["Function", "Aziz", "eb4675e9…", ""]);
 });
 
-/* Ручка отдаёт 15-минутные вёдра — человеку это дни, пропуски — нули. */
-test("вёдра складываются в дни, дыры между днями заполняются нулями", () => {
-  const days = toTimeline({
+/* Ведро приходит без таймзоны, но оно в UTC; лента — свежее сверху. */
+test("вёдра времени получают зону и сортируются свежими вверх", () => {
+  const times = toTimes({
     top: [
       { bucket: "2026-09-03 10:00:00", count: 3, percent: 30 },
-      { bucket: "2026-09-03 22:15:00", count: 2, percent: 20 },
-      { bucket: "2026-09-05 00:00:00", count: 7, percent: 70 },
+      { bucket: "2026-09-05 13:15:00", count: 7, percent: 70 },
+      { bucket: "", count: 9, percent: 0 },
     ],
   });
 
-  expect(days).toEqual([
-    { day: "2026-09-03", count: 5 },
-    { day: "2026-09-04", count: 0 },
-    { day: "2026-09-05", count: 7 },
+  expect(times).toEqual([
+    { bucket: "2026-09-05T13:15:00Z", count: 7, percent: 70 },
+    { bucket: "2026-09-03T10:00:00Z", count: 3, percent: 30 },
   ]);
-});
-
-test("пустой ответ времени — пустой график, а не строка нулей", () => {
-  expect(toTimeline({})).toEqual([]);
 });

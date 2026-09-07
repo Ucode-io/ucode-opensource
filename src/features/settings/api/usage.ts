@@ -163,6 +163,8 @@ function groupRows(dtos: RowDto[]): UsageRow[] {
 export type UsageActor = {
   /** Чем авторизован запрос: `bearer`, `api_key`. Пусто — не записано. */
   authType: string;
+  /** Идентификатор пользователя auth-сервиса: имя и фильтр времени. */
+  actorId: string;
   /** Кто: имя ключа или имя пользователя; пусто — автор не записан. */
   name: string;
   count: number;
@@ -199,14 +201,9 @@ export function useUsageActors(row: UsageRow | null, clientOnly: boolean) {
   return { actors: withNames(query.data ?? NO_ACTORS, names), isLoading: query.isLoading };
 }
 
-const NO_ACTORS: RawActor[] = [];
+const NO_ACTORS: UsageActor[] = [];
 
-type RawActor = UsageActor & {
-  /** Идентификатор пользователя auth-сервиса — по нему ищется имя. */
-  actorId: string;
-};
-
-export function toActors(dto: BreakdownDto): RawActor[] {
+export function toActors(dto: BreakdownDto): UsageActor[] {
   return (dto.top ?? []).map((row) => ({
     authType: row.auth_type ?? "",
     name: row.actor_name?.trim() ?? "",
@@ -220,28 +217,30 @@ export function toActors(dto: BreakdownDto): RawActor[] {
  * Имя отправителя: своё из записи (ключи), иначе из списка пользователей
  * проекта, иначе — узнаваемый кусок идентификатора. Пусто — автора нет.
  */
-export function withNames(actors: RawActor[], names: Map<string, string>): UsageActor[] {
-  return actors.map(({ actorId, ...actor }) => ({
+export function withNames(actors: UsageActor[], names: Map<string, string>): UsageActor[] {
+  return actors.map((actor) => ({
     ...actor,
     name:
       actor.name ||
-      names.get(actorId) ||
-      (actorId ? `${actorId.slice(0, 8)}…` : ""),
+      names.get(actor.actorId) ||
+      (actor.actorId ? `${actor.actorId.slice(0, 8)}…` : ""),
   }));
 }
 
-export type UsageDay = {
-  /** UTC-день: `2026-09-05`. */
-  day: string;
+export type UsageTime = {
+  /** Начало 15-минутного ведра, ISO с зоной: `2026-09-05T13:15:00Z`. */
+  bucket: string;
   count: number;
+  /** Доля от запросов выбранного отправителя, а не от всего месяца. */
+  percent: number;
 };
 
 /**
- * Когда вызывали раскрытый маршрут: та же ручка с `group_by=time`.
- * Ручка отдаёт 15-минутные вёдра — человеку это шум, складываем в дни.
- * `limit` не передаётся: для времени бэк сам ставит потолок в месяц точек.
+ * Когда выбранный отправитель вызывал выбранный маршрут: та же ручка
+ * с `group_by=time`. `limit` не передаётся: для времени бэк сам ставит
+ * потолок в месяц 15-минутных точек.
  */
-export function useUsageTimeline(row: UsageRow | null, clientOnly: boolean) {
+export function useUsageTimes(row: UsageRow | null, actor: UsageActor | null, clientOnly: boolean) {
   const projectId = useSession().getProjectId() ?? "";
 
   const params = {
@@ -249,47 +248,38 @@ export function useUsageTimeline(row: UsageRow | null, clientOnly: boolean) {
     method: row?.method ?? "",
     route: row?.route ?? "",
     ...(row?.collection ? { collection: row.collection } : {}),
+    ...(actor?.actorId ? { actor_id: actor.actorId } : {}),
+    ...(actor?.authType ? { auth_type: actor.authType } : {}),
     ...(clientOnly ? { source: "client" } : {}),
   };
 
   const query = useQuery({
-    queryKey: keys.settings.usageTimeline(projectId, params),
+    queryKey: keys.settings.usageTimes(projectId, params),
     queryFn: () => api.get<BreakdownDto>(BREAKDOWN, { params }),
-    enabled: Boolean(projectId && row),
+    enabled: Boolean(projectId && row && actor),
     staleTime: FRESH_FOR,
-    select: toTimeline,
+    select: toTimes,
   });
 
-  return { days: query.data ?? NO_DAYS, isLoading: query.isLoading };
+  return { times: query.data ?? NO_TIMES, isLoading: query.isLoading };
 }
 
-const NO_DAYS: UsageDay[] = [];
+const NO_TIMES: UsageTime[] = [];
 
-// ponytail: день считается по UTC-границе ведра — вечерние запросы могут
-// уехать на соседний день; переход на локальные сутки, если это начнёт мешать.
-export function toTimeline(dto: BreakdownDto): UsageDay[] {
-  const byDay = new Map<string, number>();
-  for (const row of dto.top ?? []) {
-    const day = (row.bucket ?? "").slice(0, 10);
-    if (day) byDay.set(day, (byDay.get(day) ?? 0) + (row.count ?? 0));
-  }
-
-  const known = [...byDay.keys()].sort();
-  const first = known[0];
-  const last = known[known.length - 1];
-  if (!first || !last) return [];
-
-  // Пропуски заполняются нулями: дыра в графике читается как баг, а не как тишина.
-  const days: UsageDay[] = [];
-  for (
-    let at = Date.parse(`${first}T00:00:00Z`);
-    at <= Date.parse(`${last}T00:00:00Z`);
-    at += 86_400_000
-  ) {
-    const day = new Date(at).toISOString().slice(0, 10);
-    days.push({ day, count: byDay.get(day) ?? 0 });
-  }
-  return days;
+export function toTimes(dto: BreakdownDto): UsageTime[] {
+  return (
+    (dto.top ?? [])
+      .map((row) => ({
+        // Ведро приходит без таймзоны, но оно в UTC — дописываем зону,
+        // иначе браузер прочитает его как локальное время и сдвинет ряд.
+        bucket: row.bucket ? `${row.bucket.replace(" ", "T")}Z` : "",
+        count: row.count ?? 0,
+        percent: row.percent ?? 0,
+      }))
+      .filter((row) => row.bucket)
+      // Время читают как ленту: свежее сверху, а не «самое частое сверху».
+      .sort((a, b) => b.bucket.localeCompare(a.bucket))
+  );
 }
 
 type UserDto = { id?: string; name?: string; email?: string; login?: string };
