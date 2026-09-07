@@ -36,6 +36,8 @@ type RowDto = {
   collection?: string;
   actor_id?: string;
   actor_name?: string;
+  /** Временное ведро при `group_by=time`: `2026-09-05 13:15:00`, UTC. */
+  bucket?: string;
   count?: number;
   percent?: number;
 };
@@ -226,6 +228,68 @@ export function withNames(actors: RawActor[], names: Map<string, string>): Usage
       names.get(actorId) ||
       (actorId ? `${actorId.slice(0, 8)}…` : ""),
   }));
+}
+
+export type UsageDay = {
+  /** UTC-день: `2026-09-05`. */
+  day: string;
+  count: number;
+};
+
+/**
+ * Когда вызывали раскрытый маршрут: та же ручка с `group_by=time`.
+ * Ручка отдаёт 15-минутные вёдра — человеку это шум, складываем в дни.
+ * `limit` не передаётся: для времени бэк сам ставит потолок в месяц точек.
+ */
+export function useUsageTimeline(row: UsageRow | null, clientOnly: boolean) {
+  const projectId = useSession().getProjectId() ?? "";
+
+  const params = {
+    group_by: "time",
+    method: row?.method ?? "",
+    route: row?.route ?? "",
+    ...(row?.collection ? { collection: row.collection } : {}),
+    ...(clientOnly ? { source: "client" } : {}),
+  };
+
+  const query = useQuery({
+    queryKey: keys.settings.usageTimeline(projectId, params),
+    queryFn: () => api.get<BreakdownDto>(BREAKDOWN, { params }),
+    enabled: Boolean(projectId && row),
+    staleTime: FRESH_FOR,
+    select: toTimeline,
+  });
+
+  return { days: query.data ?? NO_DAYS, isLoading: query.isLoading };
+}
+
+const NO_DAYS: UsageDay[] = [];
+
+// ponytail: день считается по UTC-границе ведра — вечерние запросы могут
+// уехать на соседний день; переход на локальные сутки, если это начнёт мешать.
+export function toTimeline(dto: BreakdownDto): UsageDay[] {
+  const byDay = new Map<string, number>();
+  for (const row of dto.top ?? []) {
+    const day = (row.bucket ?? "").slice(0, 10);
+    if (day) byDay.set(day, (byDay.get(day) ?? 0) + (row.count ?? 0));
+  }
+
+  const known = [...byDay.keys()].sort();
+  const first = known[0];
+  const last = known[known.length - 1];
+  if (!first || !last) return [];
+
+  // Пропуски заполняются нулями: дыра в графике читается как баг, а не как тишина.
+  const days: UsageDay[] = [];
+  for (
+    let at = Date.parse(`${first}T00:00:00Z`);
+    at <= Date.parse(`${last}T00:00:00Z`);
+    at += 86_400_000
+  ) {
+    const day = new Date(at).toISOString().slice(0, 10);
+    days.push({ day, count: byDay.get(day) ?? 0 });
+  }
+  return days;
 }
 
 type UserDto = { id?: string; name?: string; email?: string; login?: string };

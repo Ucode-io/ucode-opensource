@@ -3,7 +3,7 @@ import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/shared/ui/icon";
 import { Tabs } from "@/shared/ui/tabs";
-import { useUsage, useUsageActors, type UsageRow } from "../api/usage";
+import { useUsage, useUsageActors, useUsageTimeline, type UsageRow } from "../api/usage";
 import { Empty, SectionHeader, Td, Th } from "./parts";
 
 /**
@@ -15,11 +15,11 @@ import { Empty, SectionHeader, Td, Th } from "./parts";
  * на «откуда сто тысяч запросов». Поэтому — вкладка журнала, рядом
  * с изменениями и функциями, а не собственный раздел.
  *
- * Один экран без видов и фильтров: таблица маршрутов, строка
- * раскрывается и показывает, кто вызывал. Ручка умеет больше
- * (group_by по таблицам и времени, произвольные фильтры), но каждый
- * лишний разрез — это вкладки и чипы, в которых вопрос «кто ест
- * лимит» тонет; ровно так случилось с первой версией этого экрана.
+ * Один экран без видов и фильтров: таблица маршрутов, клик по строке
+ * раскрывает панель деталей — кто вызывал и когда. Ручка умеет больше
+ * (произвольные group_by и фильтры), но каждый лишний разрез — это
+ * вкладки и чипы, в которых вопрос «кто ест лимит» тонет; ровно так
+ * случилось с первой версией этого экрана.
  *
  * Срез «только клиентское API» — главный переключатель: админский
  * трафик (клики по билдеру, включая сам этот экран) лимит расходует,
@@ -52,6 +52,20 @@ export function Usage() {
               ? t("usage.unlimited", { used: amount(usage.used) })
               : t("usage.used", { used: amount(usage.used), limit: amount(usage.limit) })}
           </p>
+          {usage.percentUsed !== null && (
+            <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-surface-active">
+              <div
+                className={`h-full rounded-full ${
+                  usage.blocked
+                    ? "bg-danger"
+                    : usage.percentUsed > 80
+                      ? "bg-warning"
+                      : "bg-accent-solid"
+                }`}
+                style={{ width: `${usage.percentUsed}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -73,7 +87,7 @@ export function Usage() {
               <Th className="w-28">{t("usage.source")}</Th>
               <Th>{t("usage.route")}</Th>
               <Th className="w-28 text-right">{t("usage.count")}</Th>
-              <Th className="w-20 text-right">{t("usage.share")}</Th>
+              <Th className="w-36 text-right">{t("usage.share")}</Th>
             </tr>
           </thead>
 
@@ -100,10 +114,17 @@ export function Usage() {
                     </Td>
                     <Td className="font-mono text-xs">{row.label}</Td>
                     <Td className="text-right tabular-nums">{amount(row.count)}</Td>
-                    <Td className="text-right tabular-nums text-fg-muted">{row.percent}%</Td>
+                    <Td>
+                      <span className="flex items-center justify-end gap-2">
+                        <ShareBar percent={row.percent} />
+                        <span className="w-11 text-right text-xs tabular-nums text-fg-muted">
+                          {row.percent}%
+                        </span>
+                      </span>
+                    </Td>
                   </tr>
 
-                  {open && <RouteSenders row={row} clientOnly={clientOnly} />}
+                  {open && <RouteDetails row={row} clientOnly={clientOnly} />}
                 </Fragment>
               );
             })}
@@ -127,9 +148,45 @@ export function Usage() {
   );
 }
 
+/** Полоска доли рядом с числом: число читается, полоска сравнивается. */
+function ShareBar({ percent }: { percent: number }) {
+  return (
+    <span className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-surface-active">
+      <span
+        className="block h-full rounded-full bg-accent"
+        style={{ width: `${Math.min(100, percent)}%` }}
+      />
+    </span>
+  );
+}
+
 /**
- * Кто вызывал раскрытый маршрут. Свой компонент — свой запрос: он уходит
- * только при раскрытии строки, закрытые строки ничего не тянут.
+ * Панель деталей раскрытого маршрута: кто вызывал и когда.
+ * Оба блока грузятся только при раскрытии — закрытые строки не тянут.
+ */
+function RouteDetails({ row, clientOnly }: { row: UsageRow; clientOnly: boolean }) {
+  const { t } = useTranslation();
+
+  return (
+    <tr className="bg-bg">
+      <td colSpan={4} className="border-b border-border px-4 py-3">
+        <div className="flex flex-wrap gap-x-10 gap-y-4">
+          <div className="min-w-64 max-w-md flex-1">
+            <h4 className="mb-2 text-xs font-medium text-fg-muted">{t("usage.senders")}</h4>
+            <RouteSenders row={row} clientOnly={clientOnly} />
+          </div>
+          <div className="min-w-64 max-w-md flex-1">
+            <h4 className="mb-2 text-xs font-medium text-fg-muted">{t("usage.activity")}</h4>
+            <RouteActivity row={row} clientOnly={clientOnly} />
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * Кто вызывал раскрытый маршрут.
  *
  * Доли здесь — от запросов этого маршрута, а не от всего месяца:
  * так их отдаёт ручка под фильтром, и так они отвечают на вопрос
@@ -139,19 +196,11 @@ function RouteSenders({ row, clientOnly }: { row: UsageRow; clientOnly: boolean 
   const { t, i18n } = useTranslation();
   const { actors, isLoading } = useUsageActors(row, clientOnly);
 
-  if (isLoading) {
-    return (
-      <tr>
-        <Td />
-        <Td className="text-xs text-fg-muted">{t("common.loading")}</Td>
-        <Td />
-        <Td />
-      </tr>
-    );
-  }
+  if (isLoading) return <p className="text-xs text-fg-subtle">{t("common.loading")}</p>;
+  if (!actors.length) return <p className="text-xs text-fg-subtle">{t("usage.empty")}</p>;
 
   return (
-    <>
+    <ul className="flex flex-col gap-1.5">
       {actors.map((actor, index) => {
         const auth =
           actor.authType === "bearer"
@@ -171,16 +220,58 @@ function RouteSenders({ row, clientOnly }: { row: UsageRow; clientOnly: boolean 
             : `${auth} — ${t("usage.senderUnknown")}`;
 
         return (
-          <tr key={index} className="bg-bg">
-            <Td />
-            <Td className="text-xs text-fg-muted">{label}</Td>
-            <Td className="text-right text-xs tabular-nums text-fg-muted">
+          <li key={index} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-fg">{label}</span>
+            <span className="text-xs tabular-nums text-fg-muted">
               {actor.count.toLocaleString(i18n.language)}
-            </Td>
-            <Td className="text-right text-xs tabular-nums text-fg-muted">{actor.percent}%</Td>
-          </tr>
+            </span>
+            <ShareBar percent={actor.percent} />
+            <span className="w-11 shrink-0 text-right text-xs tabular-nums text-fg-muted">
+              {actor.percent}%
+            </span>
+          </li>
         );
       })}
-    </>
+    </ul>
+  );
+}
+
+/** Когда вызывали раскрытый маршрут: запросы по дням с начала месяца. */
+function RouteActivity({ row, clientOnly }: { row: UsageRow; clientOnly: boolean }) {
+  const { t, i18n } = useTranslation();
+  const { days, isLoading } = useUsageTimeline(row, clientOnly);
+
+  const first = days[0];
+  const last = days[days.length - 1];
+
+  if (isLoading) return <p className="text-xs text-fg-subtle">{t("common.loading")}</p>;
+  if (!first || !last) return <p className="text-xs text-fg-subtle">{t("usage.empty")}</p>;
+
+  const max = Math.max(...days.map((day) => day.count));
+  const dayLabel = (day: string) =>
+    // Ведро в UTC — без timeZone браузер утащит дату на сутки назад.
+    new Date(`${day}T00:00:00Z`).toLocaleDateString(i18n.language, {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+
+  return (
+    <div>
+      <div className="flex h-16 items-end gap-px">
+        {days.map((day) => (
+          <div
+            key={day.day}
+            title={`${dayLabel(day.day)} — ${day.count.toLocaleString(i18n.language)}`}
+            className={`min-w-1 flex-1 rounded-t-xs ${day.count ? "bg-accent" : "bg-surface-active"}`}
+            style={{ height: day.count ? `${Math.max(8, (day.count / max) * 100)}%` : "2px" }}
+          />
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-fg-subtle">
+        <span>{dayLabel(first.day)}</span>
+        {days.length > 1 && <span>{dayLabel(last.day)}</span>}
+      </div>
+    </div>
   );
 }

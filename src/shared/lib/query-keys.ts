@@ -161,6 +161,9 @@ export const keys = {
     /** Справочник «id пользователя → имя» для подписей отправителей. */
     usageSenderNames: (projectId: string) =>
       [...keys.settings.all, "usage", projectId, "senderNames"] as const,
+
+    usageTimeline: (projectId: string, params: Record<string, string | number>) =>
+      [...keys.settings.all, "usage", projectId, "timeline", params] as const,
     /** Свои эндпоинты (`/x-api/...`): список на проект и окружение. */
     endpoints: (projectId: string, envId: string) =>
       [...keys.settings.all, "endpoints", projectId, envId] as const,
