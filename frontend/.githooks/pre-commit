@@ -2,5 +2,7 @@
 # Границы и типы проверяются до коммита, а не на ревью.
 # Обойти: git commit --no-verify (и объяснить в описании, зачем).
 set -e
+# Хук запускается из корня репозитория, а package.json живёт в frontend/.
+cd "$(dirname "$0")/.."
 pnpm run lint
 pnpm run typecheck
