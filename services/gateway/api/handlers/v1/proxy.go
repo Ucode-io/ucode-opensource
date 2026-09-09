@@ -3,12 +3,12 @@ package v1
 import (
 	"context"
 	"encoding/json"
-	"time"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/config"
 	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/helper"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/services"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )

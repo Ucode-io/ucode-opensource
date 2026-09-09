@@ -2,12 +2,12 @@ package v1
 
 import (
 	"errors"
-	"strconv"
-	"strings"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/genproto/auth_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
 	obs "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/util"
+	"strconv"
+	"strings"
 
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
 
@@ -237,38 +237,6 @@ func (h *HandlerV1) ListCompanyProjects(c *gin.Context) {
 	)
 	if err != nil {
 		h.HandleResponse(c, status_http.GRPCError, err.Error())
-		return
-	}
-
-	h.HandleResponse(c, status_http.OK, resp)
-}
-
-func (h *HandlerV1) AttachFareToProject(c *gin.Context) {
-	var (
-		data company_service.AttachFareRequest
-	)
-
-	if err := c.ShouldBindJSON(&data); err != nil {
-		h.HandleResponse(c, status_http.BadRequest, err.Error())
-		return
-	}
-
-	projectId, ok := c.Get("project_id")
-	if !ok || !util.IsValidUUID(projectId.(string)) {
-		h.HandleResponse(c, status_http.InvalidArgument, "project id is an invalid uuid")
-		return
-	}
-	data.ProjectId = projectId.(string)
-
-	environmentId, ok := c.Get("environment_id")
-	if !ok || !util.IsValidUUID(environmentId.(string)) {
-		h.HandleResponse(c, status_http.BadRequest, "error getting environment id")
-		return
-	}
-
-	resp, err := h.companyServices.Project().AttachFare(c.Request.Context(), &data)
-	if err != nil {
-		h.handleError(c, status_http.GRPCError, err)
 		return
 	}
 

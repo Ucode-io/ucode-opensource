@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing"
 	hHelper "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/helper"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
@@ -92,14 +91,6 @@ func (h *HandlerV2) CreateItem(c *gin.Context) {
 	}
 
 	if resource.ResourceType == pb.ResourceType_POSTGRESQL {
-		if err = billing.CheckDatabaseLimit(c.Request.Context(), h.centralRedis, h.companyServices, services, projectId.(string), resource.ResourceEnvironmentId, resource.NodeType); err != nil {
-			if errors.Is(err, billing.ErrDatabaseLimitExceeded) {
-				h.HandleResponse(c, status_http.PaymentRequired, models.PaymentDatabaseLimit)
-			} else {
-				h.HandleResponse(c, status_http.GRPCError, err.Error())
-			}
-			return
-		}
 	}
 
 	objectRequest.Data["company_service_project_id"] = resource.GetProjectId()
@@ -325,14 +316,6 @@ func (h *HandlerV2) CreateItems(c *gin.Context) {
 	}
 
 	if resource.ResourceType == pb.ResourceType_POSTGRESQL {
-		if err = billing.CheckDatabaseLimit(c.Request.Context(), h.centralRedis, h.companyServices, services, projectId.(string), resource.ResourceEnvironmentId, resource.NodeType); err != nil {
-			if errors.Is(err, billing.ErrDatabaseLimitExceeded) {
-				h.HandleResponse(c, status_http.PaymentRequired, models.PaymentDatabaseLimit)
-			} else {
-				h.HandleResponse(c, status_http.GRPCError, err.Error())
-			}
-			return
-		}
 	}
 
 	request := make(map[string]any)
@@ -2509,14 +2492,6 @@ func (h *HandlerV2) UpsertMany(c *gin.Context) {
 	}
 
 	if resource.ResourceType == pb.ResourceType_POSTGRESQL {
-		if err = billing.CheckDatabaseLimit(c.Request.Context(), h.centralRedis, h.companyServices, services, projectId.(string), resource.ResourceEnvironmentId, resource.NodeType); err != nil {
-			if errors.Is(err, billing.ErrDatabaseLimitExceeded) {
-				h.HandleResponse(c, status_http.PaymentRequired, models.PaymentDatabaseLimit)
-			} else {
-				h.HandleResponse(c, status_http.GRPCError, err.Error())
-			}
-			return
-		}
 	}
 
 	structData, err := helper.ConvertMapToStruct(objectRequest.Data)

@@ -1,11 +1,11 @@
 package models
 
 import (
-	"net/http"
-	"net/url"
 	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/genproto/object_builder_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/services"
+	"net/http"
+	"net/url"
 )
 
 type GitlabTreeItem struct {

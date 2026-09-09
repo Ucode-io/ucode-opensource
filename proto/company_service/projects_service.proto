@@ -6,7 +6,6 @@ option go_package="genproto/company_service";
 import "company.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/empty.proto";
-import "billing_service.proto";
 
 service ProjectService {
   rpc Create(CreateProjectRequest) returns (CreateProjectResponse) {}
@@ -18,7 +17,6 @@ service ProjectService {
   rpc GetProjectsByCompanyId(GetProjectsByCompanyIdReq) returns (GetProjectsByCompanyIdRes) {}
   rpc UpdateProjectUserData (UpdateProjectUserDataReq) returns (UpdateProjectUserDataRes) {}
   rpc GetListSetting(GetListSettingReq) returns (Setting) {};
-  rpc AttachFare(AttachFareRequest) returns (Project) {};
   rpc AttachCustomer(AttachCustomerRequest) returns (EmptyProto) {};
 
 
@@ -39,6 +37,13 @@ service ProjectService {
   rpc AutoAssignUgenIfSingle(AutoAssignUgenIfSingleRequest) returns (AutoAssignUgenIfSingleResponse) {};
   rpc ListUgenProjects(ListUgenProjectsRequest) returns (ListUgenProjectsResponse) {};
   rpc ExportUgenProjects(ExportUgenProjectsRequest) returns (ExportUgenProjectsResponse) {};
+  // GetUgenProjectByCompanyId returns the company's single head (is_ugen) project,
+  // which holds the balance charged for paid template imports and paid user seats.
+  rpc GetUgenProjectByCompanyId(GetUgenProjectByCompanyIdReq) returns (Project) {};
+}
+
+message GetUgenProjectByCompanyIdReq {
+  string company_id = 1;
 }
 
 message GetPorjectConfigByProjectIdRequest {
@@ -242,7 +247,7 @@ message Project {
   int32 request_per_second = 12;
   double balance = 13;
   double credit_limit = 14;
-  Fare fare = 15;
+  reserved 15; // was: Fare fare — billing is not part of the open-source build
   string status = 16;
   bool new_design = 17;
   string expire_date = 18;
@@ -253,6 +258,11 @@ message Project {
   repeated string icon_categories = 23;
   string customer_id = 24;
   bool is_ugen = 25;
+  // per_user_price (in per_user_currency_id) is charged to the head project's
+  // balance for every user added to this project. Copied from the source template
+  // on import; 0 for ordinary projects, which keep the fare-based user limit.
+  double per_user_price = 26;
+  string per_user_currency_id = 27;
 }
 
 message CreateProjectRequest {
@@ -262,6 +272,8 @@ message CreateProjectRequest {
   repeated Resource resources = 4;
   string fare_id = 5;
   bool is_ugen = 6;
+  double per_user_price = 7;
+  string per_user_currency_id = 8;
 }
 
 message CreateProjectResponse {
@@ -439,13 +451,6 @@ message Record {
 
 message ListRecordRequest {
 
-}
-
-message AttachFareRequest {
-  string project_id = 1;
-  string fare_id = 2;
-  string discount_id = 3;
-  string billing_period_code = 4;
 }
 
 message AttachCustomerRequest {

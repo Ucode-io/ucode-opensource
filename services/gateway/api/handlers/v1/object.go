@@ -6,10 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"strings"
-	"time"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing"
 	hHelper "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/helper"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
@@ -22,6 +18,9 @@ import (
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/logger"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/security"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/util"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -116,14 +115,6 @@ func (h *HandlerV1) CreateObject(c *gin.Context) {
 	}
 
 	if resource.ResourceType == pb.ResourceType_POSTGRESQL {
-		if err = billing.CheckDatabaseLimit(c.Request.Context(), h.centralRedis, h.companyServices, services, projectId.(string), resource.ResourceEnvironmentId, resource.NodeType); err != nil {
-			if errors.Is(err, billing.ErrDatabaseLimitExceeded) {
-				h.HandleResponse(c, status_http.PaymentRequired, models.PaymentDatabaseLimit)
-			} else {
-				h.HandleResponse(c, status_http.GRPCError, err.Error())
-			}
-			return
-		}
 	}
 
 	service := services.GetBuilderServiceByType(resource.NodeType).ObjectBuilder()

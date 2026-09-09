@@ -38,6 +38,5 @@ type ProjectStorageI interface {
 	GetProjectConfigById(ctx context.Context, in *pb.GetPorjectConfigByProjectIdRequest) (*pb.ProjectConfig, error)
 	GetListProjectConfig(ctx context.Context, in *emptypb.Empty) (*pb.ListPorjectConfig, error)
 
-	AttachFare(ctx context.Context, in *pb.AttachFareRequest) (*pb.Project, error)
 	AttachCustomer(ctx context.Context, in *pb.AttachCustomerRequest) (*emptypb.Empty, error)
 }

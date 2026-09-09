@@ -28,7 +28,6 @@ type Store struct {
 	serviceResourceRepo     repo.ServiceResourceStorageI
 	redirectRepo            repo.RedirectStorageI
 	airbyteRepo             repo.AirbyteStorageI
-	billingRepo             repo.BillingStorageI
 	templateMetadataRepo    repo.TemplateStorageI
 	integrationResourceRepo repo.IntegrationResourceStorageI
 	ugenTemplateRepo        repo.UgenTemplateStorageI
@@ -320,13 +319,6 @@ func (s *Store) Airbyte() repo.AirbyteStorageI {
 		s.airbyteRepo = NewAirbyteRepo(s.db)
 	}
 	return s.airbyteRepo
-}
-
-func (s *Store) Billing() repo.BillingStorageI {
-	if s.billingRepo == nil {
-		s.billingRepo = NewBillingRepo(s.db, s.logger, s.db.cfg)
-	}
-	return s.billingRepo
 }
 
 func (s *Store) TemplateMetadata() repo.TemplateStorageI {

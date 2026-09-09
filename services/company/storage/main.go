@@ -14,7 +14,6 @@ type StorageI interface {
 	ServiceResource() repo.ServiceResourceStorageI
 	Redirect() repo.RedirectStorageI
 	Airbyte() repo.AirbyteStorageI
-	Billing() repo.BillingStorageI
 	TemplateMetadata() repo.TemplateStorageI
 	IntegrationResource() repo.IntegrationResourceStorageI
 	UgenTemplate() repo.UgenTemplateStorageI

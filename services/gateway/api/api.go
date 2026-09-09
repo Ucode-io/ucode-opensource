@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing/api_call_limits"
 
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/docs"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers"
@@ -21,7 +20,7 @@ import (
 
 // SetUpAPI @description This is an api gateway
 // @termsOfService https://u-code.io/
-func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer opentracing.Tracer, tracker *apilimits.Tracker) {
+func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer opentracing.Tracer) {
 	docs.SwaggerInfo.Title = cfg.ServiceName
 	docs.SwaggerInfo.Version = cfg.Version
 	docs.SwaggerInfo.Schemes = []string{cfg.HTTPScheme}
@@ -43,7 +42,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 	// Short link redirect — публичный, без аутентификации
 	r.GET("/p/:slug", h.V1.RedirectShortURL)
 
-	r.GET("/v1/fare", h.V1.GetAllFares)
 	r.GET("v1/chart", h.V1.GetChart)
 
 	// Public: lightweight X-API-KEY validation for session bootstrap (MCP). No AuthMiddleware/billing.
@@ -56,14 +54,12 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 	// or changing project data.
 
 	// Real Stripe PaymentIntent endpoint
-	r.POST("/stripe/webhook", h.V1.StripeWebhook)
 
 	v1 := r.Group("/v1")
 	// @securityDefinitions.apikey ApiKeyAuth
 	// @in header
 	// @name Authorization
 	v1.Use(h.V1.AuthMiddleware(cfg))
-	v1.Use(tracker.ApiCallCountMiddleware())
 	{
 		v1.POST("/menu-settings", h.V1.CreateMenuSettings)
 		v1.PUT("/menu-settings", h.V1.UpdateMenuSettings)
@@ -191,54 +187,20 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 		v1.PUT("/language", h.V1.UpdateLanguage)
 		v1.DELETE("/language/:id", h.V1.DeleteLanguage)
 
-		fare := v1.Group("/fare")
 		{
-			fare.POST("", h.V1.CreateFare)
-			fare.GET("/:id", h.V1.GetFare)
-			fare.PUT("", h.V1.UpdateFare)
-			fare.DELETE("/:id", h.V1.DeleteFare)
-			fare.POST("/calculate-price", h.V1.CalculatePrice)
 
-			fareItem := fare.Group("/item")
 			{
-				fareItem.POST("", h.V1.CreateFareItem)
-				fareItem.GET("", h.V1.GetAllFareItem)
-				fareItem.GET("/:id", h.V1.GetFareItem)
-				fareItem.PUT("", h.V1.UpdateFareItem)
-				fareItem.DELETE("/:id", h.V1.DeleteFareItem)
 			}
 		}
-		tokenPack := v1.Group("/token-pack")
 		{
-			tokenPack.GET("", h.V1.ListTokenPacks)
-			tokenPack.GET("/balance", h.V1.GetTokenPackBalance)
-			tokenPack.POST("/purchase", h.V1.PurchaseTokenPack)
-			tokenPack.POST("", h.V1.CreateTokenPack)
-			tokenPack.PUT("", h.V1.UpdateTokenPack)
-			tokenPack.DELETE("/:id", h.V1.DeleteTokenPack)
 		}
 
-		transaction := v1.Group("/transaction")
 		{
-			transaction.POST("", h.V1.CreateTransaction)
-			transaction.GET("", h.V1.GetAllTransactions)
-			transaction.GET("/:id", h.V1.GetTransaction)
-			transaction.PUT("", h.V1.UpdateTransaction)
 		}
-		payment := v1.Group("/payment")
 		{
-			payment.POST("/intent", h.V1.CreatePaymentIntent)
-			payment.POST("/get-verify-code", h.V1.GetVerifyCode)
-			payment.POST("/verify", h.V1.Verify)
-			payment.GET("/card-list", h.V1.GetAllProjectCards)
-			payment.POST("/receipt-pay", h.V1.ReceiptPay)
-			payment.DELETE("/card/:id", h.V1.DeleteProjectCard)
 		}
-		discount := v1.Group("/discounts")
 		{
-			discount.GET("", h.V1.ListDiscounts)
 		}
-		v1.GET("/billing-periods", h.V1.ListBillingPeriods)
 
 		metabase := v1.Group("/metabase")
 		{
@@ -251,15 +213,10 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 			transcoder.GET("/pipeline", h.V1.GetListPipeline)
 		}
 
-		v1.PUT("/subscription", h.V1.UpdateSubscriptionEndDate)
-		v1.GET("/subscription/current", h.V1.GetCurrentSubscription)
-		v1.PATCH("/subscription/cancel", h.V1.CancelSubscription)
-		v1.GET("/billing/status", h.V1.GetProjectBillingStatus)
 	}
 
 	v2 := r.Group("/v2")
 	v2.Use(h.V1.AuthMiddleware(cfg))
-	v2.Use(tracker.ApiCallCountMiddleware())
 	{
 		v2.POST("/object/get-list/:collection", h.V1.GetListV2)
 		v2.PUT("/update-with/:collection", h.V1.UpdateWithParams)
@@ -331,7 +288,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 		v1Admin.GET("/company/project/resource-environment/:resource_id", h.V1.GetResourceEnvironment)
 		v1Admin.GET("/company/project/resource-default", h.V1.GetServiceResources)
 		v1Admin.PUT("/company/project/resource-default", h.V1.SetDefaultResource)
-		v1Admin.PATCH("/company/project/attach-fare", h.V1.AttachFareToProject)
 
 		// airbyte
 		v1Admin.GET("/company/airbyte/:id", h.V1.GetByIdAirbyte)
@@ -368,10 +324,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 			{
 			}
 
-
-
-
-
 			editPrompts := mcpProject.Group("/:mcp_project_id/edit-prompts")
 			editPrompts.Use(h.V1.BearerOnlyMiddleware())
 			{
@@ -393,8 +345,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 		}
 
 		{
-
-
 
 		}
 
@@ -480,8 +430,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 
 	clientV2 := r.Group("/v2")
 	clientV2.Use(h.V2.AuthMiddleware())
-	clientV2.Use(tracker.ApiCallCountMiddleware())
-	clientV2.Use(tracker.BillingLimitMiddleware())
 	// items group
 	v2Items := clientV2.Group("/items")
 	{
@@ -519,7 +467,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 
 	v2Version := r.Group("/v2")
 	v2Version.Use(h.V1.AuthMiddleware(cfg))
-	v2Version.Use(tracker.ApiCallCountMiddleware())
 	{
 		v2Version.POST("/csv/:collection/download", h.V2.GetListInCSV)
 
@@ -647,14 +594,10 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 	facebook.Use(h.V1.AuthMiddleware(cfg))
 	{
 
-
-
-
 	}
 
 	metaAds := r.Group("/v1/meta-ads")
 	metaAds.Use(h.V1.AuthMiddleware(cfg))
-	metaAds.Use(tracker.ApiCallCountMiddleware())
 	{
 	}
 
@@ -663,7 +606,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 	googleLeads := r.Group("/v1/google-leads")
 	googleLeads.Use(h.V1.AuthMiddleware(cfg))
 	{
-
 
 	}
 
@@ -751,7 +693,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 
 	v3 := r.Group("/v3")
 	v3.Use(h.V1.AuthMiddleware(cfg))
-	v3.Use(tracker.ApiCallCountMiddleware())
 	v3Menus := v3.Group("/menus")
 	{
 		v3Menus.GET("", h.V3.GetAllMenus)

@@ -1,8 +1,8 @@
 package v1
 
 import (
-	"sync"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/config"
+	"sync"
 
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"

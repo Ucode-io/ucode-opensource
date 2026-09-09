@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
 	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
@@ -194,14 +193,6 @@ func (h *HandlerV2) UploadFile(c *gin.Context) {
 	}
 
 	if resource.ResourceType == pb.ResourceType_POSTGRESQL {
-		if err = billing.CheckAssetSizeLimit(c.Request.Context(), h.companyServices, services, projectId.(string), resource.ResourceEnvironmentId, file.File.Size); err != nil {
-			if errors.Is(err, billing.ErrAssetLimitExceeded) {
-				h.HandleResponse(c, status_http.PaymentRequired, models.PaymentAssetLimit)
-			} else {
-				h.HandleResponse(c, status_http.GRPCError, err.Error())
-			}
-			return
-		}
 	}
 
 	ContentTypeOfFile := file.File.Header.Get("Content-Type")
@@ -361,14 +352,6 @@ func (h *HandlerV2) UploadToFolder(c *gin.Context) {
 	}
 
 	if resource.ResourceType == pb.ResourceType_POSTGRESQL {
-		if err = billing.CheckAssetSizeLimit(c.Request.Context(), h.companyServices, services, projectId.(string), resource.ResourceEnvironmentId, file.File.Size); err != nil {
-			if errors.Is(err, billing.ErrAssetLimitExceeded) {
-				h.HandleResponse(c, status_http.PaymentRequired, models.PaymentAssetLimit)
-			} else {
-				h.HandleResponse(c, status_http.GRPCError, err.Error())
-			}
-			return
-		}
 	}
 
 	var title string = file.File.Filename

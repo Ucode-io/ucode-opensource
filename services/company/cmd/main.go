@@ -10,7 +10,6 @@ import (
 	pb "github.com/Ucode-io/ucode-opensource/services/company/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/company/grpc/client"
 	"github.com/Ucode-io/ucode-opensource/services/company/grpc/service"
-	cronjob "github.com/Ucode-io/ucode-opensource/services/company/pkg/cron"
 	"github.com/Ucode-io/ucode-opensource/services/company/pkg/logger"
 	minioclient "github.com/Ucode-io/ucode-opensource/services/company/pkg/minio"
 	vaultclient "github.com/Ucode-io/ucode-opensource/services/company/pkg/vault"
@@ -113,10 +112,6 @@ func main() {
 		return
 	}
 
-	go func() {
-		_ = cronjob.New(log, pgStore, grpcClients, baseLoad).RunJobs(ctx)
-	}()
-
 	err = serviceNodes.Add(grpcClients, baseLoad.UcodeNamespace)
 	if err != nil {
 		log.Error("Error adding company grpc client to serviceNode. ServiceNode", logger.Error(err))
@@ -154,7 +149,6 @@ func main() {
 	redirectService := service.NewRedirectService(pgStore, log)
 	companyPingService := service.NewCompanyPingService(log, serviceNodes)
 	airbyteService := service.NewAirbyteService(pgStore, log, vaultClient)
-	billingService := service.NewBillingService(pgStore, log, baseLoad)
 	visualizationService := service.NewVisualizationService(log, uConf)
 	templateService := service.NewTemplateService(pgStore, log, serviceNodes)
 	integrationResourceService := service.NewIntegrationResourceService(pgStore, log)
@@ -168,7 +162,6 @@ func main() {
 	pb.RegisterRedirectUrlServiceServer(s, redirectService)
 	pb.RegisterCompanyPingServiceServer(s, companyPingService)
 	pb.RegisterAirbyteServiceServer(s, airbyteService)
-	pb.RegisterBillingServiceServer(s, billingService)
 	pb.RegisterVisualizationServiceServer(s, visualizationService)
 	pb.RegisterTemplateMetadataServiceServer(s, templateService)
 	pb.RegisterIntegrationResourceServiceServer(s, integrationResourceService)

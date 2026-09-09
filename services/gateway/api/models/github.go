@@ -13,16 +13,16 @@ type GithubUser struct {
 
 // GithubRepo represents a GitHub repository
 type GithubRepo struct {
-	ID          int        `json:"id"`
-	Name        string     `json:"name"`
-	FullName    string     `json:"full_name"`
-	Private     bool       `json:"private"`
-	Description string     `json:"description"`
-	HTMLURL     string     `json:"html_url"`
-	CloneURL    string     `json:"clone_url"`
-	Language    string     `json:"language"`
-	DefaultBranch string   `json:"default_branch"`
-	Owner       GithubUser `json:"owner"`
+	ID            int        `json:"id"`
+	Name          string     `json:"name"`
+	FullName      string     `json:"full_name"`
+	Private       bool       `json:"private"`
+	Description   string     `json:"description"`
+	HTMLURL       string     `json:"html_url"`
+	CloneURL      string     `json:"clone_url"`
+	Language      string     `json:"language"`
+	DefaultBranch string     `json:"default_branch"`
+	Owner         GithubUser `json:"owner"`
 }
 
 // GithubBranch represents a GitHub branch
@@ -63,7 +63,7 @@ type GithubFileContent struct {
 	HTMLURL     string `json:"html_url"`
 	DownloadURL string `json:"download_url"`
 	Type        string `json:"type"`
-	Content     string `json:"content"`   // base64 encoded
+	Content     string `json:"content"` // base64 encoded
 	Encoding    string `json:"encoding"`
 }
 

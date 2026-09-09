@@ -86,35 +86,6 @@ func (s *ProjectService) Create(ctx context.Context, req *pb.CreateProjectReques
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	fare, err := s.storage.Billing().GetFareById(ctx, &pb.PrimaryKey{
-		Id:        req.FareId,
-		ProjectId: resp.ProjectId,
-	})
-	if err != nil {
-		s.logger.Error("--GetFareById--", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	var (
-		now         = time.Now()
-		startDate   = now.Format(time.DateOnly)
-		endDate     = now.AddDate(0, 0, int(fare.TrialDays-1)).Format(time.DateOnly)
-		renewalDate = now.AddDate(0, 0, int(fare.TrialDays)).Format(time.DateOnly)
-	)
-	_, err = s.storage.Billing().CreateSubscription(ctx, &pb.Subscription{
-		ProjectId:   resp.ProjectId,
-		FareId:      req.FareId,
-		Status:      config.STATUS_ACTIVE,
-		StartDate:   startDate,
-		EndDate:     endDate,
-		RenewalDate: renewalDate,
-		Type:        config.SUBSCRIPTION_FREE_TRIAL,
-	})
-	if err != nil {
-		s.logger.Error("--CreateSubscription--", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
 	return resp, nil
 }
 
@@ -423,21 +394,6 @@ func (s *ProjectService) ListProjectsRPS(ctx context.Context, in *pb.GetProjectL
 	if err != nil {
 		s.logger.Error("--ListProjectsRPS--", l.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return resp, nil
-}
-
-func (s *ProjectService) AttachFare(ctx context.Context, in *pb.AttachFareRequest) (*pb.Project, error) {
-	s.logger.Info("--AttachFare--requested", l.Any("req: ", in))
-
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.AttachFare", in)
-	defer dbSpan.Finish()
-
-	resp, err := s.storage.Project().AttachFare(ctx, in)
-	if err != nil {
-		s.logger.Error("--AttachFare--", l.Error(err))
-		return nil, err
 	}
 
 	return resp, nil

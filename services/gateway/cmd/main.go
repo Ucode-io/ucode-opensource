@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers"
-	apilimits2 "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing/api_call_limits"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/config"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/caching"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/helper"
@@ -14,7 +13,6 @@ import (
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/vault"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/services"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/storage/redis"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	go_redis "github.com/go-redis/redis/v8"
@@ -131,26 +129,6 @@ func main() {
 		log.Info("successfully connected to central redis", logger.String("host", uConf.GetRequestRedisHost), logger.String("port", uConf.GetRequestRedisPort))
 	}
 
-	// =========================== API call count methods ============================
-
-	var (
-		trackerFlushInterval     = time.Second * 10
-		MetConsumerFlushInterval = time.Minute * 10
-	)
-	// L1 to Redis
-	tracker := apilimits2.NewTracker(centralRedis, trackerFlushInterval)
-	go tracker.Start(ctx)
-
-	// Redis to Postgres
-	consumer := apilimits2.NewMetricsConsumer(centralRedis, compSrvc, MetConsumerFlushInterval)
-	go consumer.Start(ctx)
-
-	// Database-size billing limit — pre-computes allowed/blocked per project every 5 min
-	billingWorker := apilimits2.NewBillingLimitWorker(centralRedis, projectServiceNodes, compSrvc, baseConf.UcodeNamespace, 5*time.Minute)
-	go billingWorker.Start(ctx)
-
-	// ============================================================================
-
 	cache, err := caching.NewExpiringLRUCache(config.LRU_CACHE_SIZE)
 	if err != nil {
 		log.Error("Error adding caching.", logger.Error(err))
@@ -177,7 +155,7 @@ func main() {
 
 	h := handlers.NewHandler(baseConf, mapProjectConfs, log, projectServiceNodes, compSrvc, authSrvc, newRedis, centralRedis, cache, limiter, vaultClient)
 
-	api.SetUpAPI(r, h, baseConf, tracer, tracker)
+	api.SetUpAPI(r, h, baseConf, tracer)
 
 	log.Info("server is running...")
 	if err := r.Run(baseConf.HTTPPort); err != nil {

@@ -21,7 +21,6 @@ type CompanyServiceI interface {
 	CompanyPing() company_service.CompanyPingServiceClient
 	IntegrationResource() company_service.IntegrationResourceServiceClient
 	AirByte() company_service.AirbyteServiceClient
-	Billing() company_service.BillingServiceClient
 	Visualization() company_service.VisualizationServiceClient
 	Template() company_service.TemplateMetadataServiceClient
 	UgenTemplate() company_service.UgenTemplateServiceClient
@@ -38,7 +37,6 @@ type companyServiceClient struct {
 	companyPingService         company_service.CompanyPingServiceClient
 	integrationResourceService company_service.IntegrationResourceServiceClient
 	airbyteService             company_service.AirbyteServiceClient
-	billingService             company_service.BillingServiceClient
 	visualizationService       company_service.VisualizationServiceClient
 	templateService            company_service.TemplateMetadataServiceClient
 	ugenTemplateService        company_service.UgenTemplateServiceClient
@@ -70,7 +68,6 @@ func NewCompanyServiceClient(ctx context.Context, cfg config.Config) (CompanySer
 		companyPingService:         company_service.NewCompanyPingServiceClient(connCompanyService),
 		integrationResourceService: company_service.NewIntegrationResourceServiceClient(connCompanyService),
 		airbyteService:             company_service.NewAirbyteServiceClient(connCompanyService),
-		billingService:             company_service.NewBillingServiceClient(connCompanyService),
 		visualizationService:       company_service.NewVisualizationServiceClient(connCompanyService),
 		templateService:            company_service.NewTemplateMetadataServiceClient(connCompanyService),
 		ugenTemplateService:        company_service.NewUgenTemplateServiceClient(connCompanyService),
@@ -112,10 +109,6 @@ func (g *companyServiceClient) IntegrationResource() company_service.Integration
 
 func (g *companyServiceClient) AirByte() company_service.AirbyteServiceClient {
 	return g.airbyteService
-}
-
-func (g *companyServiceClient) Billing() company_service.BillingServiceClient {
-	return g.billingService
 }
 
 func (g *companyServiceClient) Visualization() company_service.VisualizationServiceClient {
