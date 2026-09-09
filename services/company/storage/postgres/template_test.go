@@ -1,3 +1,5 @@
+//go:build integration
+
 package postgres_test
 
 import (
@@ -7,6 +9,7 @@ import (
 	pb "github.com/Ucode-io/ucode-opensource/services/company/genproto/company_service"
 
 	"github.com/bxcodec/faker/v3"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -124,7 +127,7 @@ func TestGetTemplateByIdNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	// Try to get a template with a random ID
-	randomID := "non-existent-id-12345"
+	randomID := uuid.NewString()
 	template, err := strg.TemplateMetadata().GetById(ctx, randomID)
 	assert.Error(t, err)
 	assert.Nil(t, template)
@@ -233,7 +236,7 @@ func TestUpdateTemplateNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	updateReq := &pb.UpdateTemplateMetadataReq{
-		Id:   "non-existent-id-12345",
+		Id:   uuid.NewString(),
 		Name: faker.Name(),
 	}
 
@@ -288,7 +291,7 @@ func TestDeleteTemplateNotFound(t *testing.T) {
 
 	ctx := context.Background()
 
-	randomID := "non-existent-id-12345"
+	randomID := uuid.NewString()
 	err := strg.TemplateMetadata().Delete(ctx, randomID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "template not found")

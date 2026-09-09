@@ -43,10 +43,6 @@ const (
 	userId       = "1f0a4c2e-6b3d-4a71-9c58-0e2b7d5a1f34"
 	clientTypeId = "8c6d2b19-4e07-4f52-b3a8-91d6c0f7e2ab"
 
-	dbName = "ucode_test"
-	dbUser = "ucode"
-	dbPass = "ucode"
-
 	// Relative to this package directory, which is the working directory
 	// while the test binary runs.
 	migrationsPath = "../../migrations/postgres"
@@ -56,6 +52,15 @@ var (
 	err      error
 	strg     storage.StorageI
 	fakeData faker.Faker
+)
+
+// Throwaway credentials for the disposable container. Deliberately generated
+// here rather than read from config, .env or anything in the repository: test
+// runs must never be able to reach a real database.
+var (
+	dbName = "ucode_test"
+	dbUser = "ucode_test"
+	dbPass = uuid.NewString()
 )
 
 func CreateRandomId(t *testing.T) string {
@@ -108,27 +113,23 @@ func run(m *testing.M) int {
 		return 1
 	}
 
-	cfg := config.Load()
-	cfg.PostgresHost = poolCfg.ConnConfig.Host
-	cfg.PostgresPort = int(poolCfg.ConnConfig.Port)
-	cfg.PostgresUser = dbUser
-	cfg.PostgresPassword = dbPass
-	cfg.PostgresDatabase = dbName
-	cfg.PostgresMaxConnections = 10
-
-	loggerLevel := logger.LevelInfo
-	switch cfg.Environment {
-	case config.DebugMode:
-		loggerLevel = logger.LevelDebug
-		gin.SetMode(gin.DebugMode)
-	case config.TestMode:
-		loggerLevel = logger.LevelDebug
-		gin.SetMode(gin.TestMode)
-	default:
-		gin.SetMode(gin.ReleaseMode)
+	// Built explicitly instead of config.Load(): the suite must not pick up a
+	// stray .env or exported variables, and MinIO stays unset on purpose so a
+	// test that reaches for object storage fails loudly rather than silently
+	// talking to something real.
+	cfg := config.Config{
+		ServiceName:            "object-builder-test",
+		Environment:            config.TestMode,
+		PostgresHost:           poolCfg.ConnConfig.Host,
+		PostgresPort:           int(poolCfg.ConnConfig.Port),
+		PostgresUser:           dbUser,
+		PostgresPassword:       dbPass,
+		PostgresDatabase:       dbName,
+		PostgresMaxConnections: 10,
 	}
 
-	log := logger.NewLogger(cfg.ServiceName, loggerLevel)
+	gin.SetMode(gin.TestMode)
+	log := logger.NewLogger(cfg.ServiceName, logger.LevelDebug)
 	defer func() { _ = logger.Cleanup(log) }()
 
 	strg, err = postgres.NewPostgres(ctx, cfg, nil, log)

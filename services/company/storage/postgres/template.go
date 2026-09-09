@@ -2,8 +2,8 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +11,7 @@ import (
 	"github.com/Ucode-io/ucode-opensource/services/company/storage/repo"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/opentracing/opentracing-go"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -130,7 +131,7 @@ func (t *templateMetadataRepo) GetById(ctx context.Context, id string) (*pb.Temp
 		&deletedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("template not found: %s", id)
 		}
 		return nil, fmt.Errorf("failed to get template: %w", err)
@@ -315,7 +316,7 @@ func (t *templateMetadataRepo) Update(ctx context.Context, template *pb.UpdateTe
 	)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("template not found or deleted: %s", template.Id)
 		}
 		return nil, fmt.Errorf("failed to update template: %w", err)

@@ -28,14 +28,17 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-const (
-	dbName = "ucode_test"
-	dbUser = "ucode"
-	dbPass = "ucode"
+// Relative to this package directory, which is the working directory
+// while the test binary runs.
+const migrationsPath = "../../migrations/postgres"
 
-	// Relative to this package directory, which is the working directory
-	// while the test binary runs.
-	migrationsPath = "../../migrations/postgres"
+// Throwaway credentials for the disposable container. Deliberately generated
+// here rather than read from config, .env or anything in the repository: test
+// runs must never be able to reach a real database.
+var (
+	dbName = "ucode_test"
+	dbUser = "ucode_test"
+	dbPass = uuid.NewString()
 )
 
 var (
