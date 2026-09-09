@@ -1,0 +1,16 @@
+{
+  "name": "react18",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Пара React 18 для микрофронтендов. Зачем — в docs/adr/0005.",
+  "exports": {
+    "./react": "./react.js",
+    "./dom": "./dom.js",
+    "./client": "./client.js"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

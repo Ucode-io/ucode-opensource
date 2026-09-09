@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!--
+    Тот же знак, что и src/shared/ui/brand-mark.tsx, но с зашитыми hex
+    вместо CSS-токенов: файл открывается вкладкой браузера, вне каскада
+    приложения, токены там не резолвятся. Токены см. app/styles.css
+    (brand gradient from/to, accent solid).
+  -->
+  <defs>
+    <linearGradient id="u" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#062033" />
+      <stop offset="100%" stop-color="#0075cf" />
+    </linearGradient>
+  </defs>
+  <path d="M28 18v42a22 22 0 0 0 44 0V36" stroke="url(#u)" stroke-width="24" stroke-linecap="round" />
+  <circle cx="72" cy="20" r="17" fill="#ffffff" />
+  <circle cx="72" cy="20" r="12" fill="#0075cf" />
+</svg>

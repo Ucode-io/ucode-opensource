@@ -1,0 +1,119 @@
+import type { Field } from "@/features/table";
+import { isTabView, type View } from "./types";
+
+/**
+ * Колонки view → поля таблицы, в порядке, который задал view.
+ *
+ * Ключевая тонкость: view перечисляет колонки идентификаторами, и для
+ * полей-связей это id СВЯЗИ, а не id поля. Поэтому индекс строится по
+ * двум ключам. Без этого у таблицы с пятью связями молча пропадают
+ * пять колонок — они просто не находятся.
+ *
+ * Второй раз одно и то же поле не возвращается. У связи два ключа, и
+ * в columns попадают оба — id поля и id связи; бэкенд дописывает их
+ * туда независимо. Дубль в списке — это два React-ключа `column.id`
+ * на одну колонку: React оставляет в DOM ячейки прошлого view, и после
+ * перехода по вкладкам шапка растёт, а меню колонки перестаёт
+ * открываться (клик приходит по осиротевшему заголовку).
+ *
+ * Чистая функция: проверяется тестом, а не открыванием экрана.
+ */
+export function resolveColumns(view: View | undefined, fields: Field[]): Field[] {
+  if (!view) return [];
+
+  const columns = resolveColumnIds(view.columnIds, fields);
+  if (columns.length || !view.barFieldSlugs.length) return columns;
+
+  /*
+   * Таймлайн старой админки: там панель колонок писала не `columns`,
+   * а `attributes.visible_field` — слаги через косую черту (см.
+   * toBarFieldSlugs). У такого view `columns` пуст, и без этой ступени
+   * он открылся бы полосами без подписей. Ступень срабатывает ровно
+   * до первого сохранения колонок у нас.
+   */
+  return view.barFieldSlugs
+    .map((slug) => fields.find((field) => field.slug === slug))
+    .filter((field): field is Field => Boolean(field));
+}
+
+/**
+ * То же самое, но от голого списка идентификаторов.
+ *
+ * Отдельно, потому что колонки перечисляет не только view: у вкладки
+ * связи в карточке свой список, и он приходит из раскладки
+ * (`tabs[].relation.columns`). Правило разбора при этом одно на всех —
+ * второго места, где id превращаются в поля, быть не должно.
+ */
+export function resolveColumnIds(columnIds: string[], fields: Field[]): Field[] {
+  const index = new Map<string, Field>();
+  for (const field of fields) {
+    index.set(field.id, field);
+    if (field.relationId) index.set(field.relationId, field);
+  }
+
+  // Неизвестный id — поле удалили, а из view его не вычистили. Пропускаем:
+  // пустая колонка без заголовка хуже отсутствующей.
+  const seen = new Set<string>();
+  const columns: Field[] = [];
+
+  for (const id of columnIds) {
+    const field = index.get(id);
+    if (!field || seen.has(field.id)) continue;
+
+    seen.add(field.id);
+    columns.push(field);
+  }
+
+  return columns;
+}
+
+/**
+ * Ключ поля в `view.columns`: у связи это id СВЯЗИ, а не поля.
+ *
+ * Обратная сторона resolveColumns: тем же ключом колонка и записывается.
+ * Одно имя — одно место, иначе порядок, собранный по id поля, перестаёт
+ * находиться по id связи, и колонка-ссылка молча пропадает.
+ */
+export function columnKey(field: Field): string {
+  return field.relationId ?? field.id;
+}
+
+/**
+ * Вкладки экрана: только те view, у которых есть свой экран. Порядок
+ * задаёт админ; TABLE приходит без order, поэтому сортировка устойчивая
+ * — равные остаются в порядке ответа сервера.
+ */
+export function tabViews(views: View[]): View[] {
+  return views.filter(isTabView).sort((a, b) => a.order - b.order);
+}
+
+
+/**
+ * Какой view открыт. Явно выбранный из адреса, иначе первая вкладка.
+ *
+ * Ссылка на удалённый view не должна давать пустой экран: если id
+ * не нашёлся, открывается первая вкладка, как будто его и не просили.
+ */
+export function pickView(views: View[], viewId: string | undefined): View | undefined {
+  const tabs = tabViews(views);
+  return tabs.find((view) => view.id === viewId) ?? tabs[0];
+}
+
+/**
+ * Закреплённые колонки → id полей, которые понимает таблица.
+ *
+ * Ключей у поля-связи два — id поля и id связи, — и в настройке лежит
+ * любой из них, как и в `columns`. Наружу отдаётся только id поля:
+ * второго ключа таблица не знает.
+ */
+export function pinnedIds(fixedColumnIds: string[], fields: Field[]): Set<string> {
+  if (!fixedColumnIds.length) return new Set();
+
+  const fixed = new Set(fixedColumnIds);
+
+  return new Set(
+    fields
+      .filter((field) => fixed.has(field.id) || (field.relationId && fixed.has(field.relationId)))
+      .map((field) => field.id),
+  );
+}

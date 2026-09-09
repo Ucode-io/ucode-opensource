@@ -1,0 +1,197 @@
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+type Theme = "light" | "dark" | "system";
+
+type UiState = {
+  theme: Theme;
+  sidebarCollapsed: boolean;
+  sidebarWidth: number;
+  drawerWidth: number;
+  drawerMode: DrawerMode;
+  /**
+   * Последний выбранный размер страницы — по слагу таблицы.
+   *
+   * Сама пагинация живёт в адресе, но человек выбирает размер страницы
+   * один раз и ждёт его во всех таблицах, куда вернётся: без памяти
+   * каждый переход туда-обратно возвращал бы значение по умолчанию.
+   */
+  tableLimits: Record<string, number>;
+  /**
+   * Последний отбор — по паре «таблица + view».
+   *
+   * Значения фильтров живут в адресе, чтобы ссылку можно было переслать,
+   * но человек, вернувшийся на экран без параметров, ждёт свой отбор
+   * на месте — так было и в старой админке (слайс filter в localStorage).
+   * Форму значения знает features/item, здесь оно непрозрачно и
+   * проверяется при чтении.
+   */
+  tableFilters: Record<string, unknown>;
+  /**
+   * Ширины колонок — по паре «таблица + поле».
+   *
+   * Здесь, а не в настройках view: ширина — это про экран человека,
+   * а не про то, как настроен view. У соседа другой монитор, и
+   * растянутая на пол-экрана колонка «Описание» — не общее решение.
+   * Так же её хранила и старая админка (слайс tableSize в localStorage).
+   */
+  columnWidths: Record<string, Record<string, number>>;
+  /**
+   * Раскрытые папки меню — по id пункта.
+   *
+   * Раскрытие живёт здесь, а не в строке меню: уровень меню грузится
+   * своим запросом, и без памяти каждый рефреш схлопывал бы дерево
+   * до корня — вместе с путём к тому пункту, в котором человек работает.
+   *
+   * Список, а не карта: закрытая папка из него уходит, и вырасти он
+   * может только до числа одновременно раскрытых. Удалённый пункт
+   * забывается вместе с самим пунктом — см. forgetMenu.
+   */
+  expandedMenus: string[];
+  /**
+   * Язык ДАННЫХ, на котором показаны значения и подписи. Не локаль
+   * интерфейса: язык интерфейса выбирает человек для себя, а этот —
+   * ось самих данных (см. CONTEXT, Data Language).
+   *
+   * Пусто — язык не выбирали: берётся первый язык проекта. Хранить
+   * приходится, потому что переключатель стоит и в карточке, и над
+   * таблицей, и выбор обязан пережить переход между ними.
+   */
+  dataLanguage: string;
+  /**
+   * Панель помощника: открыта и какой ширины.
+   *
+   * Здесь, а не в самой панели, ровно по той же причине, что и сайдбар:
+   * кнопка стоит в шапке страницы, а панель живёт в оболочке приложения,
+   * и общее у них только это состояние. Переживает перезагрузку: панель
+   * — часть рабочего места, а не всплывающее окно.
+   */
+  copilotOpen: boolean;
+  copilotWidth: number;
+  setTheme: (theme: Theme) => void;
+  toggleSidebar: () => void;
+  toggleCopilot: () => void;
+  closeCopilot: () => void;
+  setCopilotWidth: (width: number) => void;
+  toggleMenu: (id: string) => void;
+  /**
+   * Раскрыть сразу несколько папок — дорогу до найденного поиском.
+   * Раскрытые не трогает: щелчок по результату не должен закрывать
+   * то, что человек открыл сам.
+   */
+  expandMenus: (ids: string[]) => void;
+  /** Забыть раскрытие удалённого пункта: его id больше ничему не отвечает. */
+  forgetMenu: (id: string) => void;
+  setDataLanguage: (code: string) => void;
+  setSidebarWidth: (width: number) => void;
+  setDrawerWidth: (width: number) => void;
+  setDrawerMode: (mode: DrawerMode) => void;
+  setTableLimit: (tableSlug: string, limit: number) => void;
+  setTableFilters: (key: string, filters: unknown) => void;
+  /** Ширина колонки. Ноль — вернуть исходную. */
+  setColumnWidth: (tableSlug: string, fieldId: string, width: number) => void;
+};
+
+/**
+ * Три положения drawer'а: сбоку, по центру и во весь экран. Это одна
+ * и та же панель в разных местах экрана, а не три компонента.
+ */
+export type DrawerMode = "side" | "center" | "full";
+
+/**
+ * Ширина сайдбара ограничена здесь, а не в компоненте: тянуть мышью и
+ * жать стрелки — два пути к одному значению, клампить надо один раз.
+ * Ниже 200px пункты меню обрезаются, выше 480 сайдбар отъедает таблицу.
+ */
+export const SIDEBAR_MIN_WIDTH = 200;
+export const SIDEBAR_MAX_WIDTH = 480;
+export const SIDEBAR_DEFAULT_WIDTH = 256;
+
+export const DRAWER_MIN_WIDTH = 400;
+export const DRAWER_MAX_WIDTH = 1200;
+export const DRAWER_DEFAULT_WIDTH = 520;
+
+/**
+ * Панель помощника. Уже 320px переписка становится колонкой в пять слов,
+ * шире 720 — таблица за ней перестаёт быть таблицей.
+ */
+export const COPILOT_MIN_WIDTH = 320;
+export const COPILOT_MAX_WIDTH = 720;
+export const COPILOT_DEFAULT_WIDTH = 420;
+
+export const clampSidebarWidth = (width: number) =>
+  clamp(width, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
+
+export const clampDrawerWidth = (width: number) => clamp(width, DRAWER_MIN_WIDTH, DRAWER_MAX_WIDTH);
+
+export const clampCopilotWidth = (width: number) =>
+  clamp(width, COPILOT_MIN_WIDTH, COPILOT_MAX_WIDTH);
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.round(Math.min(max, Math.max(min, value)));
+
+/**
+ * Единственный глобальный стор. Всё остальное — в URL (фильтры, view,
+ * пагинация) или в TanStack Query (данные). В старом ucode в localStorage
+ * персистилось ~30 redux-слайсов и redux-persist писал их синхронно
+ * на каждый dispatch.
+ */
+export const useUi = create<UiState>()(
+  persist(
+    (set) => ({
+      theme: "system",
+      sidebarCollapsed: false,
+      sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+      drawerWidth: DRAWER_DEFAULT_WIDTH,
+      drawerMode: "side",
+      tableLimits: {},
+      tableFilters: {},
+      columnWidths: {},
+      expandedMenus: [],
+      dataLanguage: "",
+      copilotOpen: false,
+      copilotWidth: COPILOT_DEFAULT_WIDTH,
+      setTheme: (theme) => set({ theme }),
+      setDataLanguage: (dataLanguage) => set({ dataLanguage }),
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      toggleCopilot: () => set((s) => ({ copilotOpen: !s.copilotOpen })),
+      closeCopilot: () => set({ copilotOpen: false }),
+      setCopilotWidth: (width) => set({ copilotWidth: clampCopilotWidth(width) }),
+      forgetMenu: (id) =>
+        set((s) => ({ expandedMenus: s.expandedMenus.filter((item) => item !== id) })),
+      toggleMenu: (id) =>
+        set((s) => ({
+          expandedMenus: s.expandedMenus.includes(id)
+            ? s.expandedMenus.filter((item) => item !== id)
+            : [...s.expandedMenus, id],
+        })),
+      expandMenus: (ids) =>
+        set((s) => ({ expandedMenus: [...new Set([...s.expandedMenus, ...ids])] })),
+      setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
+      setDrawerWidth: (width) => set({ drawerWidth: clampDrawerWidth(width) }),
+      setDrawerMode: (drawerMode) => set({ drawerMode }),
+      setTableLimit: (tableSlug, limit) =>
+        set((s) => ({ tableLimits: { ...s.tableLimits, [tableSlug]: limit } })),
+      setTableFilters: (key, filters) =>
+        set((s) => ({ tableFilters: { ...s.tableFilters, [key]: filters } })),
+      setColumnWidth: (tableSlug, fieldId, width) =>
+        set((s) => {
+          const table = { ...s.columnWidths[tableSlug] };
+          // Ноль — не ширина, а «как было»: ключ убирается, и колонка
+          // снова берёт значение по умолчанию.
+          if (width > 0) table[fieldId] = width;
+          else delete table[fieldId];
+
+          return { columnWidths: { ...s.columnWidths, [tableSlug]: table } };
+        }),
+    }),
+    { name: "ucode.ui" },
+  ),
+);
+
+export function applyTheme(theme: Theme) {
+  const dark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("dark", dark);
+}
