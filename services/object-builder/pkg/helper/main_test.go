@@ -1,3 +1,13 @@
+//go:build integration
+
+// Package helper_test integration bootstrap.
+//
+// Needs a real PostgreSQL, which the suite starts as a throwaway container and
+// migrates itself. Run with:
+//
+//	go test -tags=integration ./...
+//
+// Docker must be available; nothing else has to be configured.
 package helper_test
 
 import (
@@ -6,10 +16,26 @@ import (
 	"os"
 	"testing"
 
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/lib/pq"
 	"github.com/manveru/faker"
 	"github.com/stretchr/testify/assert"
+	"github.com/testcontainers/testcontainers-go"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+)
+
+const (
+	dbName = "ucode_test"
+	dbUser = "ucode"
+	dbPass = "ucode"
+
+	// Relative to this package directory, which is the working directory
+	// while the test binary runs.
+	migrationsPath = "../../migrations/postgres"
 )
 
 var (
@@ -24,33 +50,78 @@ func CreateRandomId(t *testing.T) string {
 }
 
 func TestMain(m *testing.M) {
-	postgresPassword := "oka"
-	postgresHost := "65.109.239.69"
-	postgresPort := 5432
-	postgresDatabase := "login_psql_5e9c087aca884920be1936cb20ca56f9_p_postgres_svcs"
-	postgresUser := "login_psql_5e9c087aca884920be1936cb20ca56f9_p_postgres_svcs"
+	// run() owns all cleanup; os.Exit below would skip deferred calls.
+	os.Exit(run(m))
+}
 
-	config, err := pgxpool.ParseConfig(fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
-		postgresUser,
-		postgresPassword,
-		postgresHost,
-		postgresPort,
-		postgresDatabase,
-	))
+func run(m *testing.M) int {
+	ctx := context.Background()
+
+	container, err := tcpostgres.Run(ctx,
+		"postgres:16-alpine",
+		tcpostgres.WithDatabase(dbName),
+		tcpostgres.WithUsername(dbUser),
+		tcpostgres.WithPassword(dbPass),
+		tcpostgres.BasicWaitStrategies(),
+	)
 	if err != nil {
-		return
+		fmt.Fprintf(os.Stderr, "start postgres container: %v\n", err)
+		return 1
 	}
-	config.MaxConns = 30
+	defer func() {
+		if err := testcontainers.TerminateContainer(container); err != nil {
+			fmt.Fprintf(os.Stderr, "terminate postgres container: %v\n", err)
+		}
+	}()
 
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		return
+		fmt.Fprintf(os.Stderr, "container connection string: %v\n", err)
+		return 1
+	}
+
+	if err := applyMigrations(dsn); err != nil {
+		fmt.Fprintf(os.Stderr, "apply migrations: %v\n", err)
+		return 1
+	}
+
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse pool config: %v\n", err)
+		return 1
+	}
+	poolCfg.MaxConns = 10
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "open pool: %v\n", err)
+		return 1
 	}
 	defer pool.Close()
 
 	conn = pool
-
 	fakeData, _ = faker.New("en")
-	os.Exit(m.Run())
+
+	return m.Run()
+}
+
+func applyMigrations(dsn string) error {
+	mig, err := migrate.New("file://"+migrationsPath, dsn)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		sourceErr, dbErr := mig.Close()
+		if sourceErr != nil {
+			fmt.Fprintf(os.Stderr, "close migration source: %v\n", sourceErr)
+		}
+		if dbErr != nil {
+			fmt.Fprintf(os.Stderr, "close migration db: %v\n", dbErr)
+		}
+	}()
+
+	if err := mig.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+	return nil
 }
