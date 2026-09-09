@@ -49,9 +49,6 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 	r.Any("v1/functions/:function-id/run", h.V1.FunctionRun)
 
 	r.Any("/v1/transcoder/webhook", h.V1.TranscoderWebhook)
-	// Telegram webhooks are deliberately public. Each handler validates the
-	// secret Telegram sends in X-Telegram-Bot-Api-Secret-Token before reading
-	// or changing project data.
 
 	// Real Stripe PaymentIntent endpoint
 
@@ -572,13 +569,9 @@ func SetUpAPI(r *gin.Engine, h handlers.Handler, cfg config.BaseConfig, tracer o
 
 	// Public Google Calendar OAuth callback (no auth — Google calls this)
 
-	googleDrive := r.Group("/v1/google-drive")
-	googleDrive.Use(h.V1.AuthMiddleware(cfg))
 	{
 	}
 
-	googleCalendar := r.Group("/v1/google-calendar")
-	googleCalendar.Use(h.V1.AuthMiddleware(cfg))
 	{
 	}
 

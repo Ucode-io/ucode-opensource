@@ -136,40 +136,7 @@ const (
 
 	UgenSuperAdminUserId = "c12c163c-38ee-4b37-8854-1dc9285fc3f8"
 
-	// Meta (Facebook) Lead Ads
-	FacebookOAuthStatePrefix      = "facebook-oauth-state:"
-	FacebookOAuthStateTTL         = 10 * time.Minute
-	FacebookIntegrationName       = "Facebook Lead Ads"
-	FacebookOAuthScopes           = "pages_show_list,pages_read_engagement,leads_retrieval,pages_manage_metadata,business_management,ads_read"
-	FacebookSubscribedFields      = "leadgen"
-	FacebookResourceType          = "META_LEADS"
-	FacebookStatusActive          = "active"
-	FacebookStatusRevoked         = "revoked"
-	FacebookStatusError           = "error"
-	FacebookWebhookFieldLead      = "leadgen"
-	FacebookSignatureHeader       = "X-Hub-Signature-256"
-	FacebookSignaturePrefix       = "sha256="
-	FacebookAppReviewLockPrefix   = "facebook-app-review-test-lock:"
-	FacebookAppReviewResultPrefix = "facebook-app-review-test-result:"
-	FacebookAppReviewLockTTL      = 20 * time.Minute
-	FacebookAppReviewResultTTL    = 30 * 24 * time.Hour
-	FacebookAppReviewRunTimeout   = 15 * time.Minute
-	FacebookAppReviewCallInterval = 150 * time.Millisecond
-	FacebookAppReviewTargetCalls  = 500
-	FacebookAppReviewMaxAttempts  = 600
-
 	GoogleLeadsStatusActive = "active"
-
-	// Instagram Direct Messaging
-	InstagramOAuthStatePrefix = "instagram-oauth-state:"
-	InstagramOAuthStateTTL    = 10 * time.Minute
-	InstagramIntegrationName  = "Instagram Support"
-	InstagramOAuthScopes      = "instagram_business_basic,instagram_business_manage_messages"
-	InstagramSubscribedFields = "messages,message_edit,message_reactions,messaging_postbacks,messaging_referral,messaging_seen"
-	InstagramStatusPendingUI  = "pending_ui"
-	InstagramStatusConnected  = "connected"
-	InstagramSignatureHeader  = "X-Hub-Signature-256"
-	InstagramSignaturePrefix  = "sha256="
 
 	// KP (commercial proposal) preview/download. requestId -> {projectId,environmentId,
 	// title,pageCount,qaStatus,hasHtml,hasPdf,prototype} record, written once by

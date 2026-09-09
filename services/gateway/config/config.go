@@ -139,34 +139,10 @@ type BaseConfig struct {
 	GithubFrontendSuccessURL string
 	GithubFrontendErrorURL   string
 
-	UnsplashAccessKey string
-
 	ReferenceCaptureEnabled        bool
 	ReferenceCaptureURL            string
 	ReferenceCaptureAPIKey         string
 	ReferenceCaptureTimeoutSeconds int
-
-	GoogleDriveClientID           string
-	GoogleDriveClientSecret       string
-	GoogleDriveRedirectURI        string
-	GoogleDriveFrontendSuccessURL string
-	GoogleDriveFrontendErrorURL   string
-	GoogleDriveServiceAccountJSON string
-	GoogleDriveParentFolderID     string
-	GoogleDriveVisibility         string
-
-	GoogleCalendarClientID           string
-	GoogleCalendarClientSecret       string
-	GoogleCalendarRedirectURI        string
-	GoogleCalendarFrontendSuccessURL string
-	GoogleCalendarFrontendErrorURL   string
-
-	TelegramManagerBotToken      string
-	TelegramManagerBotUsername   string
-	TelegramManagerWebhookSecret string
-	TelegramWebhookBaseURL       string
-
-	YandexMetricToken string
 
 	FacebookAppID           string
 	FacebookAppSecret       string
@@ -182,34 +158,10 @@ type BaseConfig struct {
 
 	// Lead poller: a safety-net that periodically pulls new leads from connected
 	// pages' forms in case a webhook was delayed or not delivered. Off by default.
-	FacebookLeadPollEnabled     bool
-	FacebookLeadPollIntervalSec int
-
-	MetaAdsGraphBaseURL       string
-	MetaAdsGraphVersion       string
-	MetaAdsAdAccountID        string
-	MetaAdsAccessToken        string
-	MetaAdsCacheTTLSeconds    int
-	MetaAdsRequestTimeoutSec  int
-	MetaAdsMaxRangeDays       int
-	MetaAdsLeadActionTypes    []string
-	MetaAdsAttributionWindows []string
 
 	// GoogleLeadsWebhookURL is the public URL Google posts leads to; returned to
 	// the user so they can paste it into the Google Ads lead form settings.
 	GoogleLeadsWebhookURL string
-
-	InstagramClientID            string
-	InstagramClientSecret        string
-	InstagramRedirectURI         string
-	InstagramFrontendSuccessURL  string
-	InstagramFrontendErrorURL    string
-	InstagramGraphBaseURL        string
-	InstagramGraphVersion        string
-	InstagramWebhookVerifyToken  string
-	InstagramLegacyClientSecrets []string
-	InstagramOAuthAuthorizeURL   string
-	InstagramOAuthAccessTokenURL string
 }
 
 func BaseLoad() BaseConfig {
@@ -279,33 +231,10 @@ func BaseLoad() BaseConfig {
 	config.GithubFrontendSuccessURL = cast.ToString(GetOrReturnDefaultValue("GITHUB_FRONTEND_SUCCESS_URL", "https://app.u-code.io/settings/github-success"))
 	config.GithubFrontendErrorURL = cast.ToString(GetOrReturnDefaultValue("GITHUB_FRONTEND_ERROR_URL", "https://app.u-code.io/settings/github-error"))
 
-	config.UnsplashAccessKey = cast.ToString(GetOrReturnDefaultValue("UNSPLASH_ACCESS_KEY", ""))
 	config.ReferenceCaptureEnabled = cast.ToBool(GetOrReturnDefaultValue("REFERENCE_CAPTURE_ENABLED", false))
 	config.ReferenceCaptureURL = cast.ToString(GetOrReturnDefaultValue("REFERENCE_CAPTURE_URL", ""))
 	config.ReferenceCaptureAPIKey = cast.ToString(GetOrReturnDefaultValue("REFERENCE_CAPTURE_API_KEY", ""))
 	config.ReferenceCaptureTimeoutSeconds = cast.ToInt(GetOrReturnDefaultValue("REFERENCE_CAPTURE_TIMEOUT_SECONDS", 20))
-
-	config.GoogleDriveClientID = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_CLIENT_ID", ""))
-	config.GoogleDriveClientSecret = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_CLIENT_SECRET", ""))
-	config.GoogleDriveRedirectURI = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_REDIRECT_URI", ""))
-	config.GoogleDriveFrontendSuccessURL = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_FRONTEND_SUCCESS_URL", "https://app.u-code.io/settings/google-drive-success"))
-	config.GoogleDriveFrontendErrorURL = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_FRONTEND_ERROR_URL", "https://app.u-code.io/settings/google-drive-error"))
-	config.GoogleDriveServiceAccountJSON = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", ""))
-	config.GoogleDriveParentFolderID = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_PARENT_FOLDER_ID", ""))
-	config.GoogleDriveVisibility = cast.ToString(GetOrReturnDefaultValue("GOOGLE_DRIVE_VISIBILITY", "anyone_with_link"))
-
-	config.GoogleCalendarClientID = cast.ToString(GetOrReturnDefaultValue("GOOGLE_CALENDAR_CLIENT_ID", ""))
-	config.GoogleCalendarClientSecret = cast.ToString(GetOrReturnDefaultValue("GOOGLE_CALENDAR_CLIENT_SECRET", ""))
-	config.GoogleCalendarRedirectURI = cast.ToString(GetOrReturnDefaultValue("GOOGLE_CALENDAR_REDIRECT_URI", ""))
-	config.GoogleCalendarFrontendSuccessURL = cast.ToString(GetOrReturnDefaultValue("GOOGLE_CALENDAR_FRONTEND_SUCCESS_URL", "https://app.u-code.io/settings/google-drive-success"))
-	config.GoogleCalendarFrontendErrorURL = cast.ToString(GetOrReturnDefaultValue("GOOGLE_CALENDAR_FRONTEND_ERROR_URL", "https://app.u-code.io/settings/google-drive-error"))
-
-	config.TelegramManagerBotToken = cast.ToString(GetOrReturnDefaultValue("TELEGRAM_MANAGER_BOT_TOKEN", ""))
-	config.TelegramManagerBotUsername = strings.TrimPrefix(cast.ToString(GetOrReturnDefaultValue("TELEGRAM_MANAGER_BOT_USERNAME", "")), "@")
-	config.TelegramManagerWebhookSecret = cast.ToString(GetOrReturnDefaultValue("TELEGRAM_MANAGER_WEBHOOK_SECRET", ""))
-	config.TelegramWebhookBaseURL = strings.TrimRight(cast.ToString(GetOrReturnDefaultValue("TELEGRAM_WEBHOOK_BASE_URL", config.UcodeBaseUrl)), "/")
-
-	config.YandexMetricToken = cast.ToString(GetOrReturnDefaultValue("YANDEX_METRIC_TOKEN", ""))
 
 	legacyFacebookAppID := cast.ToString(GetOrReturnDefaultValue("FACEBOOK_APP_ID", ""))
 	legacyFacebookAppSecret := cast.ToString(GetOrReturnDefaultValue("FACEBOOK_APP_SECRET", ""))
@@ -319,34 +248,8 @@ func BaseLoad() BaseConfig {
 	config.FacebookLegacyAppID = legacyFacebookAppID
 	config.FacebookLegacyAppSecret = legacyFacebookAppSecret
 	config.FacebookLegacyAppSecrets = legacySecrets(config.FacebookAppSecret, legacyFacebookAppSecret, cast.ToString(GetOrReturnDefaultValue("FACEBOOK_LEGACY_APP_SECRETS", "")))
-	config.FacebookLeadPollEnabled = cast.ToBool(GetOrReturnDefaultValue("FACEBOOK_LEAD_POLL_ENABLED", true))
-	config.FacebookLeadPollIntervalSec = cast.ToInt(GetOrReturnDefaultValue("FACEBOOK_LEAD_POLL_INTERVAL_SEC", 120))
-
-	config.MetaAdsGraphBaseURL = strings.TrimRight(cast.ToString(GetOrReturnDefaultValue("META_GRAPH_BASE_URL", "https://graph.facebook.com")), "/")
-	config.MetaAdsGraphVersion = cast.ToString(GetOrReturnDefaultValue("META_GRAPH_VERSION", "v26.0"))
-	config.MetaAdsAdAccountID = strings.TrimPrefix(strings.TrimSpace(cast.ToString(GetOrReturnDefaultValue("META_AD_ACCOUNT_ID", ""))), "act_")
-	config.MetaAdsAccessToken = strings.TrimSpace(cast.ToString(GetOrReturnDefaultValue("META_ACCESS_TOKEN", "")))
-	config.MetaAdsCacheTTLSeconds = cast.ToInt(GetOrReturnDefaultValue("META_ADS_CACHE_TTL_SEC", 86400))
-	config.MetaAdsRequestTimeoutSec = cast.ToInt(GetOrReturnDefaultValue("META_ADS_REQUEST_TIMEOUT_SEC", 30))
-	config.MetaAdsMaxRangeDays = cast.ToInt(GetOrReturnDefaultValue("META_ADS_MAX_RANGE_DAYS", 366))
-	config.MetaAdsLeadActionTypes = splitCommaSeparated(cast.ToString(GetOrReturnDefaultValue("META_LEAD_ACTION_TYPES", "lead")))
-	config.MetaAdsAttributionWindows = splitCommaSeparated(cast.ToString(GetOrReturnDefaultValue("META_ATTRIBUTION_WINDOWS", "")))
 
 	config.GoogleLeadsWebhookURL = strings.TrimRight(cast.ToString(GetOrReturnDefaultValue("GOOGLE_LEADS_WEBHOOK_URL", "")), "/")
-
-	legacyInstagramClientID := cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_CLIENT_ID", ""))
-	legacyInstagramClientSecret := cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_CLIENT_SECRET", ""))
-	config.InstagramClientID = firstNonEmpty(cast.ToString(GetOrReturnDefaultValue("UCODE_INSTAGRAM_CLIENT_ID", "")), legacyInstagramClientID)
-	config.InstagramClientSecret = firstNonEmpty(cast.ToString(GetOrReturnDefaultValue("UCODE_INSTAGRAM_CLIENT_SECRET", "")), legacyInstagramClientSecret)
-	config.InstagramRedirectURI = firstNonEmpty(cast.ToString(GetOrReturnDefaultValue("UCODE_INSTAGRAM_REDIRECT_URI", "")), cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_REDIRECT_URI", "")))
-	config.InstagramFrontendSuccessURL = firstNonEmpty(cast.ToString(GetOrReturnDefaultValue("UCODE_INSTAGRAM_FRONTEND_SUCCESS_URL", "")), cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_FRONTEND_SUCCESS_URL", "https://app.u-code.io/settings/instagram-success")))
-	config.InstagramFrontendErrorURL = firstNonEmpty(cast.ToString(GetOrReturnDefaultValue("UCODE_INSTAGRAM_FRONTEND_ERROR_URL", "")), cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_FRONTEND_ERROR_URL", "https://app.u-code.io/settings/instagram-error")))
-	config.InstagramGraphBaseURL = strings.TrimRight(cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_GRAPH_BASE_URL", "https://graph.instagram.com")), "/")
-	config.InstagramGraphVersion = cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_GRAPH_VERSION", "v25.0"))
-	config.InstagramWebhookVerifyToken = firstNonEmpty(cast.ToString(GetOrReturnDefaultValue("UCODE_INSTAGRAM_WEBHOOK_VERIFY_TOKEN", "")), cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_WEBHOOK_VERIFY_TOKEN", "")))
-	config.InstagramLegacyClientSecrets = legacySecrets(config.InstagramClientSecret, legacyInstagramClientSecret, cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_LEGACY_CLIENT_SECRETS", "")))
-	config.InstagramOAuthAuthorizeURL = strings.TrimRight(cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_OAUTH_AUTHORIZE_URL", "https://www.instagram.com/oauth/authorize")), "/")
-	config.InstagramOAuthAccessTokenURL = strings.TrimRight(cast.ToString(GetOrReturnDefaultValue("INSTAGRAM_OAUTH_ACCESS_TOKEN_URL", "https://api.instagram.com/oauth/access_token")), "/")
 
 	config.MaxTokens = cast.ToInt(GetOrReturnDefaultValue("MAX_TOKENS", 12000))
 	config.AnalyseProjectMaxTokens = cast.ToInt(GetOrReturnDefaultValue("ANALYSE_PROJECT_MAX_TOKENS", 5000))
