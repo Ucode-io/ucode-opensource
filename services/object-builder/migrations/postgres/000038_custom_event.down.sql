@@ -1,0 +1,3 @@
+ALTER TABLE IF EXISTS "custom_event" DROP COLUMN IF EXISTS "path";
+
+DELETE FROM "function" WHERE "id" = 'b90d8ad8-553a-4494-8031-660b85a79b45';

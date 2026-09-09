@@ -1,0 +1,19 @@
+DROP TABLE IF EXISTS "client_platform" CASCADE;
+DROP TABLE IF EXISTS "scope" CASCADE;
+DROP TABLE IF EXISTS "client_type" CASCADE;
+DROP TABLE IF EXISTS "user_info_field" CASCADE;
+DROP TABLE IF EXISTS "role" CASCADE;
+DROP TABLE IF EXISTS "role_permission" CASCADE;
+DROP TABLE IF EXISTS "integration" CASCADE;
+DROP TABLE IF EXISTS "client" CASCADE;
+DROP TABLE IF EXISTS "user_relation" CASCADE;
+DROP TABLE IF EXISTS "relation" CASCADE;
+DROP TABLE IF EXISTS "user_info" CASCADE;
+DROP TABLE IF EXISTS "permission" CASCADE;
+DROP TABLE IF EXISTS "permission_scope" CASCADE;
+
+DROP TYPE IF EXISTS "confirm_strategies";
+DROP TYPE IF EXISTS "relation_types";
+DROP TYPE IF EXISTS "login_strategies";
+DROP TYPE IF EXISTS "confirm_strategies";
+DROP TYPE IF EXISTS "confirm_strategies";

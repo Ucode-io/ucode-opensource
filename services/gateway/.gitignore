@@ -1,0 +1,13 @@
+.env
+.meta-ads.env
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/ucode_go_admin_api_gateway.iml
+/.idea/vcs.xml
+/.idea/git_toolbox_prj.xml
+.DS_Store
+vendor
+any.go
+test_ai
+.idea
+CLAUDE.md

@@ -1,0 +1,12 @@
+-- DO $$
+-- BEGIN
+--     IF NOT EXISTS (
+--         SELECT 1
+--         FROM information_schema.columns
+--         WHERE table_name = 'folder_group'
+--           AND column_name = 'parent_id'
+--     ) THEN
+--         ALTER TABLE "folder_group"
+--         ADD COLUMN "parent_id" UUID REFERENCES "folder_group"("id");
+--     END IF;
+-- END $$;

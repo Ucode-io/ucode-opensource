@@ -1,0 +1,31 @@
+-- DO $$
+-- DECLARE
+--     table_name_text text;
+--     excluded_tables text[] := ARRAY[
+--         'action_permission', 'automatic_filter', 'client_platform', 'client_type', 'connection', 'currency_setting',
+--         'custom_error_message', 'custom_event', 'field', 'field_permission', 'file', 'function', 'function_folder',
+--         'global_permission', 'language_setting', 'layout', 'menu', 'menu_permission', 'menu_setting',
+--         'menu_templates', 'record_permission', 'relation', 'role', 'schema_migrations', 'section', 'tab',
+--         'table', 'test_login', 'timezone_setting', 'user', 'version', 'version_history', 'view',
+--         'view_permission', 'view_relation_permission'
+--     ];
+-- BEGIN
+--     FOR table_name_text IN
+--         SELECT t.tablename
+--         FROM pg_tables t
+--         WHERE t.schemaname = 'public'
+--           AND t.tablename <> ALL (excluded_tables)
+--     LOOP
+--         IF NOT EXISTS (
+--             SELECT 1
+--             FROM information_schema.columns c
+--             WHERE c.table_name = table_name_text
+--               AND c.column_name = 'folder_id'
+--         ) THEN
+--             EXECUTE format('
+--                 ALTER TABLE %I
+--                 ADD COLUMN folder_id UUID REFERENCES folder_group(id) ON DELETE CASCADE;',
+--                 table_name_text);
+--         END IF;
+--     END LOOP;
+-- END $$;

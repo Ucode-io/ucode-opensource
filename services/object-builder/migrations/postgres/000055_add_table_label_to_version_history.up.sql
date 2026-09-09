@@ -1,0 +1,1 @@
+ALTER TABLE version_history ADD COLUMN IF NOT EXISTS "table_label" VARCHAR(255) DEFAULT '';

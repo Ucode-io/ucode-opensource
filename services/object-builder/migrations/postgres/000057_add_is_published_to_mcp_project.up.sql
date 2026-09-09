@@ -1,0 +1,1 @@
+ALTER TABLE mcp_project ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT false;

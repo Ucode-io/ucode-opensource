@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS project_resource_instagram_ig_id_unique;

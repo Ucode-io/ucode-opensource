@@ -1,0 +1,1 @@
+ALTER TABLE IF EXISTS "project" DROP COLUMN IF EXISTS "new_router";

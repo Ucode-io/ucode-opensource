@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS file_versions;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS chats;
+DROP TYPE IF EXISTS message_role;

@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "environment"
+DROP COLUMN IF EXISTS "data";

@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "tab" 
+    DROP COLUMN IF EXISTS "view_type";

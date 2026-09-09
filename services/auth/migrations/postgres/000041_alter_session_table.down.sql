@@ -1,0 +1,1 @@
+ALTER TABLE IF EXISTS "session" DROP COLUMN IF EXISTS "user_id_auth";

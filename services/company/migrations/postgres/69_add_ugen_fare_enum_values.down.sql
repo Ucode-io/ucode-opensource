@@ -1,0 +1,1 @@
+-- Removing enum values requires recreating the type; no-op for safety

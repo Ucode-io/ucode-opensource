@@ -1,0 +1,1 @@
+ALTER TABLE "variable_resource" DROP CONSTRAINT IF EXISTS unq_env_project_key;

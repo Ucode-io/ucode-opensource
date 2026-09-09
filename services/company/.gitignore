@@ -1,0 +1,8 @@
+/.idea/
+/vendor/
+.env
+./.env
+any.go
+db.sql
+.cache
+CLAUDE.md

@@ -1,0 +1,5 @@
+ALTER TABLE IF EXISTS "api_keys"
+    ALTER COLUMN "project_id" SET DEFAULT '18596880-ed4b-41fb-baaf-c62e6437012f';
+
+ALTER TABLE IF EXISTS "api_keys"
+    DROP COLUMN IF EXISTS "project_id";

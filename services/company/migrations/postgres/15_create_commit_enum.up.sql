@@ -1,0 +1,35 @@
+CREATE TYPE "commit_type" AS ENUM (
+    'APP', 
+    'TABLE', 
+    'FIELD',
+    'RELATION',
+    'SECTION',
+    'VIEW',
+    'VIEW_RELATION',
+    
+    'CLIENT_PLATFORM',
+    'CLIENT_TYPE',
+    'ROLE',
+    
+    'TEST_LOGIN',
+    'CONNECTION',
+    'AUTOMATIC_FILTER',
+    'CUSTOM_EVENT',
+
+    'RECORD_PERMISSION',
+    'ACTION_PERMISSION',
+    'FIELD_PERMISSION',
+    'VIEW_PERMISSION',
+    'VIEW_RELATION_PERMISSION',
+   
+    'DASHBOARD',
+    'VARIABLE',
+    'PANEL',
+    'FUNCTION'
+);
+
+ALTER TABLE IF EXISTS "commit"
+ ADD COLUMN IF NOT EXISTS "commit_type" commit_type NOT NULL DEFAULT 'APP';
+
+ALTER TABLE IF EXISTS "commit"
+ ALTER COLUMN "commit_type" DROP DEFAULT;

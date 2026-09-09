@@ -1,0 +1,1 @@
+ALTER TABLE client_type DROP COLUMN IF EXISTS tables JSONB;

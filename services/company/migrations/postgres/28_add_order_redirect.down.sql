@@ -1,0 +1,1 @@
+ALTER TABLE "redirect_url" DROP COLUMN IF EXISTS "order";

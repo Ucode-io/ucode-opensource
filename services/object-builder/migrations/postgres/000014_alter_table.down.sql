@@ -1,0 +1,1 @@
+alter table "docx_templates" drop column if exists "pdf_url";

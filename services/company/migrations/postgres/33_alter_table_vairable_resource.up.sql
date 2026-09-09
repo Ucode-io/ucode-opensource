@@ -1,0 +1,1 @@
+ALTER TABLE "variable_resource" ADD COLUMN IF NOT EXISTS "project_resource_id" UUID REFERENCES "project_resource"("id");

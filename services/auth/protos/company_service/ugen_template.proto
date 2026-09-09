@@ -1,0 +1,153 @@
+syntax="proto3";
+
+package company_service;
+option go_package="genproto/company_service";
+
+import "google/protobuf/empty.proto";
+
+service UgenTemplateService {
+    rpc Create(CreateUgenTemplateReq) returns (UgenTemplate) {}
+    rpc List(GetUgenTemplateListReq) returns (GetUgenTemplateListResponse) {}
+    rpc GetById(GetUgenTemplateByIdReq) returns (UgenTemplate) {}
+    rpc Update(UpdateUgenTemplateReq) returns (UgenTemplate) {}
+    rpc Delete(DeleteUgenTemplateReq) returns (google.protobuf.Empty) {}
+    rpc SetReaction(SetUgenTemplateReactionReq) returns (UgenTemplateReaction) {}
+    rpc DeleteReaction(DeleteUgenTemplateReactionReq) returns (google.protobuf.Empty) {}
+    rpc ListReactions(GetUgenTemplateReactionListReq) returns (GetUgenTemplateReactionListResponse) {}
+    // SetPrice is the admin-only price control: users create templates for free
+    // (price defaults to 0) and cannot set a price via Create/Update; only this
+    // endpoint assigns/updates a template's price and currency.
+    rpc SetPrice(SetUgenTemplatePriceReq) returns (UgenTemplate) {}
+}
+
+enum UgenTemplateReactionType {
+    UGEN_TEMPLATE_REACTION_TYPE_UNSPECIFIED = 0;
+    UGEN_TEMPLATE_REACTION_TYPE_LIKE = 1;
+    UGEN_TEMPLATE_REACTION_TYPE_DISLIKE = 2;
+}
+
+message CreateUgenTemplateReq {
+    string name = 1;
+    string description = 2;
+    string photo = 3;
+    string mcp_project_id = 4;
+    int32 order_number = 5;
+    string preview_url = 6;
+    string source_resource_env_id = 7;
+    string source_project_id = 8;
+    string source_environment_id = 9;
+    string source_node_type = 10;
+    string source_mcp_resource_env_id = 11;
+    string source_function_id = 12;
+    string source_repo_id = 13;
+    repeated string images = 14;
+}
+
+message GetUgenTemplateListReq {
+    int32 limit = 1;
+    int32 offset = 2;
+    string user_id = 3;
+}
+
+message GetUgenTemplateListResponse {
+    repeated UgenTemplate templates = 1;
+    int32 count = 2;
+}
+
+message GetUgenTemplateByIdReq {
+    string id = 1;
+    string user_id = 2;
+}
+
+message UpdateUgenTemplateReq {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string photo = 4;
+    string mcp_project_id = 5;
+    int32 order_number = 6;
+    string preview_url = 7;
+    string source_resource_env_id = 8;
+    string source_project_id = 9;
+    string source_environment_id = 10;
+    string source_node_type = 11;
+    string source_mcp_resource_env_id = 12;
+    string source_function_id = 13;
+    string source_repo_id = 14;
+    repeated string images = 15;
+}
+
+message DeleteUgenTemplateReq {
+    string id = 1;
+}
+
+message SetUgenTemplatePriceReq {
+    string id = 1;
+    double price = 2;
+    string currency_id = 3;
+    // per_user_price is charged (in currency_id) to the head project's balance for
+    // every user later added to a project created from this template. 0 = free.
+    double per_user_price = 4;
+}
+
+message SetUgenTemplateReactionReq {
+    string template_id = 1;
+    string user_id = 2;
+    UgenTemplateReactionType reaction_type = 3;
+}
+
+message DeleteUgenTemplateReactionReq {
+    string template_id = 1;
+    string user_id = 2;
+}
+
+message GetUgenTemplateReactionListReq {
+    string template_id = 1;
+    UgenTemplateReactionType reaction_type = 2;
+    int32 limit = 3;
+    int32 offset = 4;
+}
+
+message GetUgenTemplateReactionListResponse {
+    repeated UgenTemplateReaction reactions = 1;
+    int32 count = 2;
+}
+
+message UgenTemplateReaction {
+    string id = 1;
+    string template_id = 2;
+    string user_id = 3;
+    UgenTemplateReactionType reaction_type = 4;
+    string created_at = 5;
+    string updated_at = 6;
+    int64 deleted_at = 7;
+}
+
+message UgenTemplate {
+    string id = 1;
+    string name = 2;
+    string description = 3;
+    string photo = 4;
+    string mcp_project_id = 5;
+    int32 order_number = 6;
+    string created_at = 7;
+    string updated_at = 8;
+    int64 deleted_at = 9;
+    string preview_url = 10;
+    string source_resource_env_id = 11;
+    string source_project_id = 12;
+    string source_environment_id = 13;
+    string source_node_type = 14;
+    string source_mcp_resource_env_id = 15;
+    string source_function_id = 16;
+    string source_repo_id = 17;
+    repeated string images = 18;
+    int32 like_count = 19;
+    int32 dislike_count = 20;
+    UgenTemplateReactionType current_user_reaction = 21;
+    double price = 22;
+    string currency_id = 23;
+    // per_user_price (in currency_id) is charged per user added to a project
+    // provisioned from this template; copied to project.per_user_price on import.
+    double per_user_price = 24;
+}

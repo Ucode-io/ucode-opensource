@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "view" 
+    DROP COLUMN IF EXISTS "menu_id";

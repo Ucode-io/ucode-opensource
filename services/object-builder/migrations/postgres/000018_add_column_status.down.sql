@@ -1,0 +1,1 @@
+ALTER TABLE IF EXISTS "role" DROP COLUMN "status";

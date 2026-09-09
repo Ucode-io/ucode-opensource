@@ -1,0 +1,3 @@
+ALTER TABLE chats DROP COLUMN IF EXISTS type;
+
+DROP TYPE IF EXISTS chat_type;

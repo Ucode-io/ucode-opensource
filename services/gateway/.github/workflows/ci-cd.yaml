@@ -1,0 +1,101 @@
+name: CI/CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, staging ]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  prepare-meta-ads-prod:
+    if: github.ref_name == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Create backend-only Meta Ads environment
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          UCODE_FACEBOOK_APP_SECRET: ${{ secrets.UCODE_FACEBOOK_APP_SECRET }}
+          UCODE_FACEBOOK_WEBHOOK_VERIFY_TOKEN: ${{ secrets.UCODE_FACEBOOK_WEBHOOK_VERIFY_TOKEN }}
+          UCODE_INSTAGRAM_CLIENT_SECRET: ${{ secrets.UCODE_INSTAGRAM_CLIENT_SECRET_ROTATED }}
+          UCODE_INSTAGRAM_WEBHOOK_VERIFY_TOKEN: ${{ secrets.UCODE_INSTAGRAM_WEBHOOK_VERIFY_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${META_ACCESS_TOKEN}"
+          test -n "${UCODE_FACEBOOK_APP_SECRET}"
+          test -n "${UCODE_FACEBOOK_WEBHOOK_VERIFY_TOKEN}"
+          test -n "${UCODE_INSTAGRAM_CLIENT_SECRET}"
+          test -n "${UCODE_INSTAGRAM_WEBHOOK_VERIFY_TOKEN}"
+          go run ./scripts/write_meta_ads_env.go .meta-ads.env
+          test -s .meta-ads.env
+
+      - name: Upload Meta Ads environment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: env-file
+          include-hidden-files: true
+          path: .meta-ads.env
+
+  build-prod:
+    if: github.ref_name == 'master'
+    needs: prepare-meta-ads-prod
+    uses: Ucode-io/ci-cd/.github/workflows/build.yml@main
+    with:
+      ENV_TAG: latest
+    secrets: inherit
+
+  deploy-prod:
+    if: github.ref_name == 'master'
+    needs: build-prod
+    runs-on: ubuntu-latest
+    env:
+      PIPELINE_ID: ${{ github.run_number }}
+      PROJECT_NAME: ${{ github.event.repository.name }}
+      CLUSTER: cluster-prod
+      K8S_NAMESPACE: ucode-prod
+    steps:
+      - name: Checkout deployments repository
+        uses: actions/checkout@v4
+        with:
+          repository: Ucode-io/deployments
+          token: ${{ secrets.GH_TOKEN }}
+          path: deployments
+          fetch-depth: 0
+
+      - name: Install yq
+        uses: mikefarah/yq@v4
+
+      - name: Update production image tag
+        run: |
+          set -euo pipefail
+          yq eval --inplace '.image.tag = strenv(PIPELINE_ID)' \
+            "deployments/clusters/${CLUSTER}/${K8S_NAMESPACE}/${PROJECT_NAME}/values.yaml"
+
+      - name: Commit production deployment
+        run: |
+          set -euo pipefail
+          cd deployments
+          git config user.email "argocd@u-code.io"
+          git config user.name "argocd"
+          git add "clusters/${CLUSTER}/${K8S_NAMESPACE}/${PROJECT_NAME}/values.yaml"
+          git commit -m "[CLUSTER:${CLUSTER},NAMESPACE:${K8S_NAMESPACE}] Update image tag for ${PROJECT_NAME}" || exit 0
+          git push origin main
+
+  ci-cd-staging:
+    if: github.ref_name == 'staging'
+    uses: Ucode-io/ci-cd/.github/workflows/ci_cd.yml@main
+    with:
+      ENVIRONMENT: staging
+      ENV_TAG: test
+    secrets: inherit

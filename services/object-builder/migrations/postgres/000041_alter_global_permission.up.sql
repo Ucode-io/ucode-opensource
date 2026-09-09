@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "global_permission"
+    ADD COLUMN IF NOT EXISTS "billing" BOOLEAN DEFAULT true;

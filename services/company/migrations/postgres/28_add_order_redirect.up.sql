@@ -1,0 +1,1 @@
+ALTER TABLE "redirect_url" ADD COLUMN IF NOT EXISTS "order" INTEGER;

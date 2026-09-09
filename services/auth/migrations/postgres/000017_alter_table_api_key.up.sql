@@ -1,0 +1,5 @@
+ALTER TABLE IF EXISTS "api_keys"
+    ADD COLUMN IF NOT EXISTS "project_id" uuid NOT NULL DEFAULT '18596880-ed4b-41fb-baaf-c62e6437012f';
+
+ALTER TABLE IF EXISTS "api_keys"
+    ALTER COLUMN "project_id" DROP DEFAULT;

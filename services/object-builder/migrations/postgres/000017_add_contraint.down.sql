@@ -1,0 +1,1 @@
+ALTER TABLE IF EXISTS "field" DROP CONSTRAINT IF EXISTS "field_table_id_slug_unique";

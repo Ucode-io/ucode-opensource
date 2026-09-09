@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "function"
+    DROP COLUMN IF EXISTS "is_public";

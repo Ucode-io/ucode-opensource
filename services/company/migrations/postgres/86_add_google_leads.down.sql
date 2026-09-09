@@ -1,0 +1,3 @@
+-- PostgreSQL cannot safely drop a value from an enum type, so 'GOOGLE_LEADS' is
+-- left in place. The external_id column and its indexes are shared with Meta
+-- (migration 83) and must not be dropped here.

@@ -1,0 +1,3 @@
+ALTER TABLE billing_usage DROP CONSTRAINT IF EXISTS fk_billing_usage_project_id;
+ALTER TABLE integration_resource DROP CONSTRAINT IF EXISTS fk_integration_resource_project_id;
+ALTER TABLE integration_resource DROP CONSTRAINT IF EXISTS fk_integration_resource_environment_id;

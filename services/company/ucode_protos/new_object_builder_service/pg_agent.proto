@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+package new_object_builder_service;
+option go_package = "genproto/new_object_builder_service";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+// ==================== Agent Service ====================
+//
+// A per-project, user-defined AI agent. App-builders describe an agent in
+// natural language; the platform generates its description, instruction (system
+// prompt), model and table permissions, then persists it as a reusable entity.
+// The generated frontend later invokes a saved agent by id, passing record
+// context. The agent runs a native tool-use loop whose only backend tools are
+// item CRUD operations.
+//
+// Permissions are stored normalized in `agent_permissions` (one row per
+// agent x table_slug, with a boolean per allowed operation) and enforced
+// server-side at the tool boundary. Every invocation is recorded as an
+// `agent_run` for auditing.
+
+service AgentService {
+  // Agents
+  rpc CreateAgent(CreateAgentRequest) returns (Agent) {}
+  rpc GetAgent(AgentPrimaryKey) returns (Agent) {}
+  rpc GetAllAgents(GetAllAgentsRequest) returns (GetAllAgentsResponse) {}
+  rpc UpdateAgent(UpdateAgentRequest) returns (Agent) {}
+  rpc DeleteAgent(AgentPrimaryKey) returns (google.protobuf.Empty) {}
+
+  // Runs (audit trail)
+  rpc CreateAgentRun(CreateAgentRunRequest) returns (AgentRun) {}
+  rpc UpdateAgentRun(UpdateAgentRunRequest) returns (AgentRun) {}
+  rpc GetAgentRun(AgentRunPrimaryKey) returns (AgentRun) {}
+  rpc GetAllAgentRuns(GetAllAgentRunsRequest) returns (GetAllAgentRunsResponse) {}
+}
+
+// ==================== Agent ====================
+
+message Agent {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string description = 4;
+  string instruction = 5;
+  string model = 6;
+  int32  max_steps = 7;
+  bool   enabled = 8;
+  repeated AgentPermission permissions = 9;
+  string created_at = 10;
+  string updated_at = 11;
+}
+
+// AgentPermission is one allow-rule: which item-CRUD operations the agent may
+// perform on a single table. Absence of a rule means no access to that table.
+message AgentPermission {
+  string id = 1;
+  string agent_id = 2;
+  string table_slug = 3;
+  bool   can_create = 4;
+  bool   can_read = 5;
+  bool   can_update = 6;
+  bool   can_delete = 7;
+  bool   can_list = 8;
+}
+
+message CreateAgentRequest {
+  string resource_env_id = 1;
+  string project_id = 2;
+  string name = 3;
+  string description = 4;
+  string instruction = 5;
+  string model = 6;
+  int32  max_steps = 7;
+  bool   enabled = 8;
+  repeated AgentPermission permissions = 9;
+}
+
+// UpdateAgentRequest is a full replace: every scalar field is written and the
+// permission set is fully replaced with `permissions`.
+message UpdateAgentRequest {
+  string resource_env_id = 1;
+  string id = 2;
+  string name = 3;
+  string description = 4;
+  string instruction = 5;
+  string model = 6;
+  int32  max_steps = 7;
+  bool   enabled = 8;
+  repeated AgentPermission permissions = 9;
+}
+
+message AgentPrimaryKey {
+  string resource_env_id = 1;
+  string id = 2;
+}
+
+message GetAllAgentsRequest {
+  string resource_env_id = 1;
+  string project_id = 2;
+  string name = 3;
+  string model = 4;
+  string order_by = 5;
+  string order_direction = 6;
+  int32  limit = 7;
+  int32  offset = 8;
+}
+
+message GetAllAgentsResponse {
+  repeated Agent agents = 1;
+  int32 count = 2;
+}
+
+// ==================== Agent Runs ====================
+
+message AgentRun {
+  string id = 1;
+  string agent_id = 2;
+  string project_id = 3;
+  string status = 4; // running | succeeded | failed
+  google.protobuf.Struct input = 5;
+  string output = 6;
+  repeated AgentRunStep steps = 7;
+  int32  tokens_used = 8;
+  string error = 9;
+  string created_at = 10;
+  string finished_at = 11;
+}
+
+// AgentRunStep is one tool round-trip in the agent loop, captured for audit.
+message AgentRunStep {
+  int32  index = 1;
+  string tool_name = 2;
+  google.protobuf.Struct tool_input = 3;
+  string tool_result = 4;
+  bool   is_error = 5;
+}
+
+message CreateAgentRunRequest {
+  string resource_env_id = 1;
+  string agent_id = 2;
+  string project_id = 3;
+  google.protobuf.Struct input = 4;
+}
+
+// UpdateAgentRunRequest finalizes a run: it sets the terminal status, output,
+// captured steps, token usage and error, and stamps finished_at server-side.
+message UpdateAgentRunRequest {
+  string resource_env_id = 1;
+  string id = 2;
+  string status = 3;
+  string output = 4;
+  repeated AgentRunStep steps = 5;
+  int32  tokens_used = 6;
+  string error = 7;
+}
+
+message AgentRunPrimaryKey {
+  string resource_env_id = 1;
+  string id = 2;
+}
+
+message GetAllAgentRunsRequest {
+  string resource_env_id = 1;
+  string agent_id = 2;
+  string status = 3;
+  string order_by = 4;
+  string order_direction = 5;
+  int32  limit = 6;
+  int32  offset = 7;
+}
+
+message GetAllAgentRunsResponse {
+  repeated AgentRun agent_runs = 1;
+  int32 count = 2;
+}

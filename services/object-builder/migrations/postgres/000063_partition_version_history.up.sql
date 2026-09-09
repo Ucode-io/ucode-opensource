@@ -1,0 +1,126 @@
+-- -- Convert version_history into a RANGE-partitioned table by created_at (weekly partitions).
+-- -- Strategy:
+-- --   1) Skip cleanly if the table is already partitioned (re-run safety).
+-- --   2) Wipe any leftovers from previous failed attempts (version_history_new).
+-- --   3) Build a fresh partitioned table with the same columns + composite PK (id, created_at).
+-- --   4) Create partitions covering previous / current / next week so backfill always finds a home.
+-- --   5) Backfill only the last 7 days; anything older is intentionally discarded.
+-- --   6) Drop the old table -> Postgres returns disk space to the OS immediately.
+-- --   7) Promote the new table into place and rebuild the helper index.
+-- --
+-- -- Everything below is idempotent: if golang-migrate retries this file after a failure,
+-- -- it must finish cleanly without leaving the schema in a half-converted state.
+--
+-- DO $migration$
+-- DECLARE
+--     v_kind       CHAR;
+--     v_has_legacy BOOLEAN := FALSE;
+--     week_starts  DATE[];
+--     p_start      DATE;
+--     p_end        DATE;
+--     p_name       TEXT;
+-- BEGIN
+--     SELECT c.relkind
+--       INTO v_kind
+--       FROM pg_class     c
+--       JOIN pg_namespace n ON n.oid = c.relnamespace
+--      WHERE c.relname = 'version_history'
+--        AND n.nspname = current_schema();
+--
+--     -- 1) Already partitioned -> nothing to do.
+--     IF v_kind = 'p' THEN
+--         RAISE NOTICE 'version_history is already partitioned, skipping conversion';
+--         RETURN;
+--     END IF;
+--
+--     v_has_legacy := (v_kind = 'r');
+--
+--     -- 2) Clean up any leftover scratch table from a previous failed attempt.
+--     EXECUTE 'DROP TABLE IF EXISTS "version_history_new" CASCADE';
+--
+--     -- 3) Create the new partitioned parent.
+--     EXECUTE $ddl$
+--         CREATE TABLE "version_history_new" (
+--             "id"                UUID         NOT NULL DEFAULT uuid_generate_v4(),
+--             "action_source"     VARCHAR(255) NOT NULL,
+--             "action_type"       VARCHAR(255) NOT NULL,
+--             "previous"          JSONB        DEFAULT '{}',
+--             "current"           JSONB        DEFAULT '{}',
+--             "date"              VARCHAR(255),
+--             "user_info"         VARCHAR(255) NOT NULL,
+--             "request"           JSONB        DEFAULT '{}',
+--             "response"          JSONB        DEFAULT '{}',
+--             "api_key"           VARCHAR(255),
+--             "type"              VARCHAR(255) DEFAULT 'GLOBAL',
+--             "table_slug"        VARCHAR(255) NOT NULL,
+--             "used_environments" JSONB        DEFAULT '{}',
+--             "deleted_at"        TIMESTAMP,
+--             "method_api"        VARCHAR(255),
+--             "time_started"      VARCHAR(255),
+--             "time_completed"    VARCHAR(255),
+--             "duration"          BIGINT,
+--             "status_code"       BIGINT,
+--             "table_label"       VARCHAR(255) DEFAULT '',
+--             "created_at"        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--             "updated_at"        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+--             PRIMARY KEY ("id", "created_at")
+--         ) PARTITION BY RANGE ("created_at")
+--     $ddl$;
+--
+--     -- 4) Create weekly partitions for previous / current / next week.
+--     week_starts := ARRAY[
+--         date_trunc('week', CURRENT_DATE)::date - INTERVAL '7 days',
+--         date_trunc('week', CURRENT_DATE)::date,
+--         date_trunc('week', CURRENT_DATE)::date + INTERVAL '7 days'
+--     ]::date[];
+--
+--     FOREACH p_start IN ARRAY week_starts LOOP
+--         p_end  := p_start + INTERVAL '7 days';
+--         p_name := 'version_history_p_' || to_char(p_start, 'YYYY_MM_DD');
+--
+--         -- If a stray table with the same name exists outside this partition tree, drop it
+--         -- so the CREATE PARTITION OF below cannot collide.
+--         EXECUTE format('DROP TABLE IF EXISTS %I CASCADE', p_name);
+--
+--         EXECUTE format(
+--             'CREATE TABLE %I PARTITION OF "version_history_new" FOR VALUES FROM (%L) TO (%L)',
+--             p_name, p_start, p_end
+--         );
+--     END LOOP;
+--
+--     -- 5) Backfill last 7 days only, but only if the legacy table exists.
+--     IF v_has_legacy THEN
+--         EXECUTE $ddl$
+--             INSERT INTO "version_history_new" (
+--                 "id", "action_source", "action_type", "previous", "current", "date",
+--                 "user_info", "request", "response", "api_key", "type", "table_slug",
+--                 "used_environments", "deleted_at", "method_api", "time_started",
+--                 "time_completed", "duration", "status_code", "table_label",
+--                 "created_at", "updated_at"
+--             )
+--             SELECT
+--                 "id",
+--                 COALESCE("action_source", ''),
+--                 COALESCE("action_type", ''),
+--                 "previous", "current", "date",
+--                 COALESCE("user_info", ''),
+--                 "request", "response", "api_key", "type",
+--                 COALESCE("table_slug", ''),
+--                 "used_environments", "deleted_at", "method_api", "time_started",
+--                 "time_completed", "duration", "status_code", "table_label",
+--                 "created_at", "updated_at"
+--             FROM "version_history"
+--             WHERE "created_at" IS NOT NULL
+--               AND "created_at" >= NOW() - INTERVAL '7 days'
+--         $ddl$;
+--
+--         -- 6) Drop the old table - disk is returned to the OS now.
+--         EXECUTE 'DROP TABLE "version_history" CASCADE';
+--     END IF;
+--
+--     -- 7) Promote new table and (re)build the date index.
+--     EXECUTE 'ALTER TABLE "version_history_new" RENAME TO "version_history"';
+--     EXECUTE 'DROP INDEX IF EXISTS idx_version_history_created_at';
+--     EXECUTE 'CREATE INDEX idx_version_history_created_at ON "version_history" ("created_at")';
+-- END
+-- $migration$;

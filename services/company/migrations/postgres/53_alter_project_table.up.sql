@@ -1,0 +1,4 @@
+ALTER TABLE IF EXISTS "project"
+    ADD COLUMN IF NOT EXISTS "new_router" BOOLEAN DEFAULT TRUE;
+
+UPDATE project SET new_router = FALSE;

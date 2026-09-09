@@ -1,0 +1,1 @@
+ALTER TABLE "session" ADD COLUMN IF NOT EXISTS client_platform_id UUID REFERENCES "client_platform"("id");

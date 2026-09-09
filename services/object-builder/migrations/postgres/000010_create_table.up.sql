@@ -1,0 +1,9 @@
+-- CREATE TABLE IF NOT EXISTS "folder_group" (
+--     "id" UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+--     "table_id" UUID REFERENCES "table"("id") ON DELETE CASCADE,
+--     "name" VARCHAR(255),
+--     "comment" VARCHAR(255),
+--     "code" VARCHAR(255),
+--     "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+--     "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- );

@@ -1,0 +1,2 @@
+ALTER TABLE "user" DROP COLUMN IF EXISTS language_id;
+ALTER TABLE "user" DROP COLUMN IF EXISTS timezone_id;

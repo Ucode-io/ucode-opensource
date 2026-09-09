@@ -1,0 +1,36 @@
+schema: spec-driven
+
+context: |
+  ucode — open-core low-code platform. This monorepo is the OPEN SOURCE core.
+
+  Layout:
+    services/object-builder  Go, gRPC :7107. The data engine: dynamic table schemas,
+                             CRUD over user-defined tables, permissions at record/field/
+                             action/view level. Largest risk surface.
+    services/auth            Go, gRPC :9103 + HTTP. JWT, sessions, RBAC, OAuth2, API keys.
+    services/company         Go, gRPC :8092. Companies, projects, environments, resources.
+    services/gateway         Go, HTTP :8000. The only service clients talk to directly.
+    proto/                   gRPC contracts shared by the services.
+    apps/                    Admin frontend (TypeScript, TanStack Router/Query/Table, Vite).
+    cmd/ucode                The `ucode` CLI that runs the local stack via Docker.
+
+  Build: Go workspace (go.work), four separate modules. Root `go build ./...` does NOT
+  work — patterns must start inside a module. Use `make build` or list modules explicitly.
+
+  What is deliberately NOT here (closed source, do not re-add):
+    AI generation and prompts, billing and payments, all third-party integrations
+    (CRM, Meta/Facebook, Telegram, Google, GitHub/GitLab, Unsplash, n8n, Grafana),
+    serverless functions, microfrontends, SMS, chat, transcoder, document generation.
+
+  Hard constraints:
+    - No secrets, no customer names, no internal hostnames in code, tests, or fixtures.
+    - Tests must not require a hand-configured external database. Use testcontainers-go.
+    - A developer must be able to run the whole platform locally with one command.
+    - Multi-tenant model: each project gets its own Postgres database and role, created
+      on NODE_POSTGRES_HOST. Locally that is a single Postgres with CREATEDB+CREATEROLE.
+    - Connections are resolved per request via psqlpool.Get(projectId); a miss is a
+      hard failure, not a fallback.
+
+  Definition of done for any user-facing change: a developer runs the stack, logs in,
+  creates a table with fields, creates/reads/updates/deletes a record, and restricts
+  it with a role — with no console errors.

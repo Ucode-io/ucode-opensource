@@ -1,0 +1,8 @@
+
+ALTER TABLE IF EXISTS "commit"
+ ALTER COLUMN "commit_type" SET DEFAULT 'APP';
+
+ALTER TABLE IF EXISTS "commit"
+ DROP COLUMN IF EXISTS "commit_type";
+
+DROP TYPE IF EXISTS "commit_type";

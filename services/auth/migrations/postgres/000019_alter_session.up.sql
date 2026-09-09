@@ -1,0 +1,1 @@
+ALTER TABLE "session" DROP COLUMN IF EXISTS client_platform_id;

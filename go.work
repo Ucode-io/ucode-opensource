@@ -1,0 +1,8 @@
+go 1.23.2
+
+use (
+	./services/auth
+	./services/company
+	./services/gateway
+	./services/object-builder
+)

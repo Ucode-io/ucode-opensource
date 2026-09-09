@@ -1,0 +1,2 @@
+ALTER TABLE client_type DROP COLUMN IF EXISTS table_slugs;
+ALTER TABLE client_type ADD COLUMN IF NOT EXISTS tables JSONB;

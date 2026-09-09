@@ -1,0 +1,5 @@
+ALTER TABLE "user" DROP COLUMN IF EXISTS "name";
+ALTER TABLE "user" DROP COLUMN IF EXISTS "photo_url";
+-- ALTER TABLE "user" DROP COLUMN IF EXISTS "company_id";
+ALTER TABLE "user" DROP COLUMN IF EXISTS "language_id";
+ALTER TABLE "user" DROP COLUMN IF EXISTS "timezone_id";

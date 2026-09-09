@@ -1,0 +1,4 @@
+ALTER TABLE "company"
+ADD COLUMN "owner_id" uuid NOT NULL DEFAULT '12dd731c-5a49-4751-9d19-5386ae922cd4';
+
+ALTER TABLE "company" ALTER COLUMN "owner_id" DROP DEFAULT;

@@ -1,0 +1,1 @@
+ALTER TABLE "project" ADD COLUMN IF NOT EXISTS "company_id" UUID REFERENCES "company"("id") DEFAULT 'e04766bc-3228-4cd9-bd22-09e3fa27ab01' NOT NULL;

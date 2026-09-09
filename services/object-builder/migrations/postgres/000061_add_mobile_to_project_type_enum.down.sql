@@ -1,0 +1,2 @@
+-- PostgreSQL does not support removing values from an enum type directly.
+-- To roll back, the enum would need to be recreated without the 'mobile' value.

@@ -1,0 +1,1 @@
+ALTER TABLE mcp_project ADD COLUMN IF NOT EXISTS project_image TEXT NOT NULL DEFAULT '';

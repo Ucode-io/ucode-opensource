@@ -1,0 +1,1 @@
+DELETE FROM field WHERE id = 'dd1cce54-2333-4556-97ab-3663c577a28c';

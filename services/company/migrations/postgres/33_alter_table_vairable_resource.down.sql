@@ -1,0 +1,1 @@
+ALTER TABLE "variable_resource" DROP COLUMN IF EXISTS "project_resource_id";

@@ -1,0 +1,22 @@
+# build artifacts
+bin/
+vendor/
+node_modules/
+dist/
+.next/
+coverage/
+*.tsbuildinfo
+
+# local config / secrets
+.env
+.env.*
+!.env.example
+
+# os
+.DS_Store
+
+# graphify output
+graph.json
+graph.html
+GRAPH_REPORT.md
+.graphify/

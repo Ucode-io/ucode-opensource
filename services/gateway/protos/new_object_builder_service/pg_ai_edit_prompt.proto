@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package new_object_builder_service;
+option go_package = "genproto/new_object_builder_service";
+
+import "google/protobuf/empty.proto";
+
+// AiEditPromptService stores the two user-editable AI prompt overrides in the
+// generated child project's database selected by resource_env_id. The database
+// itself is the project boundary, so prompt rows deliberately have no
+// mcp_project_id or child-project identifier.
+//
+// Prompt content can contain project-specific or otherwise sensitive
+// instructions. Callers and service implementations must not log it.
+service AiEditPromptService {
+  rpc GetAiEditPrompt(GetAiEditPromptRequest) returns (AiEditPrompt) {}
+  rpc GetAiEditPrompts(GetAiEditPromptsRequest) returns (GetAiEditPromptsResponse) {}
+  rpc UpsertAiEditPrompt(UpsertAiEditPromptRequest) returns (AiEditPrompt) {}
+  rpc DeleteAiEditPrompt(DeleteAiEditPromptRequest) returns (google.protobuf.Empty) {}
+}
+
+message AiEditPrompt {
+  // Supported values: code_editor, visual_editor.
+  string prompt_kind = 1;
+  string content = 2;
+  int64 revision = 3;
+  string updated_by_user_id = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+message GetAiEditPromptRequest {
+  string resource_env_id = 1;
+  string prompt_kind = 2;
+}
+
+message GetAiEditPromptsRequest {
+  string resource_env_id = 1;
+}
+
+// Only persisted custom overrides are returned. A missing kind means the
+// caller must use its compiled default prompt.
+message GetAiEditPromptsResponse {
+  repeated AiEditPrompt prompts = 1;
+}
+
+message UpsertAiEditPromptRequest {
+  string resource_env_id = 1;
+  string prompt_kind = 2;
+  // Must contain non-whitespace text and must not exceed 128 KiB.
+  string content = 3;
+
+  // Zero creates the first override and conflicts if it already exists.
+  // A positive value updates only when it equals the stored revision.
+  int64 expected_revision = 4;
+  string updated_by_user_id = 5;
+}
+
+message DeleteAiEditPromptRequest {
+  string resource_env_id = 1;
+  string prompt_kind = 2;
+
+  // Zero succeeds only when no override exists. A positive value deletes only
+  // when it equals the stored revision. Existing rows never delete without an
+  // optimistic concurrency check.
+  int64 expected_revision = 3;
+}

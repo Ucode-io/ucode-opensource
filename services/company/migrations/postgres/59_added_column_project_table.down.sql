@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "project"
+DROP COLUMN IF EXISTS "is_ugen";

@@ -1,0 +1,1 @@
+ALTER TABLE IF EXISTS project_resource DROP COLUMN IF EXISTS settings;

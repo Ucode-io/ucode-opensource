@@ -1,0 +1,9 @@
+node_modules/
+vendor/
+genproto/
+bin/
+dist/
+.next/
+coverage/
+*.tsbuildinfo
+*.map

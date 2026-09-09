@@ -1,0 +1,3 @@
+ALTER TABLE IF EXISTS airbyte 
+ADD COLUMN IF NOT EXISTS superset_username VARCHAR(255),
+ADD COLUMN IF NOT EXISTS superset_password VARCHAR(255);

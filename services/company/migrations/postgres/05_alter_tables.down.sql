@@ -1,0 +1,5 @@
+ALTER TABLE "company" ALTER COLUMN "description" DROP DEFAULT;
+
+ALTER TABLE "project" ALTER COLUMN "updated_at" DROP DEFAULT;
+
+ALTER TABLE "resource" ALTER COLUMN "updated_at"DROP DEFAULT;

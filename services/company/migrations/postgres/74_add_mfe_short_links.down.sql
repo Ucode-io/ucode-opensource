@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS mfe_short_links;

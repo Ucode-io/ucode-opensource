@@ -1,0 +1,2 @@
+ALTER TABLE IF EXISTS "environment"
+ADD COLUMN IF NOT EXISTS "data" jsonB;

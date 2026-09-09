@@ -1,0 +1,4 @@
+CREATE TYPE "user_status" AS ENUM ('ACTIVE', 'INACTIVE', 'BLOCKED');
+
+ALTER TABLE IF EXISTS "user_project" 
+    ADD COLUMN IF NOT EXISTS "status" user_status NOT NULL DEFAULT 'ACTIVE'; 

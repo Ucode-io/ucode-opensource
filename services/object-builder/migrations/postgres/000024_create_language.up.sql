@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS "language" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "key" VARCHAR(255) NOT NULL,
+    "translations" JSONB NOT NULL,
+    "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

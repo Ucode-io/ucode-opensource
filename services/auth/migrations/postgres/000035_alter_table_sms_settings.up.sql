@@ -1,0 +1,1 @@
+ALTER TABLE "sms_otp_settings" ADD COLUMN IF NOT EXISTS "originator" VARCHAR NOT NULL DEFAULT '3700';

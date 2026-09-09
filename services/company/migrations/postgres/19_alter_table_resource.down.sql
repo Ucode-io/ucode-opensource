@@ -1,0 +1,4 @@
+ALTER TABLE resource DROP COLUMN IF EXISTS "host";
+ALTER TABLE resource DROP COLUMN IF EXISTS "port";
+ALTER TABLE resource DROP COLUMN IF EXISTS "username";
+ALTER TABLE resource DROP COLUMN IF EXISTS "database";

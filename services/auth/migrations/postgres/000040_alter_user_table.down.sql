@@ -1,0 +1,1 @@
+ALTER TABLE IF EXISTS "user" DROP COLUMN IF EXISTS "hash_type";

@@ -1,0 +1,1 @@
+ALTER TABLE "company" ADD COLUMN IF NOT EXISTS "owner_id" UUID REFERENCES "user"("id") DEFAULT 'f799f1c5-ce5f-4fdd-ac23-f542247dcc01' NOT NULL;

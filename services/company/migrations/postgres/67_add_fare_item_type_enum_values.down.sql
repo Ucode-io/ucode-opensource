@@ -1,0 +1,1 @@
+-- enum values cannot be dropped in PostgreSQL, no-op

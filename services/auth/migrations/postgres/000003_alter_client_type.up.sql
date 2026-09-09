@@ -1,0 +1,1 @@
+ALTER TABLE client_type ADD COLUMN IF NOT EXISTS table_slugs TEXT[];
