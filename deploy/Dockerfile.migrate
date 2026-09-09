@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+
+# Carries every service's schema so the stack can be started from anywhere,
+# including a machine that has never cloned the repository.
+#
+#   docker build -f deploy/Dockerfile.migrate -t ucode-migrate:test .
+
+FROM migrate/migrate:v4.17.1
+
+COPY services/auth/migrations/postgres           /m/auth
+COPY services/company/migrations/postgres        /m/company
+COPY services/object-builder/migrations/postgres /m/object-builder
+
+COPY deploy/migrate-entrypoint.sh /migrate-entrypoint.sh
+
+ENTRYPOINT ["/bin/sh", "/migrate-entrypoint.sh"]

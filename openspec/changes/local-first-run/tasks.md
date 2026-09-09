@@ -15,29 +15,49 @@
 
 ## 2. Compose
 
-- [ ] 2.1 `deploy/docker-compose.yml` with postgres, redis, minio and the four
+- [x] 2.1 `deploy/docker-compose.yml` with postgres, redis, minio and the four
       services plus the frontend, all bound to `127.0.0.1`
-- [ ] 2.2 Postgres superuser with `CREATEDB` and `CREATEROLE`; point
+- [x] 2.2 Postgres superuser with `CREATEDB` and `CREATEROLE`; point
       `NODE_POSTGRES_HOST` at it
-- [ ] 2.3 Init container running the three services' migrations with
+- [x] 2.3 Init container running the three services' migrations with
       `golang-migrate` (object-builder 73, auth 46, company 90)
-- [ ] 2.4 Dockerfile per service, multi-arch, with object-builder's WORKDIR
+- [x] 2.4 Dockerfile per service, multi-arch, with object-builder's WORKDIR
       containing `migrations/postgres`
-- [ ] 2.5 `deploy/.env.example` with working defaults and no secrets
-- [ ] 2.6 Frontend image serving a runtime config for the two backend URLs, so
+- [x] 2.5 `deploy/.env.example` with working defaults and no secrets
+- [x] 2.6 Frontend image serving a runtime config for the two backend URLs, so
       one image works for every installation
+- [x] 2.7 Stop auth panicking when the SMS service has no address — SMS is not
+      part of this build and gRPC rejects an empty target
+- [x] 2.9 Copy the frontend's file: dependencies before pnpm install — the build
+      failed on a missing vendor/react18 manifest
+- [x] 2.8 Neutralise the plan-limit checks left in auth; they called the billing
+      service that no longer exists and blocked the bootstrap
 
 ## 3. CLI
 
-- [ ] 3.1 `cmd/ucode` skeleton with cobra: `start`, `stop`, `status`, `logs`, `reset`
-- [ ] 3.2 Preflight: Docker present and running, required ports free
-- [ ] 3.3 Materialise `~/.ucode/` with the compose file and a generated `.env`,
+- [x] 3.1 `cmd/ucode` skeleton with cobra: `start`, `stop`, `status`, `logs`, `reset`
+- [x] 3.2 Preflight: Docker present and running, required ports free
+- [x] 3.3 Materialise `~/.ucode/` with the compose file and a generated `.env`,
       including a per-installation `SECRET_KEY`
-- [ ] 3.4 Wait for readiness: poll auth-service and the gateway until they answer
-- [ ] 3.5 First-run bootstrap: `POST /company` with the default admin, store a
+- [x] 3.4 Wait for readiness: poll auth-service and the gateway until they answer
+- [x] 3.5 First-run bootstrap: `POST /company` with the default admin, store a
       marker so it happens once
-- [ ] 3.6 Print credentials and open the browser
-- [ ] 3.7 `reset` removes volumes and the marker
+- [ ] 3.8 Make the bootstrap survive a partial failure. Verified by hand: the
+      company row is written before the admin user, so any later failure leaves
+      it behind and every retry then fails with "only one company allowed".
+      Either wrap Register in a transaction or have the CLI detect and clear the
+      half-created state
+- [x] 3.9 Preflight must check ports. Port 5432 was already taken on the test
+      machine and compose failed with a raw Docker error
+- [x] 3.6 Print credentials and open the browser
+- [x] 3.7 `reset` removes volumes and the marker
+- [x] 3.10 Ship the migrations as their own image. The compose file mounted them
+      from the repository by relative path, so the stack only worked from a
+      checkout — `ucode start` from ~/.ucode failed on the very first run
+- [x] 3.11 Retry the bootstrap instead of polling for readiness. Docker binds a
+      published port the moment a container starts, so a successful TCP connect
+      says nothing about the process inside; the first attempt raced auth's own
+      gRPC listener
 
 ## 4. Demo project
 
@@ -55,8 +75,14 @@
 - [ ] 5.4 Measure time from command to browser; the target is five minutes
       including image pulls
 
-## 6. Release
+## 6. Remaining billing residue in auth
 
-- [ ] 6.1 goreleaser config for darwin and linux, amd64 and arm64
-- [ ] 6.2 Publish service images to ghcr.io from CI
-- [ ] 6.3 Quickstart in the README that matches what the CLI actually does
+- [ ] 6.0 auth still carries `user_seat_billing.go`, `BillingServiceClient` in
+      its gRPC client interface and a `billing_service.proto` copy in its own
+      `protos/`. The phase-3 cut reached company and gateway but not auth
+
+## 7. Release
+
+- [ ] 7.1 goreleaser config for darwin and linux, amd64 and arm64
+- [ ] 7.2 Publish service images to ghcr.io from CI
+- [ ] 7.3 Quickstart in the README that matches what the CLI actually does

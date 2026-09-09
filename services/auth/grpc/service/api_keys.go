@@ -48,7 +48,9 @@ func (s *apiKeysService) Create(ctx context.Context, req *pb.CreateReq) (*pb.Cre
 
 	s.log.Info("---CreateApiKey--->", logger.Any("req", req))
 
-	project, err := s.services.ProjectServiceClient().GetById(
+	// Kept as an existence check for the project; the fare it used to carry
+	// is gone with billing.
+	_, err := s.services.ProjectServiceClient().GetById(
 		ctx, &pbc.GetProjectByIdRequest{
 			ProjectId: req.GetProjectId(),
 		},
@@ -56,28 +58,6 @@ func (s *apiKeysService) Create(ctx context.Context, req *pb.CreateReq) (*pb.Cre
 	if err != nil {
 		s.log.Error("!!!Create--->GetProjectById", logger.Error(err))
 		return nil, status.Error(codes.Internal, "error getting project info")
-	}
-
-	if len(project.GetFareId()) != 0 {
-		count, err := s.strg.ApiKeys().GetProjectApiKeysCount(ctx, req.GetProjectId())
-		if err != nil {
-			s.log.Error("!!!Create--->GetProjectApiKeysCount", logger.Error(err))
-			return nil, status.Error(codes.Internal, "error getting api keys count")
-		}
-
-		limitResp, err := s.services.BillingServiceClient().CompareFunction(ctx, &pbc.CompareFunctionRequest{
-			Type:   config.FARE_API_KEYS,
-			FareId: project.GetFareId(),
-			Count:  count + 1,
-		})
-		if err != nil {
-			s.log.Error("!!!Create--->CompareFunction", logger.Error(err))
-			return nil, status.Error(codes.Internal, "error checking api key limit")
-		}
-
-		if !limitResp.HasAccess {
-			return nil, status.Error(codes.ResourceExhausted, "you have reached the limit of API keys on your current plan. Please upgrade to create more.")
-		}
 	}
 
 	id, err := uuid.NewUUID()

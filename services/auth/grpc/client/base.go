@@ -6,6 +6,7 @@ import (
 	"github.com/Ucode-io/ucode-opensource/services/auth/genproto/auth_service"
 	company_service "github.com/Ucode-io/ucode-opensource/services/auth/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/auth/genproto/sms_service"
+	"strings"
 
 	otgrpc "github.com/opentracing-contrib/go-grpc"
 	"github.com/opentracing/opentracing-go"
@@ -97,8 +98,18 @@ func NewGrpcClients(ctx context.Context, cfg config.BaseConfig) (ServiceManagerI
 		return nil, err
 	}
 
+	// The SMS service is optional: it is not part of the open-source build, and
+	// a laptop install has nowhere to point it. gRPC rejects an empty target
+	// outright, which used to panic the whole process at startup, so fall back
+	// to a name that resolves to nothing. Dialling stays lazy, so SMS-backed
+	// OTP fails per call instead of stopping the service from booting.
+	smsTarget := cfg.SmsServiceHost + cfg.SmsGRPCPort
+	if strings.TrimSpace(cfg.SmsServiceHost) == "" {
+		smsTarget = "sms-service-not-configured:0"
+	}
+
 	connSmsService, err := grpc.Dial(
-		cfg.SmsServiceHost+cfg.SmsGRPCPort,
+		smsTarget,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

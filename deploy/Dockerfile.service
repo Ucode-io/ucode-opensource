@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+
+# One Dockerfile builds every Go service; pass SERVICE to pick which.
+#
+# Built from the repository root so the module path resolves, but with
+# GOWORK=off: each service is a self-contained module and does not need the
+# workspace, which keeps the build context and layer cache small.
+#
+#   docker build -f deploy/Dockerfile.service --build-arg SERVICE=auth .
+#
+# Go 1.25 is the floor: three modules were raised to it by testcontainers-go,
+# which is a test-only dependency but sets the module language version.
+
+ARG GO_VERSION=1.25
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
+
+ARG SERVICE
+ARG TARGETOS
+ARG TARGETARCH
+
+WORKDIR /src
+
+# Dependencies first so a code change does not invalidate the download layer.
+COPY services/${SERVICE}/go.mod services/${SERVICE}/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod GOWORK=off go mod download
+
+COPY services/${SERVICE}/ ./
+
+# Present for every service so the runtime COPY below always has a source,
+# even for services that own no schema (the gateway).
+RUN mkdir -p /src/migrations/postgres
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GOWORK=off \
+    go build -trimpath -ldflags="-s -w" -o /out/service ./cmd
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata \
+    && adduser -D -u 10001 ucode
+
+WORKDIR /app
+
+COPY --from=builder /out/service /app/service
+
+# object-builder loads per-project migrations through a path relative to its
+# working directory, so they have to sit next to the binary.
+COPY --from=builder /src/migrations/postgres /app/migrations/postgres
+
+USER ucode
+
+ENTRYPOINT ["/app/service"]

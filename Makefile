@@ -1,6 +1,6 @@
-MODULES := ./services/auth/... ./services/company/... ./services/gateway/... ./services/object-builder/...
+MODULES := ./services/auth/... ./services/company/... ./services/gateway/... ./services/object-builder/... ./cmd/ucode/...
 
-.PHONY: build vet test test-integration fmt tidy
+.PHONY: build vet test test-integration fmt tidy cli cli-assets
 
 build:
 	go build $(MODULES)
@@ -20,3 +20,12 @@ fmt:
 
 tidy:
 	@for m in services/*/; do (cd "$$m" && go mod tidy); done
+
+# The CLI embeds the stack definition so `ucode start` needs no checkout.
+# deploy/ stays canonical; this copies it in before building.
+cli-assets:
+	cp deploy/docker-compose.yml deploy/postgres-init.sql cmd/ucode/assets/
+
+cli: cli-assets
+	cd cmd/ucode && go build -o ../../bin/ucode .
+	@echo "built bin/ucode"

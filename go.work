@@ -1,6 +1,7 @@
-go 1.25.0
+go 1.25.11
 
 use (
+	./cmd/ucode
 	./services/auth
 	./services/company
 	./services/gateway

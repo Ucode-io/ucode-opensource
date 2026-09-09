@@ -1,0 +1,201 @@
+# The whole ucode core on one machine.
+#
+#   docker compose --env-file .env up
+#
+# Every published port is bound to 127.0.0.1: the stack ships with a default
+# admin password and must not be reachable from the network.
+
+name: ucode
+
+x-postgres: &postgres-env
+  POSTGRES_HOST: ${POSTGRES_HOST}
+  POSTGRES_PORT: ${POSTGRES_PORT}
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS}
+
+x-redis: &redis-env
+  GET_REQUEST_REDIS_HOST: ${GET_REQUEST_REDIS_HOST}
+  GET_REQUEST_REDIS_PORT: ${GET_REQUEST_REDIS_PORT}
+  GET_REQUEST_REDIS_PASSWORD: ${GET_REQUEST_REDIS_PASSWORD}
+  GET_REQUEST_REDIS_DATABASE: ${GET_REQUEST_REDIS_DATABASE}
+
+x-peers: &peer-env
+  AUTH_SERVICE_HOST: auth
+  AUTH_GRPC_PORT: ":9103"
+  COMPANY_SERVICE_HOST: company
+  COMPANY_GRPC_PORT: ":8092"
+  GO_OBJECT_BUILDER_SERVICE_GRPC_HOST: object-builder
+  GO_OBJECT_BUILDER_SERVICE_GRPC_PORT: ":7107"
+  OBJECT_BUILDER_SERVICE_LOW_HOST: object-builder
+  OBJECT_BUILDER_LOW_GRPC_PORT: ":7107"
+  OBJECT_BUILDER_SERVICE_HIGHT_HOST: object-builder
+  OBJECT_BUILDER_HIGH_GRPC_PORT: ":7107"
+
+x-service: &service-defaults
+  restart: unless-stopped
+  networks: [ucode]
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [ucode]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    ports: ["127.0.0.1:${UCODE_POSTGRES_PORT:-5433}:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [ucode]
+    ports: ["127.0.0.1:${UCODE_REDIS_PORT:-6380}:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    networks: [ucode]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports:
+      - "127.0.0.1:${UCODE_MINIO_PORT:-9010}:9000"
+      - "127.0.0.1:${UCODE_MINIO_CONSOLE_PORT:-9011}:9001"
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Applies each service's own schema once, then exits. The per-project
+  # databases are migrated later, at runtime, by object-builder.
+  # Applies each service's own schema once, then exits. The per-project
+  # databases are migrated later, at runtime, by object-builder.
+  migrate:
+    image: ${UCODE_IMAGE_PREFIX:-ucode}-migrate:${UCODE_VERSION:-test}
+    networks: [ucode]
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  auth:
+    <<: *service-defaults
+    image: ${UCODE_IMAGE_PREFIX:-ucode}-auth:${UCODE_VERSION:-test}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    environment:
+      <<: [*postgres-env, *redis-env, *peer-env]
+      SERVICE_NAME: auth_service
+      ENVIRONMENT: ${ENVIRONMENT}
+      POSTGRES_DATABASE: auth_service
+      HTTP_PORT: ":9104"
+      SECRET_KEY: ${SECRET_KEY}
+    ports:
+      - "127.0.0.1:9103:9103"
+      - "127.0.0.1:9104:9104"
+
+  company:
+    <<: *service-defaults
+    image: ${UCODE_IMAGE_PREFIX:-ucode}-company:${UCODE_VERSION:-test}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    environment:
+      <<: [*postgres-env, *redis-env, *peer-env]
+      SERVICE_NAME: company_service
+      ENVIRONMENT: ${ENVIRONMENT}
+      POSTGRES_DATABASE: company_service
+      RPC_PORT: ":8092"
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER}
+      VAULT_MOUNT_PATH: ${VAULT_MOUNT_PATH}
+      VAULT_SECRET_PATH: ${VAULT_SECRET_PATH}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+    ports: ["127.0.0.1:8092:8092"]
+
+  object-builder:
+    <<: *service-defaults
+    image: ${UCODE_IMAGE_PREFIX:-ucode}-object-builder:${UCODE_VERSION:-test}
+    depends_on:
+      postgres: {condition: service_healthy}
+      minio: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    environment:
+      <<: [*postgres-env, *peer-env]
+      SERVICE_NAME: object_builder
+      ENVIRONMENT: ${ENVIRONMENT}
+      POSTGRES_DATABASE: object_builder
+      OBJECT_BUILDER_SERVICE_PORT: ":7107"
+      K8S_NAMESPACE: ${K8S_NAMESPACE}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SSL: ${MINIO_SSL}
+      MINIO_FOLDER: ${MINIO_FOLDER}
+    ports: ["127.0.0.1:7107:7107"]
+
+  gateway:
+    <<: *service-defaults
+    image: ${UCODE_IMAGE_PREFIX:-ucode}-gateway:${UCODE_VERSION:-test}
+    depends_on: [auth, company, object-builder]
+    environment:
+      <<: [*redis-env, *peer-env]
+      SERVICE_NAME: gateway
+      ENVIRONMENT: ${ENVIRONMENT}
+      HTTP_PORT: ":8000"
+      SECRET_KEY: ${SECRET_KEY}
+      UCODE_NAMESPACE: ${K8S_NAMESPACE}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_PROTOCOL: ${MINIO_PROTOCOL}
+    ports: ["127.0.0.1:8000:8000"]
+
+  # Built once with sentinel URLs; the entrypoint rewrites them at start, so the
+  # published image works for any installation.
+  admin:
+    <<: *service-defaults
+    image: ${UCODE_IMAGE_PREFIX:-ucode}-admin:${UCODE_VERSION:-test}
+    depends_on: [gateway, auth]
+    environment:
+      UCODE_API_URL: ${UCODE_API_URL:-http://127.0.0.1:8000}
+      UCODE_AUTH_URL: ${UCODE_AUTH_URL:-http://127.0.0.1:9104}
+    ports: ["127.0.0.1:${UCODE_ADMIN_PORT:-3000}:80"]
+
+
+networks:
+  ucode:
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
