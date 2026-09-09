@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/cast"
@@ -118,7 +120,7 @@ func BaseLoad() BaseConfig {
 	config.Environment = cast.ToString(getOrReturnDefaultValue("ENVIRONMENT", DebugMode))
 	config.Version = cast.ToString(getOrReturnDefaultValue("VERSION", "1.0"))
 
-	config.HTTPPort = cast.ToString(getOrReturnDefaultValue("HTTP_PORT", ""))
+	config.HTTPPort = cast.ToString(getOrReturnDefaultValue("HTTP_PORT", ":9104"))
 	config.HTTPScheme = cast.ToString(getOrReturnDefaultValue("HTTP_SCHEME", ""))
 	config.Email = cast.ToString(getOrReturnDefaultValue("EMAIL", ""))
 	config.EmailPassword = cast.ToString(getOrReturnDefaultValue("EMAIL_PASSWORD", ""))
@@ -131,7 +133,7 @@ func BaseLoad() BaseConfig {
 	config.PostgresMaxConnections = cast.ToInt32(getOrReturnDefaultValue("POSTGRES_MAX_CONNECTIONS", 200))
 
 	config.AuthServiceHost = cast.ToString(getOrReturnDefaultValue("AUTH_SERVICE_HOST", ""))
-	config.AuthGRPCPort = cast.ToString(getOrReturnDefaultValue("AUTH_GRPC_PORT", ""))
+	config.AuthGRPCPort = cast.ToString(getOrReturnDefaultValue("AUTH_GRPC_PORT", ":9103"))
 
 	config.UcodeNamespace = "u-code"
 
@@ -141,7 +143,7 @@ func BaseLoad() BaseConfig {
 	config.SmsServiceHost = cast.ToString(getOrReturnDefaultValue("SMS_SERVICE_HOST", ""))
 	config.SmsGRPCPort = cast.ToString(getOrReturnDefaultValue("SMS_GRPC_PORT", ""))
 
-	config.SecretKey = cast.ToString(getOrReturnDefaultValue("SECRET_KEY", "snZV9XNmvf"))
+	config.SecretKey = cast.ToString(getOrReturnDefaultValue("SECRET_KEY", ""))
 
 	config.JaegerHostPort = cast.ToString(getOrReturnDefaultValue("JAEGER_URL", ""))
 
@@ -214,4 +216,31 @@ func getOrReturnDefaultValue(key string, defaultValue any) any {
 	}
 
 	return defaultValue
+}
+
+// Validate reports configuration that the service cannot run without.
+//
+// These used to be silent: an empty SECRET_KEY fell back to a value compiled
+// into the binary, which meant every installation signed its tokens with the
+// same key.
+func (c BaseConfig) Validate() error {
+	var missing []string
+
+	if strings.TrimSpace(c.SecretKey) == "" {
+		missing = append(missing, "SECRET_KEY (used to sign JWTs; generate a random value per installation)")
+	}
+	if strings.TrimSpace(c.PostgresHost) == "" {
+		missing = append(missing, "POSTGRES_HOST")
+	}
+	if strings.TrimSpace(c.PostgresDatabase) == "" {
+		missing = append(missing, "POSTGRES_DATABASE")
+	}
+	if strings.TrimSpace(c.PostgresUser) == "" {
+		missing = append(missing, "POSTGRES_USER")
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required configuration:\n  - %s", strings.Join(missing, "\n  - "))
+	}
+	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/cast"
@@ -163,7 +164,7 @@ func BaseLoad() BaseConfig {
 	c.RPCPort = cast.ToString(getOrReturnDefault("RPC_PORT", "8092"))
 
 	c.PostgresHost = cast.ToString(getOrReturnDefault("POSTGRES_HOST", ""))
-	c.PostgresPort = cast.ToInt(getOrReturnDefault("POSTGRES_PORT", ""))
+	c.PostgresPort = cast.ToInt(getOrReturnDefault("POSTGRES_PORT", 5432))
 	c.PostgresDatabase = cast.ToString(getOrReturnDefault("POSTGRES_DATABASE", "company_service"))
 	c.PostgresUser = cast.ToString(getOrReturnDefault("POSTGRES_USER", "company_service"))
 	c.PostgresPassword = cast.ToString(getOrReturnDefault("POSTGRES_PASSWORD", ""))
@@ -171,7 +172,7 @@ func BaseLoad() BaseConfig {
 
 	c.JaegerHostPort = cast.ToString(getOrReturnDefault("JAEGER_URL", "localhost:6831"))
 
-	c.SecretsProvider = cast.ToString(getOrReturnDefault("SECRETS_PROVIDER", "vault"))
+	c.SecretsProvider = cast.ToString(getOrReturnDefault("SECRETS_PROVIDER", "redis"))
 
 	c.Vault.Address = cast.ToString(getOrReturnDefault("VAULT_ADDRESS", ""))
 	c.Vault.RoleID = cast.ToString(getOrReturnDefault("VAULT_ROLE_ID", ""))
@@ -179,8 +180,8 @@ func BaseLoad() BaseConfig {
 	c.Vault.MountPath = cast.ToString(getOrReturnDefault("VAULT_MOUNT_PATH", "ucode"))
 	c.Vault.SecretPath = cast.ToString(getOrReturnDefault("VAULT_SECRET_PATH", "k8s/ucode-test"))
 
-	c.Redis.Host = cast.ToString(getOrReturnDefault("GET_REQUEST_REDIS_HOST", ""))
-	c.Redis.Port = cast.ToString(getOrReturnDefault("GET_REQUEST_REDIS_PORT", ""))
+	c.Redis.Host = cast.ToString(getOrReturnDefault("GET_REQUEST_REDIS_HOST", "localhost"))
+	c.Redis.Port = cast.ToString(getOrReturnDefault("GET_REQUEST_REDIS_PORT", "6379"))
 	c.Redis.Password = cast.ToString(getOrReturnDefault("GET_REQUEST_REDIS_PASSWORD", ""))
 	c.Redis.DB = cast.ToInt(getOrReturnDefault("GET_REQUEST_REDIS_DATABASE", 0))
 
@@ -300,4 +301,26 @@ func getOrReturnDefault(key string, defaultValue any) any {
 	}
 
 	return defaultValue
+}
+
+// Validate reports configuration that the service cannot run without, so a
+// missing value surfaces as a named variable instead of a driver-level parse
+// error further down.
+func (c BaseConfig) Validate() error {
+	var missing []string
+
+	if strings.TrimSpace(c.PostgresHost) == "" {
+		missing = append(missing, "POSTGRES_HOST")
+	}
+	if c.PostgresPort == 0 {
+		missing = append(missing, "POSTGRES_PORT")
+	}
+	if strings.TrimSpace(c.PostgresPassword) == "" {
+		missing = append(missing, "POSTGRES_PASSWORD")
+	}
+
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required configuration:\n  - %s", strings.Join(missing, "\n  - "))
+	}
+	return nil
 }

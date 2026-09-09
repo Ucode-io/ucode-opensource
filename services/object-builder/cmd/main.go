@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"net"
 	"github.com/Ucode-io/ucode-opensource/services/object-builder/config"
 	"github.com/Ucode-io/ucode-opensource/services/object-builder/grpc"
 	"github.com/Ucode-io/ucode-opensource/services/object-builder/grpc/client"
 	"github.com/Ucode-io/ucode-opensource/services/object-builder/pkg/logger"
 	"github.com/Ucode-io/ucode-opensource/services/object-builder/storage/postgres"
+	"net"
 
 	"github.com/Ucode-io/ucode-opensource/services/object-builder/pkg/cron"
 
@@ -59,8 +59,14 @@ func main() {
 	if err != nil {
 		log.Error("ERROR: cannot init Jaeger", logger.Error(err))
 	}
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
+	// closer is nil when the tracer failed to initialise; tracing is optional,
+	// so carry on without it rather than panicking on the deferred Close.
+	if closer != nil {
+		defer closer.Close()
+	}
+	if tracer != nil {
+		opentracing.SetGlobalTracer(tracer)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

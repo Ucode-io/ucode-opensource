@@ -2,14 +2,16 @@
 
 ## 1. Unblock the boot path
 
-- [ ] 1.1 Give `HTTP_PORT` a default in auth-service and stop discarding the
+- [x] 1.1 Give `HTTP_PORT` a default in auth-service and stop discarding the
       error from `r.Run(...)` in `services/auth/cmd/main.go`
-- [ ] 1.2 Default `AUTH_GRPC_PORT` to `:9103`
-- [ ] 1.3 Make company-service usable without Vault: verify the Redis secret
+- [x] 1.2 Default `AUTH_GRPC_PORT` to `:9103`
+- [x] 1.3 Make company-service usable without Vault: verify the Redis secret
       provider path end to end, and fail with a clear message instead of a bare
       `return` from `main()`
-- [ ] 1.4 Remove the hardcoded `SECRET_KEY` default in auth-service; require it
+- [x] 1.4 Remove the hardcoded `SECRET_KEY` default in auth-service; require it
       to be set
+- [x] 1.5 Fix the nil tracer closer that panics every service at startup when
+      Jaeger is unreachable — found while testing 1.3
 
 ## 2. Compose
 

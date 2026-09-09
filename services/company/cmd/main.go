@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/Ucode-io/ucode-opensource/services/company/config"
@@ -56,8 +57,19 @@ func main() {
 	if err != nil {
 		log.Error("ERROR: cannot init Jaeger", logger.Error(err))
 	}
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
+	// closer is nil when the tracer failed to initialise; tracing is optional,
+	// so carry on without it rather than panicking on the deferred Close.
+	if closer != nil {
+		defer closer.Close()
+	}
+	if tracer != nil {
+		opentracing.SetGlobalTracer(tracer)
+	}
+
+	if err := baseLoad.Validate(); err != nil {
+		log.Error("invalid configuration", logger.Error(err))
+		os.Exit(1)
+	}
 
 	pgStore, err := postgres.NewPostgres(context.Background(), baseLoad, log)
 	if err != nil {
@@ -79,8 +91,13 @@ func main() {
 		RedisDB:       baseLoad.Redis.DB,
 	})
 	if err != nil {
-		log.Error("Error while connecting to secrets", logger.Error(err))
-		return
+		// Used to be a bare return: the process exited with one log line and no
+		// exit code, which looked like a clean shutdown.
+		log.Error("cannot reach the secrets backend",
+			logger.String("provider", requestedProvider),
+			logger.String("hint", "set SECRETS_PROVIDER=redis with GET_REQUEST_REDIS_HOST/PORT, or SECRETS_PROVIDER=vault with VAULT_ADDRESS"),
+			logger.Error(err))
+		os.Exit(1)
 	}
 
 	if vaultClient.Provider() == vaultclient.ProviderVault {

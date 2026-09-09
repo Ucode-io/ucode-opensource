@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/Ucode-io/ucode-opensource/services/auth/api"
 	"github.com/Ucode-io/ucode-opensource/services/auth/api/handlers"
@@ -58,12 +59,23 @@ func main() {
 		_ = logger.Cleanup(log)
 	}()
 
+	if err := baseCfg.Validate(); err != nil {
+		log.Error("invalid configuration", logger.Error(err))
+		os.Exit(1)
+	}
+
 	tracer, closer, err := jaegerCfg.NewTracer(jaeger_config.Logger(jaeger.StdLogger))
 	if err != nil {
 		log.Error("ERROR: cannot init Jaeger", logger.Error(err))
 	}
-	defer closer.Close()
-	opentracing.SetGlobalTracer(tracer)
+	// closer is nil when the tracer failed to initialise; tracing is optional,
+	// so carry on without it rather than panicking on the deferred Close.
+	if closer != nil {
+		defer closer.Close()
+	}
+	if tracer != nil {
+		opentracing.SetGlobalTracer(tracer)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -153,5 +165,9 @@ func main() {
 
 	r := api.SetUpRouter(h, baseCfg, tracer, limiter)
 
-	_ = r.Run(baseCfg.HTTPPort)
+	log.Info("HTTP: server starting", logger.String("port", baseCfg.HTTPPort))
+	if err := r.Run(baseCfg.HTTPPort); err != nil {
+		log.Error("http server stopped", logger.String("port", baseCfg.HTTPPort), logger.Error(err))
+		os.Exit(1)
+	}
 }
