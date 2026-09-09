@@ -11,6 +11,7 @@ import (
 )
 
 func TestAuthItemsFlow(t *testing.T) {
+	requireStack(t)
 
 	var (
 		newPassword  = fakeData.UserName() + "!1"

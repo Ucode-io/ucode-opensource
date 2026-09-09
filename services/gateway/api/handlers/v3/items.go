@@ -6,10 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/googlecalendar"
 	hHelper "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/helper"
+	"time"
 
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
@@ -229,19 +228,6 @@ func (h *HandlerV3) CreateItem(c *gin.Context) {
 			h.HandleResponse(c, status_http.InvalidArgument, err.Error()+" in "+functionName)
 			return
 		}
-	}
-
-	if err := googlecalendar.SyncCreate(c.Request.Context(), googlecalendar.SyncRequest{
-		CompanyServices: h.companyServices,
-		Services:        services,
-		Resource:        resource,
-		ProjectID:       projectId.(string),
-		EnvironmentID:   environmentId.(string),
-		TableSlug:       collection,
-		Data:            objectRequest.Data,
-		Config:          h.googleCalendarConfig(),
-	}); err != nil {
-		h.log.Error("google calendar create sync failed", logger.Error(err))
 	}
 
 	statusHttp.CustomMessage = resp.GetCustomMessage()
@@ -994,18 +980,6 @@ func (h *HandlerV3) UpdateItem(c *gin.Context) {
 	if _, ok := syncData["guid"]; !ok {
 		syncData["guid"] = id
 	}
-	if err := googlecalendar.SyncUpdate(c.Request.Context(), googlecalendar.SyncRequest{
-		CompanyServices: h.companyServices,
-		Services:        services,
-		Resource:        resource,
-		ProjectID:       projectId.(string),
-		EnvironmentID:   environmentId.(string),
-		TableSlug:       collection,
-		Data:            syncData,
-		Config:          h.googleCalendarConfig(),
-	}); err != nil {
-		h.log.Error("google calendar update sync failed", logger.Error(err))
-	}
 	statusHttp.CustomMessage = resp.GetCustomMessage()
 }
 
@@ -1383,29 +1357,9 @@ func (h *HandlerV3) DeleteItem(c *gin.Context) {
 	if _, ok := syncData["guid"]; !ok {
 		syncData["guid"] = objectID
 	}
-	if err := googlecalendar.SyncDelete(c.Request.Context(), googlecalendar.SyncRequest{
-		CompanyServices: h.companyServices,
-		Services:        services,
-		Resource:        resource,
-		ProjectID:       projectId.(string),
-		EnvironmentID:   environmentId.(string),
-		TableSlug:       collection,
-		Data:            syncData,
-		Config:          h.googleCalendarConfig(),
-	}); err != nil {
-		h.log.Error("google calendar delete sync failed", logger.Error(err))
-	}
 
 	statusHttp.CustomMessage = resp.GetCustomMessage()
 	h.HandleResponse(c, statusHttp, resp)
-}
-
-func (h *HandlerV3) googleCalendarConfig() googlecalendar.Config {
-	return googlecalendar.Config{
-		ClientID:     h.baseConf.GoogleCalendarClientID,
-		ClientSecret: h.baseConf.GoogleCalendarClientSecret,
-		RedirectURI:  h.baseConf.GoogleCalendarRedirectURI,
-	}
 }
 
 func (h *HandlerV3) DeleteItems(c *gin.Context) {

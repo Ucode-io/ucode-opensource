@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,7 +11,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/ai/gemini"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/config"
@@ -34,44 +32,32 @@ import (
 )
 
 type HandlerV1 struct {
-	baseConf          config.BaseConfig
-	projectConfs      map[string]config.Config
-	log               logger.LoggerI
-	services          services.ServiceNodesI
-	companyServices   services.CompanyServiceI
-	authService       services.AuthServiceManagerI
-	redis             storage.RedisStorageI
-	centralRedis      *go_redis.Client
-	cache             *caching.ExpiringLRUCache
-	rateLimiter       *util.ApiKeyRateLimiter
-	vault             vault.VaultClient
-	geminiKeyPool     *gemini.KeyPool
-	aiEditPromptStore aiEditPromptStore
+	baseConf        config.BaseConfig
+	projectConfs    map[string]config.Config
+	log             logger.LoggerI
+	services        services.ServiceNodesI
+	companyServices services.CompanyServiceI
+	authService     services.AuthServiceManagerI
+	redis           storage.RedisStorageI
+	centralRedis    *go_redis.Client
+	cache           *caching.ExpiringLRUCache
+	rateLimiter     *util.ApiKeyRateLimiter
+	vault           vault.VaultClient
 }
 
 func NewHandlerV1(baseConf config.BaseConfig, projectConfs map[string]config.Config, log logger.LoggerI, svcs services.ServiceNodesI, cmpServ services.CompanyServiceI, authService services.AuthServiceManagerI, redis storage.RedisStorageI, centralRedis *go_redis.Client, cache *caching.ExpiringLRUCache, limiter *util.ApiKeyRateLimiter, vaultClient vault.VaultClient) HandlerV1 {
 	h := HandlerV1{
-		baseConf:          baseConf,
-		projectConfs:      projectConfs,
-		log:               log,
-		services:          svcs,
-		companyServices:   cmpServ,
-		authService:       authService,
-		redis:             redis,
-		centralRedis:      centralRedis,
-		cache:             cache,
-		rateLimiter:       limiter,
-		vault:             vaultClient,
-		aiEditPromptStore: grpcAIEditPromptStore{},
-	}
-	if len(baseConf.GeminiAPIKeys) > 0 {
-		pool, err := gemini.NewKeyPool(baseConf.GeminiAPIKeys)
-		if err != nil {
-			log.Error(fmt.Sprintf("[gemini] key pool error: %v", err))
-		} else {
-			h.geminiKeyPool = pool
-			log.Info(fmt.Sprintf("[gemini] key pool ready: %d keys", len(baseConf.GeminiAPIKeys)))
-		}
+		baseConf:        baseConf,
+		projectConfs:    projectConfs,
+		log:             log,
+		services:        svcs,
+		companyServices: cmpServ,
+		authService:     authService,
+		redis:           redis,
+		centralRedis:    centralRedis,
+		cache:           cache,
+		rateLimiter:     limiter,
+		vault:           vaultClient,
 	}
 	return h
 }

@@ -3,7 +3,6 @@ package v1
 import (
 	"strings"
 
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/googlecalendar"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
 	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
@@ -11,6 +10,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
+)
+
+// Defaults previously provided by the Google Calendar integration package.
+// The integration itself is not part of the open-source build; these remain so
+// stored resource settings keep the same shape.
+const (
+	defaultGoogleCalendarID            = "primary"
+	defaultGoogleCalendarSyncDirection = "ucode_to_google"
 )
 
 // AddResourceToProject godoc
@@ -409,11 +416,11 @@ func sanitizeGoogleCalendarSettingsForStorage(settings *pb.Settings) *pb.Setting
 	}
 	calendarID := strings.TrimSpace(calendarSettings.GetCalendarId())
 	if calendarID == "" {
-		calendarID = googlecalendar.DefaultCalendarID
+		calendarID = defaultGoogleCalendarID
 	}
 	syncDirection := strings.TrimSpace(calendarSettings.GetSyncDirection())
 	if syncDirection == "" {
-		syncDirection = googlecalendar.SyncDirection
+		syncDirection = defaultGoogleCalendarSyncDirection
 	}
 	return &pb.Settings{
 		GoogleCalendar: &pb.GoogleCalendarCredentials{

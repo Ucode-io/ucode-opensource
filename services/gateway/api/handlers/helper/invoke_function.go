@@ -2,8 +2,6 @@ package helper
 
 import (
 	"context"
-	"log"
-	"time"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/config"
@@ -15,6 +13,8 @@ import (
 	nb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/new_object_builder_service"
 	obs "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/object_builder_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/helper"
+	"log"
+	"time"
 
 	"github.com/Ucode-io/ucode-opensource/services/gateway/services"
 
@@ -87,10 +87,6 @@ func DoInvokeFunction(request models.DoInvokeFunctionStruct, c *gin.Context, h H
 		invokeFunction.Data = data
 		invokeFunction.OpenFaaSURL = h.BaseConf().OpenFaaSBaseUrl
 		invokeFunction.KnativeURL = h.BaseConf().KnativeBaseUrl
-		//HISOBIM project -> UZ knative cluster
-		if request.Resource.ProjectId == "b744d518-5f66-4818-bfd7-9f3f44ce3379" && h.BaseConf().KnativeBaseUrlUz != "" {
-			invokeFunction.KnativeURL = h.BaseConf().KnativeBaseUrlUz
-		}
 		invokeFunction.AutomationURL = h.BaseConf().AutomationURL
 
 		switch requestType {

@@ -19,7 +19,7 @@ func (h *HandlerV1) ExecQuery(c *gin.Context) {
 		return
 	}
 
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}
@@ -51,7 +51,7 @@ func (h *HandlerV1) CreateCustomEndpoint(c *gin.Context) {
 		return
 	}
 
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (h *HandlerV1) UpdateCustomEndpoint(c *gin.Context) {
 		return
 	}
 
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}
@@ -101,7 +101,7 @@ func (h *HandlerV1) UpdateCustomEndpoint(c *gin.Context) {
 // ─── GetAllCustomEndpoints ────────────────────────────────────────────────────
 
 func (h *HandlerV1) GetAllCustomEndpoints(c *gin.Context) {
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}
@@ -130,7 +130,7 @@ func (h *HandlerV1) GetAllCustomEndpoints(c *gin.Context) {
 func (h *HandlerV1) GetCustomEndpointById(c *gin.Context) {
 	id := c.Param("id")
 
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}
@@ -155,7 +155,7 @@ func (h *HandlerV1) GetCustomEndpointById(c *gin.Context) {
 func (h *HandlerV1) DeleteCustomEndpoint(c *gin.Context) {
 	id := c.Param("id")
 
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}
@@ -190,7 +190,7 @@ func (h *HandlerV1) RunCustomEndpoint(c *gin.Context) {
 	id := c.Param("id")
 
 	// 1. Получить сервис и resource_env_id
-	service, resourceEnvId, err := h.getAiChatServices(c)
+	service, resourceEnvId, err := h.getBuilderServices(c)
 	if err != nil {
 		return
 	}

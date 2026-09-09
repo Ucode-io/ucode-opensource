@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/metaads"
 	v1 "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/v1"
 	v2 "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/v2"
 	v3 "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/v3"
@@ -29,7 +28,6 @@ type Handler struct {
 	V1              v1.HandlerV1
 	V2              v2.HandlerV2
 	V3              v3.HandlerV3
-	MetaAds         metaads.Handler
 	cache           *caching.ExpiringLRUCache
 }
 
@@ -45,7 +43,6 @@ func NewHandler(baseConf config.BaseConfig, projectConfs map[string]config.Confi
 		centralRedis:    centralRedis,
 		V1:              v1.NewHandlerV1(baseConf, projectConfs, log, svcs, cmpServ, authService, redis, centralRedis, cache, limiter, vaultClient),
 		V2:              v2.NewHandlerV2(baseConf, projectConfs, log, svcs, cmpServ, authService, redis, centralRedis, cache, limiter),
-		MetaAds:         metaads.NewHandler(baseConf, centralRedis, log),
 		V3: v3.NewHandlerV3(&v3.HandlerV3Config{
 			BaseConf:        baseConf,
 			ProjectConfs:    projectConfs,

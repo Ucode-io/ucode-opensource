@@ -60,6 +60,7 @@ var (
 
 // --- Тестовый сценарий (тот же порядок вызовов, что и в storage-версии) ---
 func TestItemsFlow(t *testing.T) {
+	requireStack(t)
 
 	var (
 		mainTableId      = uuid.NewString()

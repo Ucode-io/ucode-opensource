@@ -541,11 +541,6 @@ func (h *HandlerV1) InvokeFunction(c *gin.Context) {
 		AutomationURL: h.baseConf.AutomationURL,
 	}
 
-	//HISOBIM project -> UZ knative cluster
-	if projectId == "b744d518-5f66-4818-bfd7-9f3f44ce3379" && h.baseConf.KnativeBaseUrlUz != "" {
-		invokeFunctionRequest.KnativeURL = h.baseConf.KnativeBaseUrlUz
-	}
-
 	switch requestType {
 	case "", "ASYNC":
 		functionName, err := custom.FuncHandlers[functionType](path, name, invokeFunctionRequest)

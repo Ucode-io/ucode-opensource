@@ -57,8 +57,6 @@ type Config struct {
 	GetRequestRedisDatabase int
 	GetRequestRedisPassword string
 
-	OpenAIApiKey string
-
 	// Tracker / Audit Logs
 	AuditMaxBodySize          int64
 	AuditMetricsFlushInterval int
@@ -106,23 +104,6 @@ type BaseConfig struct {
 
 	StripeApiKey        string
 	StripeWebhookSecret string
-
-	AnthropicAPIKey      string
-	AnthropicAPIKeyUcode string
-	AnthropicBeta        string
-	AnthropicBaseAPIURL  string
-	AnthropicVersion     string
-
-	ClaudeModel string
-	Agents      AIAgents
-
-	GeminiAPIKey  string
-	GeminiAPIKeys []string
-	GeminiAgents  AIAgents
-
-	OpenAIAPIKey  string
-	OpenAIBaseURL string
-	OpenAIAgents  AIAgents
 
 	AutomationURL    string
 	OpenFaaSBaseUrl  string
@@ -273,22 +254,6 @@ func BaseLoad() BaseConfig {
 	config.StripeApiKey = cast.ToString(GetOrReturnDefaultValue("STRIPE_API_KEY", ""))
 	config.StripeWebhookSecret = cast.ToString(GetOrReturnDefaultValue("STRIPE_WEBHOOK_SECRET", ""))
 
-	config.AnthropicAPIKey = cast.ToString(GetOrReturnDefaultValue("ANTHROPIC_API_KEY", ""))
-	config.AnthropicAPIKeyUcode = cast.ToString(GetOrReturnDefaultValue("ANTHROPIC_API_KEY_UCODE", ""))
-	config.AnthropicBeta = cast.ToString(GetOrReturnDefaultValue("ANTHROPIC_BETA", ""))
-	config.AnthropicBaseAPIURL = cast.ToString(GetOrReturnDefaultValue("ANTHROPIC_BASE_API_URL", ""))
-	config.AnthropicVersion = cast.ToString(GetOrReturnDefaultValue("ANTHROPIC_VERSION", ""))
-	config.ClaudeModel = cast.ToString(GetOrReturnDefaultValue("CLAUDE_MODEL", ""))
-
-	config.Agents = loadAIAgents()
-	config.GeminiAgents = loadGeminiAgents()
-
-	config.GeminiAPIKeys, config.GeminiAPIKey = loadGeminiKeys()
-
-	config.OpenAIAPIKey = cast.ToString(GetOrReturnDefaultValue("OPENAI_API_KEY", ""))
-	config.OpenAIBaseURL = cast.ToString(GetOrReturnDefaultValue("OPENAI_BASE_URL", ""))
-	config.OpenAIAgents = loadOpenAIAgents()
-
 	config.AutomationURL = cast.ToString(GetOrReturnDefaultValue("AUTOMATION_URL", ""))
 	config.OpenFaaSBaseUrl = cast.ToString(GetOrReturnDefaultValue("OPENFAAS_BASE_URL", ""))
 	config.KnativeBaseUrl = cast.ToString(GetOrReturnDefaultValue("KNATIVE_BASE_URL", ""))
@@ -430,8 +395,6 @@ func Load() Config {
 	config.GetRequestRedisPort = cast.ToString(GetOrReturnDefaultValue("GET_REQUEST_REDIS_PORT", "6379"))
 	config.GetRequestRedisDatabase = cast.ToInt(GetOrReturnDefaultValue("GET_REQUEST_REDIS_DATABASE", 1))
 	config.GetRequestRedisPassword = cast.ToString(GetOrReturnDefaultValue("GET_REQUEST_REDIS_PASSWORD", "D8ihWNRZ9stYaDoPket4KXu1A6TChzqg"))
-
-	config.OpenAIApiKey = cast.ToString(GetOrReturnDefaultValue("OPENAI_API_KEY", "sk-proj-a2ma7TfGU0msgfY9GDsST3BlbkFJljmuOgGattnpsfQCnJ2C"))
 
 	config.AuditMaxBodySize = cast.ToInt64(GetOrReturnDefaultValue("AUDIT_MAX_BODY_SIZE", 256*1024))
 	config.AuditMetricsFlushInterval = cast.ToInt(GetOrReturnDefaultValue("METRICS_FLUSH_INTERVAL_SEC", 60))

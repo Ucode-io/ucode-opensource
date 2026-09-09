@@ -4,19 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing"
+	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
+	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
+	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
+	obs "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/object_builder_service"
+	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/util"
 	"log"
 	"mime/multipart"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/fileupload"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
-	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
-	obs "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/object_builder_service"
-	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/util"
 
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -27,6 +26,9 @@ import (
 
 	"github.com/minio/minio-go/v7"
 )
+
+// minioStorageType marks files stored in the built-in MinIO bucket.
+const minioStorageType = "minio"
 
 type UploadResponse struct {
 	Filename string `json:"filename"`
@@ -210,70 +212,6 @@ func (h *HandlerV2) UploadFile(c *gin.Context) {
 	}
 	defer object.Close()
 
-	driveUpload, driveConfigured, err := fileupload.NewGoogleDriveUploader(h.companyServices.Resource(), fileupload.GoogleDriveConfig{
-		ClientID:           h.baseConf.GoogleDriveClientID,
-		ClientSecret:       h.baseConf.GoogleDriveClientSecret,
-		RedirectURI:        h.baseConf.GoogleDriveRedirectURI,
-		ServiceAccountJSON: h.baseConf.GoogleDriveServiceAccountJSON,
-		ParentFolderID:     h.baseConf.GoogleDriveParentFolderID,
-		Visibility:         h.baseConf.GoogleDriveVisibility,
-	}).UploadIfConfigured(
-		c.Request.Context(),
-		fileupload.GoogleDriveUploadRequest{
-			ProjectID:     projectId.(string),
-			EnvironmentID: environmentId.(string),
-			FileName:      file.File.Filename,
-			ContentType:   ContentTypeOfFile,
-			Size:          file.File.Size,
-			Reader:        object,
-		},
-	)
-	if err != nil {
-		h.HandleResponse(c, status_http.BadRequest, err.Error())
-		return
-	}
-	if driveConfigured {
-		splitedFileName := strings.Split(fileNameForObjectBuilder, ".")
-		var tags []string
-		if c.Query("tags") != "" {
-			tags = strings.Split(c.Query("tags"), ",")
-		}
-
-		requestMap := make(map[string]any)
-		requestMap["table_slug"] = c.Param("collection")
-		requestMap["object_id"] = c.Param("id")
-		requestMap["date"] = time.Now().Format(time.RFC3339)
-		requestMap["tags"] = tags
-		requestMap["size"] = int32(file.File.Size)
-		requestMap["type"] = splitedFileName[len(splitedFileName)-1]
-		requestMap["file_link"] = driveUpload.Link
-		requestMap["name"] = fileNameForObjectBuilder
-		structData, err := helper.ConvertMapToStruct(requestMap)
-		if err != nil {
-			h.HandleResponse(c, status_http.BadRequest, err.Error())
-			return
-		}
-
-		_, err = services.GetBuilderServiceByType(resource.NodeType).ObjectBuilder().Create(
-			c.Request.Context(),
-			&obs.CommonMessage{
-				TableSlug: "file",
-				Data:      structData,
-				ProjectId: resource.ResourceEnvironmentId,
-			},
-		)
-		if err != nil {
-			h.HandleResponse(c, status_http.InternalServerError, err.Error())
-			return
-		}
-
-		h.HandleResponse(c, status_http.Created, Path{
-			Filename: file.File.Filename,
-			Hash:     fName.String(),
-		})
-		return
-	}
-
 	minioClient, err := minio.New(h.baseConf.MinioEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(h.baseConf.MinioAccessKeyID, h.baseConf.MinioSecretAccessKey, ""),
 		Secure: h.baseConf.MinioProtocol,
@@ -445,50 +383,6 @@ func (h *HandlerV2) UploadToFolder(c *gin.Context) {
 	}
 	defer object.Close()
 
-	driveUpload, driveConfigured, err := fileupload.NewGoogleDriveUploader(h.companyServices.Resource(), fileupload.GoogleDriveConfig{
-		ClientID:           h.baseConf.GoogleDriveClientID,
-		ClientSecret:       h.baseConf.GoogleDriveClientSecret,
-		RedirectURI:        h.baseConf.GoogleDriveRedirectURI,
-		ServiceAccountJSON: h.baseConf.GoogleDriveServiceAccountJSON,
-		ParentFolderID:     h.baseConf.GoogleDriveParentFolderID,
-		Visibility:         h.baseConf.GoogleDriveVisibility,
-	}).UploadIfConfigured(
-		c.Request.Context(),
-		fileupload.GoogleDriveUploadRequest{
-			ProjectID:     projectId.(string),
-			EnvironmentID: environmentId.(string),
-			FolderName:    folder_name,
-			FileName:      file.File.Filename,
-			ContentType:   file.File.Header.Get("Content-Type"),
-			Size:          file.File.Size,
-			Reader:        object,
-		},
-	)
-	if err != nil {
-		h.HandleResponse(c, status_http.BadRequest, err.Error())
-		return
-	}
-	if driveConfigured {
-		resp, err := services.GetBuilderServiceByType(resource.NodeType).File().Create(c.Request.Context(), &obs.CreateFileRequest{
-			Id:               fName.String(),
-			Title:            title,
-			Storage:          driveUpload.Storage,
-			StorageType:      fileupload.GoogleDriveStorageType,
-			FileNameDisk:     driveUpload.FileNameDisk,
-			FileNameDownload: title,
-			Link:             driveUpload.Link,
-			FileSize:         file.File.Size,
-			ProjectId:        resource.ResourceEnvironmentId,
-		})
-		if err != nil {
-			h.HandleResponse(c, status_http.GRPCError, err.Error())
-			return
-		}
-
-		h.HandleResponse(c, status_http.Created, resp)
-		return
-	}
-
 	minioClient, err := minio.New(h.baseConf.MinioEndpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(h.baseConf.MinioAccessKeyID, h.baseConf.MinioSecretAccessKey, ""),
 		Secure: h.baseConf.MinioProtocol,
@@ -520,7 +414,7 @@ func (h *HandlerV2) UploadToFolder(c *gin.Context) {
 		Id:               fName.String(),
 		Title:            title,
 		Storage:          folder_name,
-		StorageType:      fileupload.MinioStorageType,
+		StorageType:      minioStorageType,
 		FileNameDisk:     file.File.Filename,
 		FileNameDownload: title,
 		Link:             resource.ResourceEnvironmentId + "/" + folder_name + "/" + file.File.Filename,
@@ -970,5 +864,5 @@ func (h *HandlerV2) GetAllFiles(c *gin.Context) {
 }
 
 func normalizeGoogleDriveFolderName(folderName string) string {
-	return fileupload.NormalizeGoogleDriveFolderName(folderName)
+	return strings.TrimSpace(folderName)
 }

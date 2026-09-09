@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers"
 	apilimits2 "github.com/Ucode-io/ucode-opensource/services/gateway/api/handlers/billing/api_call_limits"
@@ -15,6 +14,7 @@ import (
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/vault"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/services"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/storage/redis"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	go_redis "github.com/go-redis/redis/v8"
@@ -178,9 +178,6 @@ func main() {
 	h := handlers.NewHandler(baseConf, mapProjectConfs, log, projectServiceNodes, compSrvc, authSrvc, newRedis, centralRedis, cache, limiter, vaultClient)
 
 	api.SetUpAPI(r, h, baseConf, tracer, tracker)
-
-	// Facebook lead poller (webhook safety net) — no-op unless FACEBOOK_LEAD_POLL_ENABLED.
-	h.V1.StartLeadPoller(context.Background())
 
 	log.Info("server is running...")
 	if err := r.Run(baseConf.HTTPPort); err != nil {

@@ -1,6 +1,6 @@
-INSERT INTO "project"("id", "name", "domain") VALUES ('f5955c82-f264-4655-aeb4-86fd1c642cb6', 'MEDION', 'medion.udevs.io');
+INSERT INTO "project"("id", "name", "domain") VALUES ('f5955c82-f264-4655-aeb4-86fd1c642cb6', 'ucode', 'localhost');
 
-INSERT INTO "client_platform"("id", "project_id", "name", "subdomain") VALUES ('7d4a4c38-dd84-4902-b744-0488b80a4c01', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', 'MEDION ADMIN PANEL', 'admin.medion.uz');
+INSERT INTO "client_platform"("id", "project_id", "name", "subdomain") VALUES ('7d4a4c38-dd84-4902-b744-0488b80a4c01', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', 'Admin Panel', 'admin.ucode.uz');
 
 INSERT INTO "client_type"("id", "name", "project_id", "confirm_by", "self_register", "self_recover") VALUES ('5a3818a9-90f0-44e9-a053-3be0ba1e2c01', 'ADMIN', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', 'UNDECIDED', FALSE, FALSE);
 INSERT INTO "client_type"("id", "name", "project_id", "confirm_by", "self_register", "self_recover") VALUES ('5a3818a9-90f0-44e9-a053-3be0ba1e2c02', 'CASHIER', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', 'UNDECIDED', FALSE, FALSE);
@@ -10,9 +10,9 @@ INSERT INTO "client_type"("id", "name", "project_id", "confirm_by", "self_regist
 INSERT INTO "client_type"("id", "name", "project_id", "confirm_by", "self_register", "self_recover") VALUES ('5a3818a9-90f0-44e9-a053-3be0ba1e2c06', 'INSURER', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', 'EMAIL', FALSE, TRUE);
 
 
-INSERT INTO "relation"("id", "client_type_id", "type", "name", "description") VALUES ('2d4a4c38-90f0-44e9-b744-7be0ba1e2c01', '5a3818a9-90f0-44e9-a053-3be0ba1e2c03', 'BRANCH', 'MEDION CLINIC', 'Медицинский центр MEDION CLINIC, AESTHETIC & SPA');
-INSERT INTO "relation"("id", "client_type_id", "type", "name", "description") VALUES ('2d4a4c38-90f0-44e9-b744-7be0ba1e2c02', '5a3818a9-90f0-44e9-a053-3be0ba1e2c03', 'BRANCH', 'MEDION INNOVATION', 'Медицинский центр MEDION INNOVATION');
-INSERT INTO "relation"("id", "client_type_id", "type", "name", "description") VALUES ('2d4a4c38-90f0-44e9-b744-7be0ba1e2c03', '5a3818a9-90f0-44e9-a053-3be0ba1e2c03', 'BRANCH', 'MEDION FAMILY HOSPITAL', 'Медицинский центр MEDION FAMILY HOSPITAL');
+INSERT INTO "relation"("id", "client_type_id", "type", "name", "description") VALUES ('2d4a4c38-90f0-44e9-b744-7be0ba1e2c01', '5a3818a9-90f0-44e9-a053-3be0ba1e2c03', 'BRANCH', 'Sample Team', 'Медицинский центр ucode CLINIC, AESTHETIC & SPA');
+INSERT INTO "relation"("id", "client_type_id", "type", "name", "description") VALUES ('2d4a4c38-90f0-44e9-b744-7be0ba1e2c02', '5a3818a9-90f0-44e9-a053-3be0ba1e2c03', 'BRANCH', 'Sample Project', 'Медицинский центр ucode INNOVATION');
+INSERT INTO "relation"("id", "client_type_id", "type", "name", "description") VALUES ('2d4a4c38-90f0-44e9-b744-7be0ba1e2c03', '5a3818a9-90f0-44e9-a053-3be0ba1e2c03', 'BRANCH', 'Sample Workspace', 'Медицинский центр ucode FAMILY HOSPITAL');
 
 INSERT INTO "user_info_field"("id", "client_type_id", "field_name", "field_type", "data_type") VALUES ('3a3818a9-90f0-44e9-b744-5be0ba1e2c01', '5a3818a9-90f0-44e9-a053-3be0ba1e2c04', 'resume_url', 'FLAT', 'STRING');
 INSERT INTO "user_info_field"("id", "client_type_id", "field_name", "field_type", "data_type") VALUES ('3a3818a9-90f0-44e9-b744-5be0ba1e2c02', '5a3818a9-90f0-44e9-a053-3be0ba1e2c04', 'contact_links', 'ARRAY', 'STRING');
@@ -59,4 +59,4 @@ INSERT INTO "role_permission"("role_id", "permission_id") VALUES ('a1ca1301-4da9
 INSERT INTO "role_permission"("role_id", "permission_id") VALUES ('a1ca1301-4da9-424d-a9e2-578ae6dcde06', 'ffffffff-ffff-4fff-8fff-ffffffffffff');
 
 INSERT INTO "user"("id", "project_id", "client_platform_id", "client_type_id", "role_id", "phone", "email", "login", "password", "active", "expires_at")
-    VALUES ('f799f1c5-ce5f-4fdd-ac23-f542247dcc01', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', '7d4a4c38-dd84-4902-b744-0488b80a4c01', '5a3818a9-90f0-44e9-a053-3be0ba1e2c01', 'a1ca1301-4da9-424d-a9e2-578ae6dcde01', '+998914015636', 'bakhodir_tukhtamuradov@udevs.io', 'medion_admin', '$argon2id$v=19$models=65536,t=3,p=4$Uv38ByGCZU8WP18PmmIdcg$pkQBTSchMryxoPqiqY6onQlZ7lPSgX1S/HqnfPDIGzk', 1, '2072-05-01T11:21:59.001+0000');
+    VALUES ('f799f1c5-ce5f-4fdd-ac23-f542247dcc01', 'f5955c82-f264-4655-aeb4-86fd1c642cb6', '7d4a4c38-dd84-4902-b744-0488b80a4c01', '5a3818a9-90f0-44e9-a053-3be0ba1e2c01', 'a1ca1301-4da9-424d-a9e2-578ae6dcde01', '+10000000000', 'admin@ucode.local', 'admin', '$argon2id$v=19$models=65536,t=3,p=4$Uv38ByGCZU8WP18PmmIdcg$pkQBTSchMryxoPqiqY6onQlZ7lPSgX1S/HqnfPDIGzk', 1, '2072-05-01T11:21:59.001+0000');
