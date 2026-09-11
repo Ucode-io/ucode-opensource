@@ -8,6 +8,7 @@ import { clearLegacyMirror } from "./features/microfrontend";
 import { session } from "./shared/api/session";
 import { queryClient } from "./app/query-client";
 import { applyTheme, useUi } from "./shared/lib/ui-store";
+import { googleClientId, isGoogleLoginEnabled } from "./shared/lib/google-oauth";
 import { routeTree } from "./routeTree.gen";
 import "./shared/lib/i18n";
 import "./app/styles.css";
@@ -47,12 +48,18 @@ session.subscribe(() => {
   void router.navigate({ to: "/login" });
 });
 
+const app = (
+  <QueryClientProvider client={queryClient}>
+    <RouterProvider router={router} />
+  </QueryClientProvider>
+);
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </GoogleOAuthProvider>
+    {isGoogleLoginEnabled ? (
+      <GoogleOAuthProvider clientId={googleClientId}>{app}</GoogleOAuthProvider>
+    ) : (
+      app
+    )}
   </StrictMode>,
 );

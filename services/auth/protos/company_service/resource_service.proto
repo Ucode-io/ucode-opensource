@@ -362,12 +362,7 @@ message Settings {
     PostgresCredentials postgres = 6;
     MetabaseCredentials metabase = 7;
     MailchimpCredentials mailchimp = 8;
-    GoogleDriveCredentials google_drive = 9;
-    GoogleCalendarCredentials google_calendar = 10;
-    TelegramCredentials telegram = 11;
-    FacebookLeadsCredentials facebook_leads = 12;
-    InstagramCredentials instagram = 13;
-    GoogleLeadsCredentials google_leads = 14;
+    reserved 9 to 13; // were: Google Drive/Calendar, Telegram, Meta Leads, Instagram
 }
 
 message SmsCredentials {
@@ -415,48 +410,9 @@ message MailchimpCredentials {
     string default_otp = 4;
 }
 
-message GoogleDriveCredentials {
-    string auth_type = 1;
-    string folder_id = 2;
-    string visibility = 3;
-    string client_id = 4;
-    string client_secret = 5;
-    string refresh_token = 6;
-    string service_account_json = 7;
-}
-
-message GoogleCalendarCredentials {
-    string auth_type = 1;
-    string calendar_id = 2;
-    string client_id = 3;
-    string client_secret = 4;
-    string refresh_token = 5;
-    string sync_direction = 6;
-    GoogleCalendarMapping mapping = 7;
-}
-
-message GoogleCalendarMapping {
-    string table_slug = 1;
-    string title_field = 2;
-    string start_field = 3;
-    string end_field = 4;
-    string description_field = 5;
-    string location_field = 6;
-    string attendees_field = 7;
-    string status_field = 8;
-}
-
 // Telegram secrets are stored in the configured secrets provider.  This
 // project-resource setting deliberately contains only public bot metadata and
 // the reference needed by trusted backend services to load the secret.
-message TelegramCredentials {
-    string bot_id = 1;
-    string bot_username = 2;
-    string secret_path = 3;
-    string status = 4;
-    TelegramChatMapping mapping = 5;
-}
-
 // The selected table remains the project's source of truth for conversations.
 // Message and attachment records live in dedicated Ugen Telegram system tables.
 message TelegramChatMapping {
@@ -475,14 +431,21 @@ message TelegramChatMapping {
 // Meta (Facebook) Lead Ads. external_id of the project_resource holds page_id.
 // The page access token is stored here openly (like Google refresh_token); it is
 // what fetches the full lead and keeps the leadgen subscription alive.
-message FacebookLeadsCredentials {
-    string page_id = 1;
-    string page_name = 2;
-    string page_access_token = 3;
-    string connected_user_id = 4;
-    string connected_at = 5;
-    string status = 6;
-    repeated FacebookLeadFormMapping forms = 7;
+// Per-project mapping for the amoCRM-style lead flow: which tables/relations an
+// incoming lead is written to and which pipeline/stage a new deal lands in.
+// Empty fields fall back to platform defaults, so the integration is not bound
+// to any single project's schema.
+message FacebookCrmMapping {
+    string contacts_table = 1;
+    string deals_table = 2;
+    string lead_forms_table = 3;
+    string deal_contact_field = 4; // relation field on deals -> contacts
+    string deal_form_field = 5;    // relation field on deals -> lead_forms
+    string pipeline_field = 6;
+    string pipeline_value = 7;
+    string stage_field = 8;
+    string stage_value = 9;
+    string source_field = 10;
 }
 
 // One lead form mapped to one project table. A page may have many forms; each
@@ -505,17 +468,6 @@ message FacebookLeadFieldMapping {
 // Instagram Direct Messaging. external_id of the project_resource holds ig_id.
 // Access tokens are stored in project_resource.secret, not in this public
 // settings payload.
-message InstagramCredentials {
-    string ig_id = 1;
-    string username = 2;
-    string account_type = 3;
-    string profile_picture_url = 4;
-    string status = 5;
-    string connected_user_id = 6;
-    string connected_at = 7;
-    InstagramChatMapping mapping = 8;
-}
-
 message InstagramChatMapping {
     string table_id = 1;
     string table_slug = 2;
@@ -528,30 +480,6 @@ message InstagramChatMapping {
     string unread_count_field = 9;
     string status_field = 10;
     string conversation_id_field = 11;
-}
-
-// Google Lead Form Ads (webhook-only). external_id of the project_resource holds
-// the generated google_key — it is both the webhook auth secret and the routing
-// key. Unlike Meta there are no OAuth tokens: Google pushes the full lead data to
-// our webhook, so nothing is fetched back. One form == one resource == one key,
-// hence the mapping is flat (table_slug + fields) instead of nested per form.
-message GoogleLeadsCredentials {
-    string google_key = 1;     // generated secret; mirrored into external_id
-    string form_id = 2;        // optional: validate incoming form_id ("" = accept any)
-    string form_name = 3;
-    string table_slug = 4;
-    string status = 5;
-    string connected_at = 6;
-    repeated GoogleLeadFieldMapping fields = 7;
-}
-
-// One Google lead column mapped to one ucode table field. lead_column is the
-// Google column_id (== user_column_data[].column_id, e.g. FULL_NAME, EMAIL), not
-// the human label.
-message GoogleLeadFieldMapping {
-    string lead_column = 1;
-    string table_field = 2;
-    bool required = 3;
 }
 
 message Github {

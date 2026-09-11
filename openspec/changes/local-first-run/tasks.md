@@ -71,15 +71,25 @@
 - [ ] 5.1 CI job that boots the compose stack, waits, creates a table and a
       record through the API and asserts they come back
 - [ ] 5.2 Walk the seven acceptance steps by hand on a clean macOS machine
+      (in progress: sign-in and table creation confirmed working)
 - [ ] 5.3 Repeat on Linux and on Apple Silicon
 - [ ] 5.4 Measure time from command to browser; the target is five minutes
       including image pulls
 
-## 6. Remaining billing residue in auth
+## 6. Billing residue outside company and gateway
 
-- [ ] 6.0 auth still carries `user_seat_billing.go`, `BillingServiceClient` in
-      its gRPC client interface and a `billing_service.proto` copy in its own
-      `protos/`. The phase-3 cut reached company and gateway but not auth
+- [x] 6.0 auth and object-builder each kept their own copy of
+      `billing_service.proto`, so their code still compiled against a service
+      that no longer answers. Removed the copies, regenerated, dropped
+      `BillingServiceClient` from both client interfaces, and made
+      `user_seat_billing.go` a no-op
+- [x] 6.1 Plan-limit check on table creation in
+      `object-builder/grpc/service/table.go` — found by a user clicking "create
+      table" in the browser, not by any test
+- [ ] 6.2 Walk the rest of the acceptance path by hand. Three runtime failures
+      so far (SMS dial, api-key limit, table limit) all shared one cause:
+      cutting Go code leaves the proto contract, and a dead call stays
+      compilable until something actually invokes it
 
 ## 7. Release
 

@@ -38,32 +38,11 @@ func (t *tableService) Create(ctx context.Context, req *nb.CreateTableRequest) (
 
 	t.log.Info("---CreateTable--->>>", logger.Any("request", compactRequest(req)))
 
-	project, err := t.services.ProjectServiceClient().GetById(ctx, &pbc.GetProjectByIdRequest{ProjectId: req.GetUcodeProjectId()})
+	// Kept as an existence check; the fare it used to carry went with billing.
+	_, err = t.services.ProjectServiceClient().GetById(ctx, &pbc.GetProjectByIdRequest{ProjectId: req.GetUcodeProjectId()})
 	if err != nil {
 		t.log.Error("---CreateTable--->GetProjectById", logger.Error(err))
 		return nil, status.Error(codes.Internal, "error getting project info")
-	}
-
-	if len(project.GetFareId()) != 0 {
-		count, err := t.strg.Table().GetProjectTablesCount(ctx, req.GetProjectId())
-		if err != nil {
-			t.log.Error("---CreateTable--->GetProjectTablesCount", logger.Error(err))
-			return nil, status.Error(codes.Internal, "error getting tables count")
-		}
-
-		limitResp, err := t.services.BillingServiceClient().CompareFunction(ctx, &pbc.CompareFunctionRequest{
-			Type:   config.FARE_TABLES,
-			FareId: project.GetFareId(),
-			Count:  count + 1,
-		})
-		if err != nil {
-			t.log.Error("---CreateTable--->CompareFunction", logger.Error(err))
-			return nil, status.Error(codes.Internal, "error checking table limit")
-		}
-
-		if !limitResp.HasAccess {
-			return nil, status.Error(codes.ResourceExhausted, "you have reached the table limit on your current plan. Please upgrade to create more tables.")
-		}
 	}
 
 	resp, err = t.strg.Table().Create(ctx, req)

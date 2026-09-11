@@ -10,6 +10,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -116,18 +117,32 @@ func statusCmd() *cobra.Command {
 }
 
 func logsCmd() *cobra.Command {
-	return &cobra.Command{
+	var follow bool
+	var tail int
+
+	cmd := &cobra.Command{
 		Use:   "logs [service]",
-		Short: "Follow the logs of the whole stack or one service",
+		Short: "Show the logs of the whole stack or one service",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			s, err := newStack()
 			if err != nil {
 				return err
 			}
-			return s.run(append([]string{"logs", "--follow", "--tail", "100"}, args...)...)
+
+			// Printing and exiting is the default so this is usable from a
+			// script or a CI step; --follow is the interactive case.
+			flags := []string{"logs", "--tail", strconv.Itoa(tail)}
+			if follow {
+				flags = append(flags, "--follow")
+			}
+			return s.run(append(flags, args...)...)
 		},
 	}
+
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "keep printing new lines")
+	cmd.Flags().IntVar(&tail, "tail", 100, "how many lines to show per service")
+	return cmd
 }
 
 func resetCmd() *cobra.Command {

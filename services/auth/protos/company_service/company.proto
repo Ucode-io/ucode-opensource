@@ -33,12 +33,7 @@ enum ResourceType {
     METABASE = 12;
     TRANSCODER = 13;
     MAILCHIMP = 14;
-    GOOGLE_DRIVE = 15;
-    GOOGLE_CALENDAR = 16;
-    TELEGRAM = 17;
-    META_LEADS = 18;
-    INSTAGRAM = 19;
-    GOOGLE_LEADS = 20;
+    reserved 15 to 19; // were: Google Drive/Calendar, Telegram, Meta Leads, Instagram
 }
 
 enum SettingType {

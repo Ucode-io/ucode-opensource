@@ -19,7 +19,6 @@ type ServiceManagerI interface {
 	ResourceService() company_service.ResourceServiceClient
 	TranscoderService() transcoder_service.PipelineServiceClient
 	ProjectServiceClient() company_service.ProjectServiceClient
-	BillingServiceClient() company_service.BillingServiceClient
 }
 
 type grpcClients struct {
@@ -28,7 +27,6 @@ type grpcClients struct {
 	resourceService      company_service.ResourceServiceClient
 	transcoderService    transcoder_service.PipelineServiceClient
 	projectServiceClient company_service.ProjectServiceClient
-	billingServiceClient company_service.BillingServiceClient
 }
 
 func NewGrpcClients(cfg config.Config) (ServiceManagerI, error) {
@@ -76,7 +74,6 @@ func NewGrpcClients(cfg config.Config) (ServiceManagerI, error) {
 		resourceService:      company_service.NewResourceServiceClient(connCompanyService),
 		transcoderService:    transcoder_service.NewPipelineServiceClient(connTranscoderService),
 		projectServiceClient: company_service.NewProjectServiceClient(connCompanyService),
-		billingServiceClient: company_service.NewBillingServiceClient(connCompanyService),
 	}, nil
 }
 
@@ -98,8 +95,4 @@ func (g *grpcClients) TranscoderService() transcoder_service.PipelineServiceClie
 
 func (g *grpcClients) ProjectServiceClient() company_service.ProjectServiceClient {
 	return g.projectServiceClient
-}
-
-func (g *grpcClients) BillingServiceClient() company_service.BillingServiceClient {
-	return g.billingServiceClient
 }

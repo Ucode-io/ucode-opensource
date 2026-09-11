@@ -1,0 +1,41 @@
+# Boots the whole platform and walks the path a new user takes.
+#
+# Unit tests never caught any of the failures this is here for: services that
+# panicked on an unset optional dependency, and plan-limit checks calling a
+# service that had been removed. They compiled, and `go test` was green. Only a
+# real request found them.
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/gateway/go.mod
+          cache: false
+
+      - name: Build images
+        run: make images
+
+      - name: Build the CLI
+        run: make cli
+
+      - name: Start the stack
+        run: ./bin/ucode start --no-browser
+
+      - name: Walk the user path
+        run: make smoke
+
+      - name: Service logs
+        if: failure()
+        run: ./bin/ucode logs --tail 200 || true

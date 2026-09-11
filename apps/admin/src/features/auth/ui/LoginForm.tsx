@@ -22,6 +22,7 @@ import type {
 import { AuthCard } from "./AuthCard";
 import { ErrorText } from "./ErrorText";
 import { GoogleButton } from "./GoogleButton";
+import { isGoogleLoginEnabled } from "@/shared/lib/google-oauth";
 import { ConnectionPicker } from "./ConnectionPicker";
 
 /**
@@ -298,13 +299,17 @@ export function LoginForm({ onSuccess }: { onSuccess: () => void }) {
           </button>
         )}
 
-        <Divider>{t("auth.orContinueWith")}</Divider>
+        {isGoogleLoginEnabled && (
+          <>
+            <Divider>{t("auth.orContinueWith")}</Divider>
 
-        <GoogleButton
-          disabled={busy}
-          label="Google"
-          onToken={(token) => token && google.mutate(token, { onSuccess: handle })}
-        />
+            <GoogleButton
+              disabled={busy}
+              label="Google"
+              onToken={(token) => token && google.mutate(token, { onSuccess: handle })}
+            />
+          </>
+        )}
       </form>
     </AuthCard>
   );

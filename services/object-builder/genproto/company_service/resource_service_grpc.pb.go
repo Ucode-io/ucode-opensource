@@ -52,10 +52,12 @@ type ResourceServiceClient interface {
 	UpdateVariableResource(ctx context.Context, in *UpdateVariableResourceRequest, opts ...grpc.CallOption) (*Empty, error)
 	DeleteVariableResource(ctx context.Context, in *PrimaryKeyVariableResource, opts ...grpc.CallOption) (*Empty, error)
 	AddResourceToProject(ctx context.Context, in *AddResourceToProjectRequest, opts ...grpc.CallOption) (*ProjectResource, error)
+	UpsertProjectResource(ctx context.Context, in *AddResourceToProjectRequest, opts ...grpc.CallOption) (*ProjectResource, error)
 	GetProjectResourceList(ctx context.Context, in *GetProjectResourceListRequest, opts ...grpc.CallOption) (*ListProjectResource, error)
 	GetSingleProjectResouece(ctx context.Context, in *PrimaryKeyProjectResource, opts ...grpc.CallOption) (*ProjectResource, error)
 	UpdateProjectResource(ctx context.Context, in *ProjectResource, opts ...grpc.CallOption) (*Empty, error)
 	DeleteProjectResource(ctx context.Context, in *PrimaryKeyProjectResource, opts ...grpc.CallOption) (*Empty, error)
+	GetProjectResourcesByExternalId(ctx context.Context, in *GetByExternalIdRequest, opts ...grpc.CallOption) (*ListProjectResource, error)
 }
 
 type resourceServiceClient struct {
@@ -327,6 +329,15 @@ func (c *resourceServiceClient) AddResourceToProject(ctx context.Context, in *Ad
 	return out, nil
 }
 
+func (c *resourceServiceClient) UpsertProjectResource(ctx context.Context, in *AddResourceToProjectRequest, opts ...grpc.CallOption) (*ProjectResource, error) {
+	out := new(ProjectResource)
+	err := c.cc.Invoke(ctx, "/company_service.ResourceService/UpsertProjectResource", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *resourceServiceClient) GetProjectResourceList(ctx context.Context, in *GetProjectResourceListRequest, opts ...grpc.CallOption) (*ListProjectResource, error) {
 	out := new(ListProjectResource)
 	err := c.cc.Invoke(ctx, "/company_service.ResourceService/GetProjectResourceList", in, out, opts...)
@@ -357,6 +368,15 @@ func (c *resourceServiceClient) UpdateProjectResource(ctx context.Context, in *P
 func (c *resourceServiceClient) DeleteProjectResource(ctx context.Context, in *PrimaryKeyProjectResource, opts ...grpc.CallOption) (*Empty, error) {
 	out := new(Empty)
 	err := c.cc.Invoke(ctx, "/company_service.ResourceService/DeleteProjectResource", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *resourceServiceClient) GetProjectResourcesByExternalId(ctx context.Context, in *GetByExternalIdRequest, opts ...grpc.CallOption) (*ListProjectResource, error) {
+	out := new(ListProjectResource)
+	err := c.cc.Invoke(ctx, "/company_service.ResourceService/GetProjectResourcesByExternalId", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -397,10 +417,12 @@ type ResourceServiceServer interface {
 	UpdateVariableResource(context.Context, *UpdateVariableResourceRequest) (*Empty, error)
 	DeleteVariableResource(context.Context, *PrimaryKeyVariableResource) (*Empty, error)
 	AddResourceToProject(context.Context, *AddResourceToProjectRequest) (*ProjectResource, error)
+	UpsertProjectResource(context.Context, *AddResourceToProjectRequest) (*ProjectResource, error)
 	GetProjectResourceList(context.Context, *GetProjectResourceListRequest) (*ListProjectResource, error)
 	GetSingleProjectResouece(context.Context, *PrimaryKeyProjectResource) (*ProjectResource, error)
 	UpdateProjectResource(context.Context, *ProjectResource) (*Empty, error)
 	DeleteProjectResource(context.Context, *PrimaryKeyProjectResource) (*Empty, error)
+	GetProjectResourcesByExternalId(context.Context, *GetByExternalIdRequest) (*ListProjectResource, error)
 	mustEmbedUnimplementedResourceServiceServer()
 }
 
@@ -495,6 +517,9 @@ func (UnimplementedResourceServiceServer) DeleteVariableResource(context.Context
 func (UnimplementedResourceServiceServer) AddResourceToProject(context.Context, *AddResourceToProjectRequest) (*ProjectResource, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddResourceToProject not implemented")
 }
+func (UnimplementedResourceServiceServer) UpsertProjectResource(context.Context, *AddResourceToProjectRequest) (*ProjectResource, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpsertProjectResource not implemented")
+}
 func (UnimplementedResourceServiceServer) GetProjectResourceList(context.Context, *GetProjectResourceListRequest) (*ListProjectResource, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetProjectResourceList not implemented")
 }
@@ -506,6 +531,9 @@ func (UnimplementedResourceServiceServer) UpdateProjectResource(context.Context,
 }
 func (UnimplementedResourceServiceServer) DeleteProjectResource(context.Context, *PrimaryKeyProjectResource) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteProjectResource not implemented")
+}
+func (UnimplementedResourceServiceServer) GetProjectResourcesByExternalId(context.Context, *GetByExternalIdRequest) (*ListProjectResource, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetProjectResourcesByExternalId not implemented")
 }
 func (UnimplementedResourceServiceServer) mustEmbedUnimplementedResourceServiceServer() {}
 
@@ -1042,6 +1070,24 @@ func _ResourceService_AddResourceToProject_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ResourceService_UpsertProjectResource_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddResourceToProjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ResourceServiceServer).UpsertProjectResource(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/company_service.ResourceService/UpsertProjectResource",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ResourceServiceServer).UpsertProjectResource(ctx, req.(*AddResourceToProjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ResourceService_GetProjectResourceList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetProjectResourceListRequest)
 	if err := dec(in); err != nil {
@@ -1110,6 +1156,24 @@ func _ResourceService_DeleteProjectResource_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ResourceServiceServer).DeleteProjectResource(ctx, req.(*PrimaryKeyProjectResource))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ResourceService_GetProjectResourcesByExternalId_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetByExternalIdRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ResourceServiceServer).GetProjectResourcesByExternalId(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/company_service.ResourceService/GetProjectResourcesByExternalId",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ResourceServiceServer).GetProjectResourcesByExternalId(ctx, req.(*GetByExternalIdRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1238,6 +1302,10 @@ var ResourceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ResourceService_AddResourceToProject_Handler,
 		},
 		{
+			MethodName: "UpsertProjectResource",
+			Handler:    _ResourceService_UpsertProjectResource_Handler,
+		},
+		{
 			MethodName: "GetProjectResourceList",
 			Handler:    _ResourceService_GetProjectResourceList_Handler,
 		},
@@ -1252,6 +1320,10 @@ var ResourceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteProjectResource",
 			Handler:    _ResourceService_DeleteProjectResource_Handler,
+		},
+		{
+			MethodName: "GetProjectResourcesByExternalId",
+			Handler:    _ResourceService_GetProjectResourcesByExternalId_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

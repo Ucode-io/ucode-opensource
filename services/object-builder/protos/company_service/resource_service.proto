@@ -6,6 +6,7 @@ option go_package="genproto/company_service";
 import "company.proto";
 import "projects_service.proto";
 import "integration_resource_service.proto";
+import "google/protobuf/struct.proto";
 
 service ResourceService {
     rpc AddResource(AddResourceRequest) returns (AddResourceResponse) {}
@@ -40,10 +41,17 @@ service ResourceService {
     rpc DeleteVariableResource(PrimaryKeyVariableResource) returns (Empty) {}
 
     rpc AddResourceToProject(AddResourceToProjectRequest) returns(ProjectResource) {}
+    rpc UpsertProjectResource(AddResourceToProjectRequest) returns(ProjectResource) {}
     rpc GetProjectResourceList(GetProjectResourceListRequest) returns (ListProjectResource) {}
     rpc GetSingleProjectResouece(PrimaryKeyProjectResource) returns (ProjectResource) {}
     rpc UpdateProjectResource(ProjectResource) returns (Empty) {}
     rpc DeleteProjectResource(PrimaryKeyProjectResource) returns (Empty) {}
+    rpc GetProjectResourcesByExternalId(GetByExternalIdRequest) returns (ListProjectResource) {}
+}
+
+message GetByExternalIdRequest {
+    string external_id = 1;
+    ResourceType type = 2;
 }
 
 message UpdateVariableResourceRequest {
@@ -72,6 +80,8 @@ message AddResourceToProjectRequest {
     string client_type_id = 10;
     string company_id = 11;
     string node_type = 12;
+    google.protobuf.Struct secret = 13;
+    string external_id = 14;
 }
 
 message GetProjectResourceListRequest {
@@ -89,6 +99,8 @@ message ProjectResource {
     repeated VariableResource variables = 6;
     Settings settings = 7;
     int32 resource_type = 8;
+    google.protobuf.Struct secret = 9;
+    string external_id = 10;
 }
 
 message ListProjectResource {
@@ -350,7 +362,7 @@ message Settings {
     PostgresCredentials postgres = 6;
     MetabaseCredentials metabase = 7;
     MailchimpCredentials mailchimp = 8;
-    GoogleDriveCredentials google_drive = 9;
+    reserved 9 to 13; // were: Google Drive/Calendar, Telegram, Meta Leads, Instagram
 }
 
 message SmsCredentials {
@@ -398,14 +410,76 @@ message MailchimpCredentials {
     string default_otp = 4;
 }
 
-message GoogleDriveCredentials {
-    string auth_type = 1;
-    string folder_id = 2;
-    string visibility = 3;
-    string client_id = 4;
-    string client_secret = 5;
-    string refresh_token = 6;
-    string service_account_json = 7;
+// Telegram secrets are stored in the configured secrets provider.  This
+// project-resource setting deliberately contains only public bot metadata and
+// the reference needed by trusted backend services to load the secret.
+// The selected table remains the project's source of truth for conversations.
+// Message and attachment records live in dedicated Ugen Telegram system tables.
+message TelegramChatMapping {
+    string table_id = 1;
+    string table_slug = 2;
+    string telegram_chat_id_field = 3;
+    string telegram_user_id_field = 4;
+    string display_name_field = 5;
+    string username_field = 6;
+    string last_message_field = 7;
+    string last_message_at_field = 8;
+    string unread_count_field = 9;
+    string status_field = 10;
+}
+
+// Meta (Facebook) Lead Ads. external_id of the project_resource holds page_id.
+// The page access token is stored here openly (like Google refresh_token); it is
+// what fetches the full lead and keeps the leadgen subscription alive.
+// Per-project mapping for the amoCRM-style lead flow: which tables/relations an
+// incoming lead is written to and which pipeline/stage a new deal lands in.
+// Empty fields fall back to platform defaults, so the integration is not bound
+// to any single project's schema.
+message FacebookCrmMapping {
+    string contacts_table = 1;
+    string deals_table = 2;
+    string lead_forms_table = 3;
+    string deal_contact_field = 4; // relation field on deals -> contacts
+    string deal_form_field = 5;    // relation field on deals -> lead_forms
+    string pipeline_field = 6;
+    string pipeline_value = 7;
+    string stage_field = 8;
+    string stage_value = 9;
+    string source_field = 10;
+}
+
+// One lead form mapped to one project table. A page may have many forms; each
+// gets its own target table (forms are not merged into a single table).
+message FacebookLeadFormMapping {
+    string form_id = 1;
+    string form_name = 2;
+    string table_slug = 3;
+    repeated FacebookLeadFieldMapping fields = 4;
+}
+
+// One Meta lead field mapped to one ucode table field. lead_field is the Meta
+// question key (== field_data[].name), not the label.
+message FacebookLeadFieldMapping {
+    string lead_field = 1;
+    string table_field = 2;
+    bool required = 3;
+}
+
+// Instagram Direct Messaging. external_id of the project_resource holds ig_id.
+// Access tokens are stored in project_resource.secret, not in this public
+// settings payload.
+message InstagramChatMapping {
+    string table_id = 1;
+    string table_slug = 2;
+    string instagram_user_id_field = 3;
+    string username_field = 4;
+    string display_name_field = 5;
+    string profile_picture_field = 6;
+    string last_message_field = 7;
+    string last_message_at_field = 8;
+    string unread_count_field = 9;
+    string status_field = 10;
+    string conversation_id_field = 11;
 }
 
 message Github {
