@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { IconDatabase, IconPlus } from "@tabler/icons-react";
+import { useDeferredValue, useMemo, useState } from "react";
+import { IconDatabase, IconLoader2, IconPlus } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
@@ -35,6 +35,12 @@ export function ConnectionSettings() {
   const active = connectionId || connections[0]?.id || "";
   const [adding, setAdding] = useState(false);
 
+  const [navQuery, setNavQuery] = useState("");
+  const navSearch = useDeferredValue(navQuery).trim().toLowerCase();
+  const shownConnections = navSearch
+    ? connections.filter((connection) => connection.name.toLowerCase().includes(navSearch))
+    : connections;
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SectionHeader title={t("connections.title")} hint={t("connections.hint")}>
@@ -45,13 +51,23 @@ export function ConnectionSettings() {
       </SectionHeader>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-56 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-2">
+        <nav className="flex w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border p-2">
+          {connections.length > 1 && (
+            <Input
+              value={navQuery}
+              onChange={(event) => setNavQuery(event.target.value)}
+              placeholder={t("connections.search")}
+              aria-label={t("connections.search")}
+              className="h-7 shrink-0 text-sm"
+            />
+          )}
+
           {isLoading && <p className="px-2 py-1 text-xs text-fg-subtle">{t("common.loading")}</p>}
           {!isLoading && !connections.length && (
             <p className="px-2 py-1 text-xs text-fg-subtle">{t("connections.empty")}</p>
           )}
 
-          {connections.map((connection) => (
+          {shownConnections.map((connection) => (
             <button
               key={connection.id}
               type="button"
@@ -99,6 +115,19 @@ function ExternalTables({ connectionId }: { connectionId: string }) {
 
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
 
+  /*
+   * Фильтр на клиенте: `useExternalTables` отдаёт весь список чужой
+   * базы разом, без пагинации (connections.ts) — фильтровать на бэкенде
+   * нечего запрашивать заново, а `useDeferredValue` не блокирует ввод
+   * на сотнях строк.
+   */
+  const [query, setQuery] = useState("");
+  const search = useDeferredValue(query).trim().toLowerCase();
+  const shown = useMemo(
+    () => (search ? tables.filter((table) => table.name.toLowerCase().includes(search)) : tables),
+    [tables, search],
+  );
+
   const toggle = (id: string) =>
     setPicked((current) => {
       const next = new Set(current);
@@ -108,22 +137,32 @@ function ExternalTables({ connectionId }: { connectionId: string }) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
         <span className="text-xs text-fg-subtle">
           {t("connections.tablesCount", { count: tables.length })}
         </span>
 
-        {picked.size > 0 && (
-          <Button
-            size="sm"
-            disabled={track.isPending}
-            onClick={() =>
-              track.mutate([...picked], { onSuccess: () => setPicked(new Set()) })
-            }
-          >
-            {t("connections.trackSelected", { count: picked.size })}
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("connections.search")}
+            aria-label={t("connections.search")}
+            className="h-7 w-48 text-sm"
+          />
+
+          {picked.size > 0 && (
+            <Button
+              size="sm"
+              disabled={track.isPending}
+              onClick={() =>
+                track.mutate([...picked], { onSuccess: () => setPicked(new Set()) })
+              }
+            >
+              {t("connections.trackSelected", { count: picked.size })}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -139,9 +178,9 @@ function ExternalTables({ connectionId }: { connectionId: string }) {
 
           <tbody>
             {isLoading && <Empty text={t("common.loading")} colSpan={4} />}
-            {!isLoading && !tables.length && <Empty text={t("connections.noTables")} colSpan={4} />}
+            {!isLoading && !shown.length && <Empty text={t("connections.noTables")} colSpan={4} />}
 
-            {tables.map((table) => (
+            {shown.map((table) => (
               <tr key={table.id} className="hover:bg-surface-hover">
                 <Td className="text-center">
                   {/* У отмеченной таблицы флажка нет: она уже своя,
@@ -228,6 +267,7 @@ function ConnectionDialog({ onClose }: { onClose: () => void }) {
             {t("action.cancel")}
           </Button>
           <Button type="submit" disabled={create.isPending || !name.trim() || !connectionString.trim()}>
+            {create.isPending && <Icon as={IconLoader2} size={14} className="animate-spin" />}
             {create.isPending ? t("common.saving") : t("action.create")}
           </Button>
         </div>

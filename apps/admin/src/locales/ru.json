@@ -291,6 +291,7 @@
   "connections.name": "Название",
   "connections.noTables": "Таблиц не нашлось",
   "connections.pick": "Выберите подключение",
+  "connections.search": "Поиск по имени",
   "connections.string": "Строка соединения",
   "connections.stringHint": "Проверяет её сервер: он же читает схему.",
   "connections.table": "Таблица",

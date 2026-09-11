@@ -291,6 +291,7 @@
   "connections.name": "Name",
   "connections.noTables": "No tables found",
   "connections.pick": "Pick a connection",
+  "connections.search": "Search by name",
   "connections.string": "Connection string",
   "connections.stringHint": "The server checks it — it also reads the schema.",
   "connections.table": "Table",

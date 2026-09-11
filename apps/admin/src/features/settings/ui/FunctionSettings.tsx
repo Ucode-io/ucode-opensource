@@ -1,5 +1,12 @@
 import { useDeferredValue, useState } from "react";
-import { IconCode, IconPencil, IconPlayerPlay, IconPlus, IconTrash } from "@tabler/icons-react";
+import {
+  IconCode,
+  IconLoader2,
+  IconPencil,
+  IconPlayerPlay,
+  IconPlus,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
@@ -7,6 +14,7 @@ import { Icon } from "@/shared/ui/icon";
 import { Dropdown } from "@/shared/ui/dropdown";
 import { Field, Input } from "@/shared/ui/input";
 import { Modal } from "@/shared/ui/modal";
+import { errorMessage } from "@/shared/lib/toast";
 import {
   EMPTY_FUNCTION_DRAFT,
   FUNCTIONS_PAGE,
@@ -283,6 +291,7 @@ function FunctionDialog({ item, onClose }: { item: ProjectFunction | null; onClo
             {t("action.cancel")}
           </Button>
           <Button type="submit" disabled={busy || !draft.name.trim() || !draft.path.trim()}>
+            {busy && <Icon as={IconLoader2} size={14} className="animate-spin" />}
             {busy ? t("common.saving") : t(item ? "action.save" : "action.create")}
           </Button>
         </div>
@@ -341,6 +350,12 @@ function RunDialog({ item, onClose }: { item: ProjectFunction; onClose: () => vo
           </p>
         )}
 
+        {run.isError && (
+          <p role="alert" className="text-2xs text-danger">
+            {errorMessage(run.error, "functions.runFailed")}
+          </p>
+        )}
+
         {run.data !== undefined && (
           <div className="flex min-h-0 flex-1 flex-col gap-1">
             <span className="text-2xs text-fg-muted">{t("functions.runResult")}</span>
@@ -355,6 +370,7 @@ function RunDialog({ item, onClose }: { item: ProjectFunction; onClose: () => vo
             {t("action.close")}
           </Button>
           <Button type="button" disabled={run.isPending} onClick={submit}>
+            {run.isPending && <Icon as={IconLoader2} size={14} className="animate-spin" />}
             {run.isPending ? t("common.loading") : t("functions.run")}
           </Button>
         </div>

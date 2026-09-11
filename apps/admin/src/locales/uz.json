@@ -291,6 +291,7 @@
   "connections.name": "Nomi",
   "connections.noTables": "Jadvallar topilmadi",
   "connections.pick": "Ulanishni tanlang",
+  "connections.search": "Nom bo'yicha qidirish",
   "connections.string": "Ulanish satri",
   "connections.stringHint": "Uni server tekshiradi: sxemani ham u oʻqiydi.",
   "connections.table": "Jadval",
