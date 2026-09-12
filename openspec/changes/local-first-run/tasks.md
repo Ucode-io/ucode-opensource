@@ -91,8 +91,22 @@
       cutting Go code leaves the proto contract, and a dead call stays
       compilable until something actually invokes it
 
-## 7. Release
+## 7. Footprint
 
-- [ ] 7.1 goreleaser config for darwin and linux, amd64 and arm64
-- [ ] 7.2 Publish service images to ghcr.io from CI
-- [ ] 7.3 Quickstart in the README that matches what the CLI actually does
+Measured on a laptop: the running stack takes ~304 MB of memory across eight
+containers and about 9% CPU at rest. What hurt was building it — repeated Go
+compiles, a pnpm install and a Vite build filled 4.4 GB of build cache and
+pinned every core. Users must never have to do that.
+
+- [x] 7.4 Set memory limits per service in compose. There are none today, so a
+      runaway Postgres or MinIO has nothing stopping it
+- [x] 7.5 State the requirements in the README: memory, disk, Docker, and that
+      building from source is not part of installing
+- [ ] 7.6 Make ghcr.io images the default in the compose file, so `ucode start`
+      pulls rather than expecting locally built `:test` tags
+
+## 8. Release
+
+- [ ] 8.1 goreleaser config for darwin and linux, amd64 and arm64
+- [ ] 8.2 Publish service images to ghcr.io from CI
+- [ ] 8.3 Quickstart in the README that matches what the CLI actually does

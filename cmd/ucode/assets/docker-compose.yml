@@ -40,6 +40,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    mem_limit: 512M
     restart: unless-stopped
     networks: [ucode]
     environment:
@@ -58,6 +59,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    mem_limit: 128M
     restart: unless-stopped
     networks: [ucode]
     ports: ["127.0.0.1:${UCODE_REDIS_PORT:-6380}:6379"]
@@ -70,6 +72,7 @@ services:
 
   minio:
     image: minio/minio:latest
+    mem_limit: 512M
     restart: unless-stopped
     networks: [ucode]
     command: server /data --console-address ":9001"
@@ -104,6 +107,7 @@ services:
   auth:
     <<: *service-defaults
     image: ${UCODE_IMAGE_PREFIX:-ucode}-auth:${UCODE_VERSION:-test}
+    mem_limit: 256M
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -122,6 +126,7 @@ services:
   company:
     <<: *service-defaults
     image: ${UCODE_IMAGE_PREFIX:-ucode}-company:${UCODE_VERSION:-test}
+    mem_limit: 256M
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -145,6 +150,7 @@ services:
   object-builder:
     <<: *service-defaults
     image: ${UCODE_IMAGE_PREFIX:-ucode}-object-builder:${UCODE_VERSION:-test}
+    mem_limit: 256M
     depends_on:
       postgres: {condition: service_healthy}
       minio: {condition: service_healthy}
@@ -166,6 +172,7 @@ services:
   gateway:
     <<: *service-defaults
     image: ${UCODE_IMAGE_PREFIX:-ucode}-gateway:${UCODE_VERSION:-test}
+    mem_limit: 384M
     depends_on: [auth, company, object-builder]
     environment:
       <<: [*redis-env, *peer-env]
@@ -185,6 +192,7 @@ services:
   admin:
     <<: *service-defaults
     image: ${UCODE_IMAGE_PREFIX:-ucode}-admin:${UCODE_VERSION:-test}
+    mem_limit: 128M
     depends_on: [gateway, auth]
     environment:
       UCODE_API_URL: ${UCODE_API_URL:-http://127.0.0.1:8000}

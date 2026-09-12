@@ -11,6 +11,18 @@ individual record and field.
 
 Docker is required. Everything else comes with the CLI.
 
+### What it needs
+
+| | |
+|---|---|
+| Memory | The stack uses about 300 MB across all eight containers. On macOS and Windows, Docker Desktop reserves its own virtual machine on top of that — budget 4 GB free for a comfortable time |
+| Disk | ~1.5 GB of images, plus whatever your data grows to |
+| CPU | Near idle once running |
+
+You never build anything to install ucode: `ucode start` pulls prebuilt images.
+Building from source is only for working on ucode itself, and that is the part
+that is heavy.
+
 ```bash
 ucode start
 ```
