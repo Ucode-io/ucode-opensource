@@ -73,13 +73,21 @@
 
 ## 5. Proof
 
-- [ ] 5.1 CI job that boots the compose stack, waits, creates a table and a
-      record through the API and asserts they come back
+- [x] 5.1 CI job that boots the compose stack, waits, creates a table and a
+      record through the API and asserts they come back — green on a real
+      runner in 6m49s
 - [ ] 5.2 Walk the seven acceptance steps by hand on a clean macOS machine
       (in progress: sign-in and table creation confirmed working)
 - [ ] 5.3 Repeat on Linux and on Apple Silicon
 - [ ] 5.4 Measure time from command to browser; the target is five minutes
       including image pulls
+
+## 6. Billing residue, and one more cache lie
+
+- [x] 6.3 MinIO is gone from Docker Hub — the whole repository, not just the
+      `latest` tag. It kept working locally because a year-old image sat in the
+      cache; CI failed on it every single run. Now pulled from quay.io, pinned
+      to a release, because a floating tag is exactly what disappeared
 
 ## 6. Billing residue outside company and gateway
 
@@ -115,7 +123,21 @@ pinned every core. Users must never have to do that.
 - [ ] 8.1 goreleaser config for darwin and linux, amd64 and arm64
 - [x] 8.2 Publish service images to ghcr.io from CI — workflow written, six
       images, amd64 and arm64. Not yet observed running on a real runner
-- [ ] 8.4 Watch the first images run and confirm the packages appear. Building
-      multi-arch under emulation is the slow part; if arm64 takes too long,
-      split it or drop to native arm runners
-- [ ] 8.3 Quickstart in the README that matches what the CLI actually does
+- [x] 8.4 Watch the first images run — green in 7m33s, six images for amd64 and
+      arm64. Emulation was not the problem it was expected to be
+- [x] 8.5 Make the six ghcr packages public — done. All six answer HTTP 200
+      anonymously for both linux/amd64 and linux/arm64, manifests and layer
+      blobs alike. Note the check itself: a bare unauthenticated request to
+      ghcr returns 401 for public and private packages alike, because that is
+      the registry auth challenge, not a visibility signal. The real check is
+      to take an anonymous token from `ghcr.io/token?scope=repository:...:pull`
+      and fetch the manifest with it
+- [ ] 8.3 Quickstart in the README that matches what the CLI actually does.
+      Blocking, and larger than it looks: the README opens with `ucode start`
+      but never says how to obtain the `ucode` binary, and the "Without the
+      CLI" fallback needs a clone of a repository that is private. Public
+      images on their own install nothing — 8.1 has to land first
+- [ ] 8.6 Exercise the default image path end to end. Every local run so far
+      used `UCODE_VERSION=local` against images built on this machine; the
+      `:latest`-from-ghcr path that a stranger actually gets has never been
+      run. MinIO is the precedent for trusting a warm cache
