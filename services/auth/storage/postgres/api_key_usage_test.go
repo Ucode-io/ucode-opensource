@@ -12,7 +12,9 @@ import (
 
 func apiKeyUsageBulkUpsert(t *testing.T) {
 	usage := &pb.ApiKeyUsage{
-		ApiKey:       "P-iTSqj09ucK9IySQIoL6cr6T8lk23MYAB",
+		// A fixture, not a key: this only has to be a distinct string in a
+		// throwaway database. The real format is "P-" and 32 characters.
+		ApiKey:       "P-test000000000000000000000000000",
 		RequestCount: 21,
 	}
 
