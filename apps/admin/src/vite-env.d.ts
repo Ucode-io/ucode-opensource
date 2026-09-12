@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_ICON_CDN_URL: string;
   /** Хранилище файлов: ручка загрузки отдаёт путь, а не адрес. */
   readonly VITE_CDN_URL: string;
+  /** Ключ Яндекс.Карт. Пустой — редакторы точки и области скажут, что карт нет. */
+  readonly VITE_YANDEX_MAPS_API_KEY: string;
 }
 
 interface ImportMeta {

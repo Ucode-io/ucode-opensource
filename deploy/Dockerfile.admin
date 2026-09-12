@@ -27,6 +27,7 @@ ENV VITE_API_URL=__UCODE_API_URL__
 ENV VITE_AUTH_URL=__UCODE_AUTH_URL__
 ENV VITE_CDN_URL=__UCODE_CDN_URL__
 ENV VITE_ICON_CDN_URL=__UCODE_ICON_CDN_URL__
+ENV VITE_YANDEX_MAPS_API_KEY=__UCODE_YANDEX_MAPS_API_KEY__
 # Empty on purpose: Google sign-in is optional and the app skips the provider
 # when it is not configured.
 ENV VITE_GOOGLE_CLIENT_ID=

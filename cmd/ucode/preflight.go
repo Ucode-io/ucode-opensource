@@ -33,7 +33,9 @@ var publishedPorts = []struct {
 // to fail telling you to stop whatever was using the ports — which was ucode.
 func preflight(stackRunning bool) error {
 	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker is not installed.\nucode runs the platform in containers; install Docker and try again")
+		return fmt.Errorf("docker is not installed.\n" +
+			"ucode runs the platform in containers, so Docker is the one thing\n" +
+			"you have to install yourself: https://docs.docker.com/get-docker/")
 	}
 
 	if err := exec.Command("docker", "info").Run(); err != nil {

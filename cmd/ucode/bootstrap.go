@@ -102,6 +102,48 @@ func retryable(err error) bool {
 	return false
 }
 
+// verifySetup confirms the installation actually works, by doing what the
+// first user does: signing in as the admin and resolving a project.
+//
+// This is not belt and braces. Creating the first company writes the company
+// row before it registers the project's builder resource on object-builder,
+// and those are not one transaction. If object-builder is not listening yet,
+// the company survives and the resource does not — and every later attempt is
+// refused with "only one company allowed", which is indistinguishable from a
+// finished installation. That combination used to be reported as success, and
+// the user met it as a login that failed with "user project not found".
+//
+// The compose file now makes company wait for object-builder to answer, which
+// should stop it happening. This catches it if it happens anyway, because a
+// wrong "ucode is running" costs more than a slow failure.
+func verifySetup(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for {
+		if _, err := newAPIClient(); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf(`the platform was created but the admin cannot sign in:
+%v
+
+Part of the first-run setup did not finish. Start over with:
+
+    ucode reset
+    ucode start
+
+If it happens again, "ucode logs company" and "ucode logs object-builder"
+will show which step failed`, lastErr)
+}
+
 func registerCompany() error {
 	body, err := json.Marshal(registerRequest{
 		Name: "ucode",

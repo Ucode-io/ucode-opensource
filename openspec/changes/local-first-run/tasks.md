@@ -42,11 +42,32 @@
 - [x] 3.4 Wait for readiness: poll auth-service and the gateway until they answer
 - [x] 3.5 First-run bootstrap: `POST /company` with the default admin, store a
       marker so it happens once
-- [ ] 3.8 Make the bootstrap survive a partial failure. Verified by hand: the
-      company row is written before the admin user, so any later failure leaves
-      it behind and every retry then fails with "only one company allowed".
-      Either wrap Register in a transaction or have the CLI detect and clear the
-      half-created state
+- [x] 3.8 Make the bootstrap survive a partial failure — **hit in the wild**
+      on a second laptop 2026-09-12, and it cost a demo. company-service
+      registers the project's builder resource on object-builder over gRPC
+      while creating the first project, and nothing made it wait for that
+      service to listen. On a slower machine it lost the race:
+
+          AddResource -> dial tcp 172.18.0.7:7107: connect: connection refused
+
+      The company row survived, the builder resource did not, and the retry was
+      refused with "only one company allowed" — which the CLI read as "already
+      set up" and reported as success. The user met a login that failed with
+      "user project not found" on an installation that said it was running.
+
+      Two fixes. object-builder now has a healthcheck that proves 7107 answers
+      (`nc -z`), and company and gateway wait on `service_healthy` rather than
+      on the container merely existing — `depends_on` alone only waits for the
+      container to start, which is the trap. And `verifySetup` now signs in as
+      the admin before the install is called done, so a half-built setup fails
+      loudly instead of quietly.
+
+      Verified: object-builder healthy after 5 checks, company started 2.9s
+      behind it, smoke green. Still not transactional — a rollback would be the
+      real fix; this makes the failure both unlikely and visible
+- [ ] 3.10 Make company registration transactional, or have the CLI clear a
+      half-created company itself. 3.8 stops the known race and reports the
+      damage, but the two writes are still not one unit
 - [x] 3.9 Preflight must check ports. Port 5432 was already taken on the test
       machine and compose failed with a raw Docker error
 - [x] 3.6 Print credentials and open the browser
@@ -147,6 +168,12 @@ pinned every core. Users must never have to do that.
       against. `v0.1.0` publishes images `0.1.0` and a CLI reporting `0.1.0`;
       dev builds still track `latest`. Covered by cmd/ucode/env_test.go, which
       was mutation-checked
+- [ ] 8.8 Sign and notarise the macOS binaries. Unsigned, they are quarantined
+      on arrival and macOS refuses to run them: the user is shown "Apple could
+      not verify… Move to Trash", with no obvious way forward. Confirmed on a
+      second laptop 2026-09-12; `xattr -d com.apple.quarantine` cleared it, but
+      that is not something to put in a quickstart. Needs a paid Developer ID
+      and a notarytool step in the release workflow
 - [ ] 8.6 Exercise the default image path end to end. Every local run so far
       used `UCODE_VERSION=local` against images built on this machine; the
       `:latest`-from-ghcr path that a stranger actually gets has never been

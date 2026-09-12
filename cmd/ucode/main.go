@@ -75,6 +75,11 @@ func startCmd() *cobra.Command {
 				case err != nil:
 					return err
 				}
+				step("Checking that the admin can sign in")
+				if err := verifySetup(2 * time.Minute); err != nil {
+					return err
+				}
+
 				if err := s.markBootstrapped(); err != nil {
 					return err
 				}

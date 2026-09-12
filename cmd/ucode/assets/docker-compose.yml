@@ -135,6 +135,11 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
       migrate: {condition: service_completed_successfully}
+      # Creating the first project registers a builder resource on
+      # object-builder over gRPC. Starting before it listens is what breaks
+      # first run: the company row is written, the resource is not, and the
+      # admin then cannot sign in ("user project not found").
+      object-builder: {condition: service_healthy}
     environment:
       <<: [*postgres-env, *redis-env, *peer-env]
       SERVICE_NAME: company_service
@@ -172,12 +177,25 @@ services:
       MINIO_SSL: ${MINIO_SSL}
       MINIO_FOLDER: ${MINIO_FOLDER}
     ports: ["127.0.0.1:7107:7107"]
+    # A published port proves nothing: Docker binds it the moment the
+    # container starts, long before the process inside listens. depends_on
+    # alone waits only for the container, so it needs a real check.
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 7107 || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 45
 
   gateway:
     <<: *service-defaults
     image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/gateway:${UCODE_VERSION:-latest}
     mem_limit: 384M
-    depends_on: [auth, company, object-builder]
+    depends_on:
+      auth: {condition: service_started}
+      company: {condition: service_started}
+      # The gateway proxies straight to object-builder, so waiting for the
+      # container is not enough here either.
+      object-builder: {condition: service_healthy}
     environment:
       <<: [*redis-env, *peer-env]
       SERVICE_NAME: gateway
@@ -201,6 +219,7 @@ services:
     environment:
       UCODE_API_URL: ${UCODE_API_URL:-http://127.0.0.1:8000}
       UCODE_AUTH_URL: ${UCODE_AUTH_URL:-http://127.0.0.1:9104}
+      UCODE_YANDEX_MAPS_API_KEY: ${UCODE_YANDEX_MAPS_API_KEY:-}
     ports: ["127.0.0.1:${UCODE_ADMIN_PORT:-3000}:80"]
 
 

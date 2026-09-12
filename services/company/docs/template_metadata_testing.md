@@ -195,7 +195,7 @@ Tests skip gracefully with informative messages:
 Tests use the same configuration as the main application:
 
 - Database connection details from `.env` file
-- Remote database connection (95.217.155.57:30034)
+- Remote database connection
 - Company service database
 
 ### Test Setup
