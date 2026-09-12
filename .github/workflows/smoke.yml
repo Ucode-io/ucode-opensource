@@ -21,7 +21,9 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: services/gateway/go.mod
+          # go.work carries the highest requirement across the modules; a
+          # single module's go.mod would install a Go too old for the others.
+          go-version-file: go.work
           cache: false
 
       - name: Build images
