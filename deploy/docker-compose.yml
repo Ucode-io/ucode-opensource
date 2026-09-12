@@ -71,7 +71,11 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    # quay.io, and pinned: MinIO stopped publishing to Docker Hub, so
+    # `minio/minio:latest` cannot be pulled at all any more. It only kept
+    # working here because the image was already in the local cache — CI, with
+    # nothing cached, failed on the very first run.
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
     mem_limit: 512M
     restart: unless-stopped
     networks: [ucode]
