@@ -27,13 +27,21 @@ var publishedPorts = []struct {
 
 // preflight refuses to start rather than letting docker fail with a raw error
 // halfway through bringing containers up.
-func preflight() error {
+//
+// The port check is skipped when our own stack already holds them: `ucode
+// start` on a running installation is a reasonable thing to type, and it used
+// to fail telling you to stop whatever was using the ports — which was ucode.
+func preflight(stackRunning bool) error {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return fmt.Errorf("docker is not installed.\nucode runs the platform in containers; install Docker and try again")
 	}
 
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		return fmt.Errorf("docker is installed but not running.\nStart Docker Desktop (or the docker daemon) and try again")
+	}
+
+	if stackRunning {
+		return nil
 	}
 
 	var taken []string

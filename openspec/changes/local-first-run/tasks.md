@@ -61,10 +61,15 @@
 
 ## 4. Demo project
 
-- [ ] 4.1 Decide the demo's shape — a small, obviously-not-real dataset
-- [ ] 4.2 Create it through the public API, not by touching the database, so it
+- [x] 4.1 Decide the demo's shape — a small, obviously-not-real dataset
+- [x] 4.2 Create it through the public API, not by touching the database, so it
       exercises the same path a user would
-- [ ] 4.3 Make it idempotent: a second run must not duplicate it
+- [x] 4.3 Make it idempotent: a second run must not duplicate it
+- [x] 4.4 Stop preflight refusing to start when our own stack holds the ports.
+      `ucode start` on a running installation told the user to stop whatever was
+      using them — which was ucode
+- [x] 4.5 Treat "only one company allowed" as already bootstrapped rather than
+      an error. Losing the marker file used to make every later start fail
 
 ## 5. Proof
 

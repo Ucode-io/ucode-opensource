@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,6 +51,10 @@ type registerUser struct {
 // a published port as soon as the container starts, so a successful TCP
 // connect says nothing about whether the process inside is listening yet. The
 // call itself is the only honest signal.
+// errAlreadyBootstrapped means the platform is already set up — the marker
+// file was lost or never written, but the company exists.
+var errAlreadyBootstrapped = errors.New("already bootstrapped")
+
 func bootstrap(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -59,6 +64,9 @@ func bootstrap(timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
+		if alreadyBootstrapped(err) {
+			return errAlreadyBootstrapped
+		}
 		if !retryable(err) {
 			return err
 		}
@@ -67,6 +75,13 @@ func bootstrap(timeout time.Duration) error {
 	}
 
 	return fmt.Errorf("the services never became ready within %s.\nLast error:\n%v", timeout, lastErr)
+}
+
+// alreadyBootstrapped distinguishes "this installation is set up" from a real
+// failure. company-service refuses a second company outside production, which
+// is exactly what a re-run looks like.
+func alreadyBootstrapped(err error) bool {
+	return strings.Contains(err.Error(), "only one company allowed")
 }
 
 // retryable reports whether an attempt failed because something was still
@@ -110,9 +125,7 @@ func registerCompany() error {
 
 	payload, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("creating the first company failed (HTTP %d):\n%s\n\n"+
-			"If this says \"only one company allowed\", an earlier attempt left a half-created\n"+
-			"company behind. Run \"ucode reset\" and start again",
+		return fmt.Errorf("creating the first company failed (HTTP %d): %s",
 			resp.StatusCode, bytes.TrimSpace(payload))
 	}
 	return nil

@@ -141,3 +141,16 @@ func (s *stack) envValue(key string) string {
 	}
 	return ""
 }
+
+// running reports whether this installation already has containers up, so
+// callers can tell "the ports are busy" apart from "the ports are ours".
+func (s *stack) running() bool {
+	if _, err := os.Stat(s.composePath()); err != nil {
+		return false
+	}
+	out, err := s.output("ps", "--quiet")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(out) != ""
+}

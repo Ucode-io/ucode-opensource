@@ -8,6 +8,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -47,7 +48,7 @@ func startCmd() *cobra.Command {
 				return err
 			}
 
-			if err := preflight(); err != nil {
+			if err := preflight(s.running()); err != nil {
 				return err
 			}
 
@@ -68,11 +69,21 @@ func startCmd() *cobra.Command {
 
 			if !s.bootstrapped() {
 				step("Creating the first company and admin")
-				if err := bootstrap(5 * time.Minute); err != nil {
+				switch err := bootstrap(5 * time.Minute); {
+				case errors.Is(err, errAlreadyBootstrapped):
+					// The platform is set up; only the marker was missing.
+				case err != nil:
 					return err
 				}
 				if err := s.markBootstrapped(); err != nil {
 					return err
+				}
+
+				step("Adding a demo project")
+				// An empty workspace is a poor first impression, but a missing
+				// demo is not a reason to fail a working installation.
+				if err := seedDemo(); err != nil {
+					fmt.Fprintf(os.Stderr, "  could not add the demo data: %v\n", err)
 				}
 			}
 
