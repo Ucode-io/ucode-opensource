@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-09-12
+# Parked until the product owner writes the list of limits. There are no specs
+# to declare yet: deciding where the boundary runs is the open question, and
+# writing a spec now would fix a line nobody agreed to.
+skip_specs: true

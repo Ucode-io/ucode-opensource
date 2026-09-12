@@ -94,7 +94,7 @@ services:
   # Applies each service's own schema once, then exits. The per-project
   # databases are migrated later, at runtime, by object-builder.
   migrate:
-    image: ${UCODE_IMAGE_PREFIX:-ucode}-migrate:${UCODE_VERSION:-test}
+    image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/migrate:${UCODE_VERSION:-latest}
     networks: [ucode]
     depends_on:
       postgres: {condition: service_healthy}
@@ -106,7 +106,7 @@ services:
 
   auth:
     <<: *service-defaults
-    image: ${UCODE_IMAGE_PREFIX:-ucode}-auth:${UCODE_VERSION:-test}
+    image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/auth:${UCODE_VERSION:-latest}
     mem_limit: 256M
     depends_on:
       postgres: {condition: service_healthy}
@@ -125,7 +125,7 @@ services:
 
   company:
     <<: *service-defaults
-    image: ${UCODE_IMAGE_PREFIX:-ucode}-company:${UCODE_VERSION:-test}
+    image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/company:${UCODE_VERSION:-latest}
     mem_limit: 256M
     depends_on:
       postgres: {condition: service_healthy}
@@ -149,7 +149,7 @@ services:
 
   object-builder:
     <<: *service-defaults
-    image: ${UCODE_IMAGE_PREFIX:-ucode}-object-builder:${UCODE_VERSION:-test}
+    image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/object-builder:${UCODE_VERSION:-latest}
     mem_limit: 256M
     depends_on:
       postgres: {condition: service_healthy}
@@ -171,7 +171,7 @@ services:
 
   gateway:
     <<: *service-defaults
-    image: ${UCODE_IMAGE_PREFIX:-ucode}-gateway:${UCODE_VERSION:-test}
+    image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/gateway:${UCODE_VERSION:-latest}
     mem_limit: 384M
     depends_on: [auth, company, object-builder]
     environment:
@@ -191,7 +191,7 @@ services:
   # published image works for any installation.
   admin:
     <<: *service-defaults
-    image: ${UCODE_IMAGE_PREFIX:-ucode}-admin:${UCODE_VERSION:-test}
+    image: ${UCODE_IMAGE_PREFIX:-ghcr.io/ucode-io/ucode-opensource}/admin:${UCODE_VERSION:-latest}
     mem_limit: 128M
     depends_on: [gateway, auth]
     environment:

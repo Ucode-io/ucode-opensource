@@ -33,6 +33,10 @@ jobs:
         run: make cli
 
       - name: Start the stack
+        # The images built a step ago, not whatever is published — the point is
+        # to test this commit.
+        env:
+          UCODE_VERSION: local
         run: ./bin/ucode start --no-browser
 
       - name: Walk the user path

@@ -107,11 +107,15 @@ pinned every core. Users must never have to do that.
       runaway Postgres or MinIO has nothing stopping it
 - [x] 7.5 State the requirements in the README: memory, disk, Docker, and that
       building from source is not part of installing
-- [ ] 7.6 Make ghcr.io images the default in the compose file, so `ucode start`
+- [x] 7.6 Make ghcr.io images the default in the compose file, so `ucode start`
       pulls rather than expecting locally built `:test` tags
 
 ## 8. Release
 
 - [ ] 8.1 goreleaser config for darwin and linux, amd64 and arm64
-- [ ] 8.2 Publish service images to ghcr.io from CI
+- [x] 8.2 Publish service images to ghcr.io from CI — workflow written, six
+      images, amd64 and arm64. Not yet observed running on a real runner
+- [ ] 8.4 Watch the first images run and confirm the packages appear. Building
+      multi-arch under emulation is the slow part; if arm64 takes too long,
+      split it or drop to native arm runners
 - [ ] 8.3 Quickstart in the README that matches what the CLI actually does
