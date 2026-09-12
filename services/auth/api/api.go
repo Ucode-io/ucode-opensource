@@ -47,12 +47,6 @@ func SetUpRouter(h handlers.Handler, cfg config.BaseConfig, tracer opentracing.T
 	v3 := r.Group("/v3")
 	{
 		v3.POST("/multicompany/default-login", h.V3MultiCompanyLogin)
-
-		v3.POST("/ugen/register", h.UgenRegister)
-		v3.POST("/ugen/login", h.UgenLogin)
-		v3.GET("/ugen/auth/google", h.UgenGoogleAuth)
-		v3.GET("/ugen/auth/google/callback", h.UgenGoogleCallback)
-		v3.GET("/ugen/auth/session", h.UgenAuthSession)
 	}
 	v2.Use(h.AuthMiddleware())
 	{

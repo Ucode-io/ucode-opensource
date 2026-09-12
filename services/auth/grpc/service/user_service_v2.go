@@ -553,13 +553,6 @@ func (s *userService) V2CreateUser(ctx context.Context, req *pb.CreateUserReques
 			s.log.Error("!!!V2CreateUser--->checkUserProjectLimit", logger.Error(limitErr))
 			return nil, limitErr
 		}
-
-		if project.GetIsUgen() {
-			if limitErr := checkUgenBuildersLimit(ctx, s.services, s.strg, project.GetFareId(), project.GetProjectId()); limitErr != nil {
-				s.log.Error("!!!V2CreateUser--->checkUgenBuildersLimit", logger.Error(limitErr))
-				return nil, limitErr
-			}
-		}
 	}
 
 	if len(userId) == 0 {
