@@ -92,7 +92,7 @@ admin the CLI creates for you — you get the stack, not the finished setup.
 | `services/company` | Companies, projects, environments, resources |
 | `services/gateway` | The only service clients talk to directly |
 | `apps/admin` | The admin panel — TypeScript, TanStack Router and Query |
-| `proto/` | The gRPC contracts between services |
+| `services/*/protos/` | The gRPC contracts between services. Each service carries the ones it speaks; `make proto` regenerates the Go bindings from them |
 | `cmd/ucode` | The CLI above |
 
 ### How a request flows
@@ -119,6 +119,7 @@ make test-integration # integration tests; starts throwaway Postgres containers
 make cli              # build bin/ucode
 make images           # build the container images locally
 make smoke            # walk the user path against a running stack
+make proto            # regenerate the gRPC bindings
 ```
 
 To run the stack from images you just built rather than the published ones:

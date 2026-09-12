@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"time"
 
 	pb "github.com/Ucode-io/ucode-opensource/services/company/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/company/models"
@@ -65,12 +64,6 @@ func (c *projectRepo) Create(ctx context.Context, id string, project *pb.CreateP
 		err    error
 	)
 
-	if project.IsUgen {
-		if err := c.validateUgenUniqueness(ctx, project.CompanyId); err != nil {
-			return nil, err
-		}
-	}
-
 	insertProject :=
 		`INSERT INTO project(
 			id,
@@ -78,10 +71,9 @@ func (c *projectRepo) Create(ctx context.Context, id string, project *pb.CreateP
 			company_id,
 			k8s_namespace,
 			fare_id,
-			is_ugen,
 			per_user_price,
 			per_user_currency_id
-		) VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, NULLIF($8, '')::uuid) RETURNING id`
+		) VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, NULLIF($7, '')::uuid) RETURNING id`
 
 	err = c.db.QueryRow(
 		ctx,
@@ -91,7 +83,6 @@ func (c *projectRepo) Create(ctx context.Context, id string, project *pb.CreateP
 		project.CompanyId,
 		"cp-region-type-id", //@TODO:: use k8snamespace coming from request
 		project.FareId,
-		project.IsUgen,
 		project.PerUserPrice,
 		project.PerUserCurrencyId,
 	).Scan(&result)
@@ -156,7 +147,6 @@ func (c *projectRepo) GetById(ctx context.Context, projectId string) (*pb.Projec
 					LIMIT 1
 				) AS subscription_info,
 				customer_id,
-				is_ugen,
 				COALESCE(p.per_user_price, 0),
 				COALESCE(p.per_user_currency_id::text, '')
 			FROM project p
@@ -193,7 +183,6 @@ func (c *projectRepo) GetById(ctx context.Context, projectId string) (*pb.Projec
 		&currenciesString,
 		&subscriptionInfo,
 		&resp.CustomerId,
-		&resp.IsUgen,
 		&resp.PerUserPrice,
 		&resp.PerUserCurrencyId,
 	)
@@ -251,34 +240,6 @@ func (c *projectRepo) GetById(ctx context.Context, projectId string) (*pb.Projec
 	return &resp, nil
 }
 
-// GetUgenProjectByCompanyId returns the company's single head (is_ugen) project.
-// Uniqueness of the ugen project per company is guaranteed by validateUgenUniqueness,
-// so this returns at most one row. The balance it carries is the one charged for
-// paid template imports and paid user seats.
-func (c *projectRepo) GetUgenProjectByCompanyId(ctx context.Context, companyId string) (*pb.Project, error) {
-	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.GetUgenProjectByCompanyId")
-	defer dbSpan.Finish()
-
-	var resp pb.Project
-	stmt := `SELECT id, company_id, COALESCE(k8s_namespace, ''), COALESCE(title, ''),
-				COALESCE(balance, 0), COALESCE(credit_limit, 0), is_ugen,
-				COALESCE(per_user_price, 0), COALESCE(per_user_currency_id::text, '')
-			 FROM project
-			 WHERE company_id = $1 AND is_ugen = true AND deleted_at IS NULL
-			 LIMIT 1`
-
-	err := c.db.QueryRow(ctx, stmt, companyId).Scan(
-		&resp.ProjectId, &resp.CompanyId, &resp.K8SNamespace, &resp.Title,
-		&resp.Balance, &resp.CreditLimit, &resp.IsUgen,
-		&resp.PerUserPrice, &resp.PerUserCurrencyId,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "projectRepo.GetUgenProjectByCompanyId")
-	}
-
-	return &resp, nil
-}
-
 func (c *projectRepo) GetList(ctx context.Context, queryParam *pb.GetProjectListRequest) (*pb.GetProjectListResponse, error) {
 	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.GetList")
 	defer dbSpan.Finish()
@@ -311,8 +272,7 @@ func (c *projectRepo) GetList(ctx context.Context, queryParam *pb.GetProjectList
 					) AS subscription_info,
 					p.new_design,
 					p.new_layout,
-					p.new_router,
-					p.is_ugen
+					p.new_router
 
 				FROM
 					"project" p
@@ -391,7 +351,6 @@ func (c *projectRepo) GetList(ctx context.Context, queryParam *pb.GetProjectList
 			&obj.NewDesign,
 			&obj.NewLayout,
 			&obj.NewRouter,
-			&obj.IsUgen,
 		)
 
 		if err != nil {
@@ -485,18 +444,6 @@ func (c *projectRepo) Update(ctx context.Context, project *pb.Project) (*pb.Proj
 		params["timezone_id"] = project.GetTimezone().GetId()
 		updateQuery += `, timezone_id = :timezone_id`
 	}
-
-	if project.IsUgen {
-		var current bool
-		err := c.db.QueryRow(ctx, `SELECT is_ugen FROM project WHERE id = $1`, project.ProjectId).Scan(&current)
-		if err == nil && !current {
-			if err := c.validateUgenUniqueness(ctx, project.CompanyId); err != nil {
-				return nil, err
-			}
-		}
-	}
-	params["is_ugen"] = project.GetIsUgen()
-	updateQuery += `, is_ugen = :is_ugen`
 
 	query := updateQuery + filter
 
@@ -1714,348 +1661,4 @@ func (p *projectRepo) UpdateProjectBalance(ctx context.Context, projectId string
 	}
 
 	return nil
-}
-
-func (p *projectRepo) validateUgenUniqueness(ctx context.Context, companyId string) error {
-	var (
-		count int
-		query = `SELECT count(1) FROM project WHERE company_id = $1 AND is_ugen = true AND deleted_at IS NULL`
-	)
-
-	err := p.db.QueryRow(ctx, query, companyId).Scan(&count)
-	if err != nil {
-		return err
-	}
-
-	if count > 0 {
-		return errors.New("company already has a ugen project")
-	}
-
-	return nil
-}
-
-func (p *projectRepo) GetProjectUgenStatus(ctx context.Context, req *pb.GetProjectUgenStatusRequest) (*pb.GetProjectUgenStatusResponse, error) {
-	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.GetProjectUgenStatus")
-	defer dbSpan.Finish()
-
-	var (
-		isUgen sql.NullBool
-		count  int
-
-		query = `SELECT
-				(SELECT is_ugen FROM project WHERE id = $1 AND deleted_at IS NULL),
-				(SELECT count(1) FROM project WHERE company_id = $2 AND deleted_at IS NULL)
-		`
-	)
-
-	err := p.db.QueryRow(ctx, query, req.ProjectId, req.CompanyId).Scan(&isUgen, &count)
-
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, p.db.HandleDatabaseError(err, "GetProjectUgenStatus")
-	}
-
-	return &pb.GetProjectUgenStatusResponse{
-		IsUgen:               isUgen.Bool,
-		CompanyProjectsCount: int32(count),
-	}, nil
-}
-
-func (p *projectRepo) UpdateProjectUgenAccess(ctx context.Context, req *pb.UpdateProjectUgenAccessRequest) (*pb.UpdateProjectUgenAccessResponse, error) {
-	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.UpdateProjectUgenAccess")
-	defer dbSpan.Finish()
-
-	tx, err := p.db.Begin(ctx)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "UpdateProjectUgenAccess begin tx")
-	}
-	defer tx.Rollback(ctx)
-
-	var (
-		count int
-		query = `SELECT count(1) FROM project WHERE company_id = $1 AND is_ugen = true AND deleted_at IS NULL AND id != $2`
-	)
-
-	err = tx.QueryRow(ctx, query, req.CompanyId, req.ProjectId).Scan(&count)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "UpdateProjectUgenAccess validate")
-	}
-	if count > 0 {
-		return nil, errors.New("company already has a ugen project")
-	}
-
-	query = `UPDATE project SET is_ugen = true WHERE id = $1 AND company_id = $2 AND deleted_at IS NULL`
-	_, err = tx.Exec(ctx, query, req.ProjectId, req.CompanyId)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "UpdateProjectUgenAccess set true")
-	}
-
-	query = `UPDATE project SET is_ugen = false WHERE id != $1 AND company_id = $2 AND deleted_at IS NULL`
-	_, err = tx.Exec(ctx, query, req.ProjectId, req.CompanyId)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "UpdateProjectUgenAccess set false")
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		return nil, p.db.HandleDatabaseError(err, "UpdateProjectUgenAccess commit")
-	}
-
-	project, err := p.GetById(ctx, req.ProjectId)
-	if err != nil {
-		return nil, err
-	}
-
-	return &pb.UpdateProjectUgenAccessResponse{
-		Project: project,
-	}, nil
-}
-
-func (p *projectRepo) AutoAssignUgenIfSingle(ctx context.Context, req *pb.AutoAssignUgenIfSingleRequest) (*pb.AutoAssignUgenIfSingleResponse, error) {
-	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.AutoAssignUgenIfSingle")
-	defer dbSpan.Finish()
-
-	var (
-		count int
-		query = `SELECT count(1) FROM project WHERE company_id = $1 AND deleted_at IS NULL`
-	)
-	err := p.db.QueryRow(ctx, query, req.CompanyId).Scan(&count)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "AutoAssignUgenIfSingle count")
-	}
-
-	if count == 1 {
-		query = `UPDATE project SET is_ugen = true WHERE company_id = $1 AND deleted_at IS NULL`
-		_, err = p.db.Exec(ctx, query, req.CompanyId)
-		if err != nil {
-			return nil, p.db.HandleDatabaseError(err, "AutoAssignUgenIfSingle update")
-		}
-		return &pb.AutoAssignUgenIfSingleResponse{Assigned: true}, nil
-	}
-
-	return &pb.AutoAssignUgenIfSingleResponse{Assigned: false}, nil
-}
-
-func (p *projectRepo) ListUgenProjects(ctx context.Context, req *pb.ListUgenProjectsRequest) (*pb.ListUgenProjectsResponse, error) {
-	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.ListUgenProjects")
-	defer dbSpan.Finish()
-
-	limit := req.GetLimit()
-	if limit <= 0 {
-		limit = 10
-	}
-	offset := req.GetOffset()
-	if offset < 0 {
-		offset = 0
-	}
-
-	var query = `
-		SELECT
-			p.id,
-			p.title,
-			p.company_id,
-			p.k8s_namespace,
-			p.logo,
-			p.fare_id,
-			p.balance,
-			p.credit_limit,
-			p.status,
-			p.created_at,
-			p.updated_at,
-			COALESCE(e.id::text, '')        AS environment_id,
-			cp.cnt                          AS company_projects_count,
-			au.last_activity                AS last_activity_date,
-			COUNT(*) OVER()                 AS total_count
-		FROM project p
-		LEFT JOIN LATERAL (
-			SELECT id
-			FROM environment
-			WHERE project_id = p.id
-			ORDER BY (name = 'Production') DESC, created_at ASC
-			LIMIT 1
-		) e ON TRUE
-		LEFT JOIN LATERAL (
-			SELECT COUNT(*)::int AS cnt
-			FROM project
-			WHERE company_id = p.company_id
-			  AND deleted_at IS NULL
-		) cp ON TRUE
-		LEFT JOIN LATERAL (
-			SELECT MAX(created_at) AS last_activity
-			FROM ai_token_usage
-			WHERE company_id = p.company_id
-		) au ON TRUE
-		WHERE p.is_ugen = TRUE
-		  AND p.deleted_at IS NULL
-		  AND p.company_id IS NOT NULL
-		  AND ($1::text = '' OR p.title ILIKE '%' || $1 || '%')
-		ORDER BY p.created_at DESC
-		LIMIT $2 OFFSET $3
-	`
-
-	rows, err := p.db.Query(ctx, query, req.GetSearch(), limit, offset)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "ListUgenProjects query")
-	}
-	defer rows.Close()
-
-	res := &pb.ListUgenProjectsResponse{
-		Projects: []*pb.UgenProjectItem{},
-	}
-
-	var total int32
-	for rows.Next() {
-		var (
-			item                            = &pb.UgenProjectItem{}
-			logo, fareID, statusVal         sql.NullString
-			createdAt, updatedAt            sql.NullTime
-			lastActivity                    sql.NullTime
-			companyProjectsCount, totalRows int32
-		)
-
-		if err := rows.Scan(
-			&item.ProjectId,
-			&item.Title,
-			&item.CompanyId,
-			&item.K8SNamespace,
-			&logo,
-			&fareID,
-			&item.Balance,
-			&item.CreditLimit,
-			&statusVal,
-			&createdAt,
-			&updatedAt,
-			&item.EnvironmentId,
-			&companyProjectsCount,
-			&lastActivity,
-			&totalRows,
-		); err != nil {
-			return nil, p.db.HandleDatabaseError(err, "ListUgenProjects scan")
-		}
-
-		item.Logo = logo.String
-		item.FareId = fareID.String
-		item.Status = statusVal.String
-		if createdAt.Valid {
-			item.CreatedAt = createdAt.Time.Format(time.RFC3339)
-		}
-		if updatedAt.Valid {
-			item.UpdatedAt = updatedAt.Time.Format(time.RFC3339)
-		}
-		if lastActivity.Valid {
-			item.LastActivityDate = lastActivity.Time.Format(time.RFC3339)
-		}
-		item.CompanyProjectsCount = companyProjectsCount
-		total = totalRows
-
-		res.Projects = append(res.Projects, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, p.db.HandleDatabaseError(err, "ListUgenProjects rows")
-	}
-
-	res.Count = total
-	return res, nil
-}
-
-func (p *projectRepo) ListAllUgenProjects(ctx context.Context, search string) ([]*pb.UgenProjectItem, error) {
-	dbSpan, ctx := opentracing.StartSpanFromContext(ctx, "project.ListAllUgenProjects")
-	defer dbSpan.Finish()
-
-	var query = `
-		SELECT
-			p.id,
-			p.title,
-			p.company_id,
-			p.k8s_namespace,
-			p.logo,
-			p.fare_id,
-			p.balance,
-			p.credit_limit,
-			p.status,
-			p.created_at,
-			p.updated_at,
-			COALESCE(e.id::text, '')        AS environment_id,
-			cp.cnt                          AS company_projects_count,
-			au.last_activity                AS last_activity_date
-		FROM project p
-		LEFT JOIN LATERAL (
-			SELECT id
-			FROM environment
-			WHERE project_id = p.id
-			ORDER BY (name = 'Production') DESC, created_at ASC
-			LIMIT 1
-		) e ON TRUE
-		LEFT JOIN LATERAL (
-			SELECT COUNT(*)::int AS cnt
-			FROM project
-			WHERE company_id = p.company_id
-			  AND deleted_at IS NULL
-		) cp ON TRUE
-		LEFT JOIN LATERAL (
-			SELECT MAX(created_at) AS last_activity
-			FROM ai_token_usage
-			WHERE company_id = p.company_id
-		) au ON TRUE
-		WHERE p.is_ugen = TRUE
-		  AND p.deleted_at IS NULL
-		  AND p.company_id IS NOT NULL
-		  AND ($1::text = '' OR p.title ILIKE '%' || $1 || '%')
-		ORDER BY p.created_at DESC
-	`
-
-	rows, err := p.db.Query(ctx, query, search)
-	if err != nil {
-		return nil, p.db.HandleDatabaseError(err, "ListAllUgenProjects query")
-	}
-	defer rows.Close()
-
-	projects := []*pb.UgenProjectItem{}
-	for rows.Next() {
-		var (
-			item                    = &pb.UgenProjectItem{}
-			logo, fareID, statusVal sql.NullString
-			createdAt, updatedAt    sql.NullTime
-			lastActivity            sql.NullTime
-			companyProjectsCount    int32
-		)
-
-		if err := rows.Scan(
-			&item.ProjectId,
-			&item.Title,
-			&item.CompanyId,
-			&item.K8SNamespace,
-			&logo,
-			&fareID,
-			&item.Balance,
-			&item.CreditLimit,
-			&statusVal,
-			&createdAt,
-			&updatedAt,
-			&item.EnvironmentId,
-			&companyProjectsCount,
-			&lastActivity,
-		); err != nil {
-			return nil, p.db.HandleDatabaseError(err, "ListAllUgenProjects scan")
-		}
-
-		item.Logo = logo.String
-		item.FareId = fareID.String
-		item.Status = statusVal.String
-		if createdAt.Valid {
-			item.CreatedAt = createdAt.Time.Format(time.RFC3339)
-		}
-		if updatedAt.Valid {
-			item.UpdatedAt = updatedAt.Time.Format(time.RFC3339)
-		}
-		if lastActivity.Valid {
-			item.LastActivityDate = lastActivity.Time.Format(time.RFC3339)
-		}
-		item.CompanyProjectsCount = companyProjectsCount
-
-		projects = append(projects, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, p.db.HandleDatabaseError(err, "ListAllUgenProjects rows")
-	}
-
-	return projects, nil
 }

@@ -51,7 +51,6 @@ const (
 
 	// Product types
 	PRODUCT_TYPE_UCODE string = "ucode"
-	PRODUCT_TYPE_UGEN  string = "ugen"
 
 	// Subscription statuses
 	SUBSCRIPTION_STATUS_ACTIVE            = "active"

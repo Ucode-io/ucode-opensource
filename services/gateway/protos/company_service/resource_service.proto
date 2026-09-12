@@ -414,7 +414,7 @@ message MailchimpCredentials {
 // project-resource setting deliberately contains only public bot metadata and
 // the reference needed by trusted backend services to load the secret.
 // The selected table remains the project's source of truth for conversations.
-// Message and attachment records live in dedicated Ugen Telegram system tables.
+// Message and attachment records live in dedicated Telegram system tables.
 message TelegramChatMapping {
     string table_id = 1;
     string table_slug = 2;

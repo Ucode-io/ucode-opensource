@@ -3,7 +3,6 @@ package v1
 import (
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/models"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/api/status_http"
-	auth "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/auth_service"
 	pb "github.com/Ucode-io/ucode-opensource/services/gateway/genproto/company_service"
 	"github.com/Ucode-io/ucode-opensource/services/gateway/pkg/util"
 
@@ -28,9 +27,6 @@ func (h *HandlerV1) CreateEnvironment(c *gin.Context) {
 	var (
 		environmentRequest pb.CreateEnvironmentRequest
 		resp               = &pb.Environment{}
-
-		isUgen      = c.DefaultQuery("is_uagen", "false") == "true"
-		systemToken = c.GetHeader("system-token")
 	)
 
 	if err := c.ShouldBindJSON(&environmentRequest); err != nil {
@@ -79,25 +75,6 @@ func (h *HandlerV1) CreateEnvironment(c *gin.Context) {
 	environmentRequest.RoleId = tokenInfo.GetRoleId()
 	environmentRequest.UserId = tokenInfo.GetUserIdAuth()
 	environmentRequest.ClientTypeId = tokenInfo.GetClientTypeId()
-
-	if isUgen && systemToken != "" {
-		authService, conn, err := services.AuthService().Session(c.Request.Context())
-		if err != nil {
-			h.HandleResponse(c, status_http.GRPCError, err.Error())
-			return
-		}
-		defer conn.Close()
-
-		ugenUserInfo, err := authService.GetUserInfoByToken(c.Request.Context(), &auth.GetUserInfoByTokenReq{Token: systemToken})
-		if err != nil {
-			h.HandleResponse(c, status_http.GRPCError, err.Error())
-			return
-		}
-
-		environmentRequest.RoleId = ugenUserInfo.GetRoleId()
-		environmentRequest.UserId = ugenUserInfo.GetUserId()
-		environmentRequest.ClientTypeId = ugenUserInfo.GetClientTypeId()
-	}
 
 	var (
 		logReq = &models.CreateVersionHistoryRequest{

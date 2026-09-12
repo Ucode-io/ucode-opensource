@@ -30,7 +30,7 @@ func (h *Handler) RegisterCompany(c *gin.Context) {
 		return
 	}
 
-	company.IsUgen = false
+	// No billing in the open-source build, so no plan to put a company on.
 	company.FareId = ""
 
 	resp, err := h.services.CompanyService().Register(

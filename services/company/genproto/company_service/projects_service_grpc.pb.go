@@ -42,14 +42,6 @@ type ProjectServiceClient interface {
 	UpsertRecord(ctx context.Context, in *Record, opts ...grpc.CallOption) (*EmptyProto, error)
 	ListRecord(ctx context.Context, in *ListRecordRequest, opts ...grpc.CallOption) (*EmptyProto, error)
 	ListProjectsRPS(ctx context.Context, in *GetProjectListRequest, opts ...grpc.CallOption) (*ListProjectsRPSResponse, error)
-	GetProjectUgenStatus(ctx context.Context, in *GetProjectUgenStatusRequest, opts ...grpc.CallOption) (*GetProjectUgenStatusResponse, error)
-	UpdateProjectUgenAccess(ctx context.Context, in *UpdateProjectUgenAccessRequest, opts ...grpc.CallOption) (*UpdateProjectUgenAccessResponse, error)
-	AutoAssignUgenIfSingle(ctx context.Context, in *AutoAssignUgenIfSingleRequest, opts ...grpc.CallOption) (*AutoAssignUgenIfSingleResponse, error)
-	ListUgenProjects(ctx context.Context, in *ListUgenProjectsRequest, opts ...grpc.CallOption) (*ListUgenProjectsResponse, error)
-	ExportUgenProjects(ctx context.Context, in *ExportUgenProjectsRequest, opts ...grpc.CallOption) (*ExportUgenProjectsResponse, error)
-	// GetUgenProjectByCompanyId returns the company's single head (is_ugen) project,
-	// which holds the balance charged for paid template imports and paid user seats.
-	GetUgenProjectByCompanyId(ctx context.Context, in *GetUgenProjectByCompanyIdReq, opts ...grpc.CallOption) (*Project, error)
 }
 
 type projectServiceClient struct {
@@ -231,60 +223,6 @@ func (c *projectServiceClient) ListProjectsRPS(ctx context.Context, in *GetProje
 	return out, nil
 }
 
-func (c *projectServiceClient) GetProjectUgenStatus(ctx context.Context, in *GetProjectUgenStatusRequest, opts ...grpc.CallOption) (*GetProjectUgenStatusResponse, error) {
-	out := new(GetProjectUgenStatusResponse)
-	err := c.cc.Invoke(ctx, "/company_service.ProjectService/GetProjectUgenStatus", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *projectServiceClient) UpdateProjectUgenAccess(ctx context.Context, in *UpdateProjectUgenAccessRequest, opts ...grpc.CallOption) (*UpdateProjectUgenAccessResponse, error) {
-	out := new(UpdateProjectUgenAccessResponse)
-	err := c.cc.Invoke(ctx, "/company_service.ProjectService/UpdateProjectUgenAccess", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *projectServiceClient) AutoAssignUgenIfSingle(ctx context.Context, in *AutoAssignUgenIfSingleRequest, opts ...grpc.CallOption) (*AutoAssignUgenIfSingleResponse, error) {
-	out := new(AutoAssignUgenIfSingleResponse)
-	err := c.cc.Invoke(ctx, "/company_service.ProjectService/AutoAssignUgenIfSingle", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *projectServiceClient) ListUgenProjects(ctx context.Context, in *ListUgenProjectsRequest, opts ...grpc.CallOption) (*ListUgenProjectsResponse, error) {
-	out := new(ListUgenProjectsResponse)
-	err := c.cc.Invoke(ctx, "/company_service.ProjectService/ListUgenProjects", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *projectServiceClient) ExportUgenProjects(ctx context.Context, in *ExportUgenProjectsRequest, opts ...grpc.CallOption) (*ExportUgenProjectsResponse, error) {
-	out := new(ExportUgenProjectsResponse)
-	err := c.cc.Invoke(ctx, "/company_service.ProjectService/ExportUgenProjects", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *projectServiceClient) GetUgenProjectByCompanyId(ctx context.Context, in *GetUgenProjectByCompanyIdReq, opts ...grpc.CallOption) (*Project, error) {
-	out := new(Project)
-	err := c.cc.Invoke(ctx, "/company_service.ProjectService/GetUgenProjectByCompanyId", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // ProjectServiceServer is the server API for ProjectService service.
 // All implementations must embed UnimplementedProjectServiceServer
 // for forward compatibility
@@ -308,14 +246,6 @@ type ProjectServiceServer interface {
 	UpsertRecord(context.Context, *Record) (*EmptyProto, error)
 	ListRecord(context.Context, *ListRecordRequest) (*EmptyProto, error)
 	ListProjectsRPS(context.Context, *GetProjectListRequest) (*ListProjectsRPSResponse, error)
-	GetProjectUgenStatus(context.Context, *GetProjectUgenStatusRequest) (*GetProjectUgenStatusResponse, error)
-	UpdateProjectUgenAccess(context.Context, *UpdateProjectUgenAccessRequest) (*UpdateProjectUgenAccessResponse, error)
-	AutoAssignUgenIfSingle(context.Context, *AutoAssignUgenIfSingleRequest) (*AutoAssignUgenIfSingleResponse, error)
-	ListUgenProjects(context.Context, *ListUgenProjectsRequest) (*ListUgenProjectsResponse, error)
-	ExportUgenProjects(context.Context, *ExportUgenProjectsRequest) (*ExportUgenProjectsResponse, error)
-	// GetUgenProjectByCompanyId returns the company's single head (is_ugen) project,
-	// which holds the balance charged for paid template imports and paid user seats.
-	GetUgenProjectByCompanyId(context.Context, *GetUgenProjectByCompanyIdReq) (*Project, error)
 	mustEmbedUnimplementedProjectServiceServer()
 }
 
@@ -379,24 +309,6 @@ func (UnimplementedProjectServiceServer) ListRecord(context.Context, *ListRecord
 }
 func (UnimplementedProjectServiceServer) ListProjectsRPS(context.Context, *GetProjectListRequest) (*ListProjectsRPSResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProjectsRPS not implemented")
-}
-func (UnimplementedProjectServiceServer) GetProjectUgenStatus(context.Context, *GetProjectUgenStatusRequest) (*GetProjectUgenStatusResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetProjectUgenStatus not implemented")
-}
-func (UnimplementedProjectServiceServer) UpdateProjectUgenAccess(context.Context, *UpdateProjectUgenAccessRequest) (*UpdateProjectUgenAccessResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateProjectUgenAccess not implemented")
-}
-func (UnimplementedProjectServiceServer) AutoAssignUgenIfSingle(context.Context, *AutoAssignUgenIfSingleRequest) (*AutoAssignUgenIfSingleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method AutoAssignUgenIfSingle not implemented")
-}
-func (UnimplementedProjectServiceServer) ListUgenProjects(context.Context, *ListUgenProjectsRequest) (*ListUgenProjectsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListUgenProjects not implemented")
-}
-func (UnimplementedProjectServiceServer) ExportUgenProjects(context.Context, *ExportUgenProjectsRequest) (*ExportUgenProjectsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ExportUgenProjects not implemented")
-}
-func (UnimplementedProjectServiceServer) GetUgenProjectByCompanyId(context.Context, *GetUgenProjectByCompanyIdReq) (*Project, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetUgenProjectByCompanyId not implemented")
 }
 func (UnimplementedProjectServiceServer) mustEmbedUnimplementedProjectServiceServer() {}
 
@@ -753,114 +665,6 @@ func _ProjectService_ListProjectsRPS_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProjectService_GetProjectUgenStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetProjectUgenStatusRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProjectServiceServer).GetProjectUgenStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/company_service.ProjectService/GetProjectUgenStatus",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProjectServiceServer).GetProjectUgenStatus(ctx, req.(*GetProjectUgenStatusRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProjectService_UpdateProjectUgenAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateProjectUgenAccessRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProjectServiceServer).UpdateProjectUgenAccess(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/company_service.ProjectService/UpdateProjectUgenAccess",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProjectServiceServer).UpdateProjectUgenAccess(ctx, req.(*UpdateProjectUgenAccessRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProjectService_AutoAssignUgenIfSingle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AutoAssignUgenIfSingleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProjectServiceServer).AutoAssignUgenIfSingle(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/company_service.ProjectService/AutoAssignUgenIfSingle",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProjectServiceServer).AutoAssignUgenIfSingle(ctx, req.(*AutoAssignUgenIfSingleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProjectService_ListUgenProjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListUgenProjectsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProjectServiceServer).ListUgenProjects(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/company_service.ProjectService/ListUgenProjects",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProjectServiceServer).ListUgenProjects(ctx, req.(*ListUgenProjectsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProjectService_ExportUgenProjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExportUgenProjectsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProjectServiceServer).ExportUgenProjects(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/company_service.ProjectService/ExportUgenProjects",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProjectServiceServer).ExportUgenProjects(ctx, req.(*ExportUgenProjectsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProjectService_GetUgenProjectByCompanyId_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetUgenProjectByCompanyIdReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProjectServiceServer).GetUgenProjectByCompanyId(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/company_service.ProjectService/GetUgenProjectByCompanyId",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProjectServiceServer).GetUgenProjectByCompanyId(ctx, req.(*GetUgenProjectByCompanyIdReq))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ProjectService_ServiceDesc is the grpc.ServiceDesc for ProjectService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -943,30 +747,6 @@ var ProjectService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProjectsRPS",
 			Handler:    _ProjectService_ListProjectsRPS_Handler,
-		},
-		{
-			MethodName: "GetProjectUgenStatus",
-			Handler:    _ProjectService_GetProjectUgenStatus_Handler,
-		},
-		{
-			MethodName: "UpdateProjectUgenAccess",
-			Handler:    _ProjectService_UpdateProjectUgenAccess_Handler,
-		},
-		{
-			MethodName: "AutoAssignUgenIfSingle",
-			Handler:    _ProjectService_AutoAssignUgenIfSingle_Handler,
-		},
-		{
-			MethodName: "ListUgenProjects",
-			Handler:    _ProjectService_ListUgenProjects_Handler,
-		},
-		{
-			MethodName: "ExportUgenProjects",
-			Handler:    _ProjectService_ExportUgenProjects_Handler,
-		},
-		{
-			MethodName: "GetUgenProjectByCompanyId",
-			Handler:    _ProjectService_GetUgenProjectByCompanyId_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

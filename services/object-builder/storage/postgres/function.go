@@ -209,7 +209,7 @@ func (f *functionRepo) GetList(ctx context.Context, req *nb.GetAllFunctionsReque
 		return &nb.GetAllFunctionsResponse{}, err
 	}
 
-	//THIS LOGIC ADDED FOR UGEN
+	// Added for the app generator.
 	if req.GetIncludeCustomEvents() {
 		if err = f.attachCustomEvents(ctx, conn, resp.Functions); err != nil {
 			return &nb.GetAllFunctionsResponse{}, err
@@ -219,7 +219,7 @@ func (f *functionRepo) GetList(ctx context.Context, req *nb.GetAllFunctionsReque
 	return resp, nil
 }
 
-// THIS FUNCTION ADDED FOR UGEN
+// Added for the app generator.
 func (f *functionRepo) attachCustomEvents(ctx context.Context, conn *psqlpool.Pool, functions []*nb.Function) error {
 	for _, function := range functions {
 		function.CustomEvents = []*nb.FunctionCustomEvent{}

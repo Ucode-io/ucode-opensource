@@ -23,7 +23,6 @@ type CompanyServiceI interface {
 	AirByte() company_service.AirbyteServiceClient
 	Visualization() company_service.VisualizationServiceClient
 	Template() company_service.TemplateMetadataServiceClient
-	UgenTemplate() company_service.UgenTemplateServiceClient
 	MfeShortLink() company_service.MfeShortLinkServiceClient
 }
 
@@ -39,7 +38,6 @@ type companyServiceClient struct {
 	airbyteService             company_service.AirbyteServiceClient
 	visualizationService       company_service.VisualizationServiceClient
 	templateService            company_service.TemplateMetadataServiceClient
-	ugenTemplateService        company_service.UgenTemplateServiceClient
 	mfeShortLinkService        company_service.MfeShortLinkServiceClient
 }
 
@@ -70,7 +68,6 @@ func NewCompanyServiceClient(ctx context.Context, cfg config.Config) (CompanySer
 		airbyteService:             company_service.NewAirbyteServiceClient(connCompanyService),
 		visualizationService:       company_service.NewVisualizationServiceClient(connCompanyService),
 		templateService:            company_service.NewTemplateMetadataServiceClient(connCompanyService),
-		ugenTemplateService:        company_service.NewUgenTemplateServiceClient(connCompanyService),
 		mfeShortLinkService:        company_service.NewMfeShortLinkServiceClient(connCompanyService),
 	}, nil
 }
@@ -117,10 +114,6 @@ func (g *companyServiceClient) Visualization() company_service.VisualizationServ
 
 func (g *companyServiceClient) Template() company_service.TemplateMetadataServiceClient {
 	return g.templateService
-}
-
-func (g *companyServiceClient) UgenTemplate() company_service.UgenTemplateServiceClient {
-	return g.ugenTemplateService
 }
 
 func (g *companyServiceClient) MfeShortLink() company_service.MfeShortLinkServiceClient {

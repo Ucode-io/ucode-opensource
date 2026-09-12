@@ -115,7 +115,6 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		K8SNamespace: config.K8SNamespace,
 		Title:        req.GetName(),
 		FareId:       req.GetFareId(),
-		IsUgen:       req.IsUgen,
 	})
 	if err != nil {
 		s.log.Error("---RegisterCompany--->CreateProject", logger.Error(err))

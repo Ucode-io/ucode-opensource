@@ -116,11 +116,8 @@ const (
 
 	YandexMetricCountersURL = "https://api-metrika.yandex.net/management/v1/counters"
 
-	UGEN_FREE_PLAN_ID = "07d8a364-ebb2-4291-a452-f44b335cb031"
-
 	// AI products that token usage is attributed to.
 	PRODUCT_TYPE_UCODE string = "ucode"
-	PRODUCT_TYPE_UGEN  string = "ugen"
 
 	FARE_ASSET_SIZE        string = "asset_size"
 	FARE_DATABASE_SIZE     string = "database"
@@ -133,8 +130,6 @@ const (
 
 	KeyBillingApiLimit = "billing:api_limit:%s" // projectId → "1"(allowed) | "0"(blocked)
 	KeyBillingFareId   = "billing:fare_id:%s"   // projectId → fareId string, TTL=30min
-
-	UgenSuperAdminUserId = "c12c163c-38ee-4b37-8854-1dc9285fc3f8"
 
 	GoogleLeadsStatusActive = "active"
 

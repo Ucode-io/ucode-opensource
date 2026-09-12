@@ -30,7 +30,6 @@ type Store struct {
 	airbyteRepo             repo.AirbyteStorageI
 	templateMetadataRepo    repo.TemplateStorageI
 	integrationResourceRepo repo.IntegrationResourceStorageI
-	ugenTemplateRepo        repo.UgenTemplateStorageI
 	mfeShortLinkRepo        repo.MfeShortLinkStorageI
 }
 
@@ -333,13 +332,6 @@ func (s *Store) IntegrationResource() repo.IntegrationResourceStorageI {
 		s.integrationResourceRepo = NewIntegrationResourceRepo(s.db)
 	}
 	return s.integrationResourceRepo
-}
-
-func (s *Store) UgenTemplate() repo.UgenTemplateStorageI {
-	if s.ugenTemplateRepo == nil {
-		s.ugenTemplateRepo = NewUgenTemplateRepo(s.db)
-	}
-	return s.ugenTemplateRepo
 }
 
 func (s *Store) MfeShortLink() repo.MfeShortLinkStorageI {

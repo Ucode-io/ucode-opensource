@@ -11,10 +11,10 @@
 
 | Проект | exposes | React | @originjs |
 |---|---|---|---|
-| `professio_app_69f844` | `./App` | 18.3.1 | ^1.4.1 |
+| `client_app_a1b2c3` | `./App` | 18.3.1 | ^1.4.1 |
 | `ucode_template_react` | `./App` | 18.3.1 | ^1.4.1 |
-| `new-crm/crm_app_703078` | `./App` | 18.3.1 | ^1.4.1 |
-| `lodify_test-master` | `./Page` | 18.3.1 | ^1.2.3 |
+| `new-crm/crm_app_d4e5f6` | `./App` | 18.3.1 | ^1.4.1 |
+| `legacy_test-master` | `./Page` | 18.3.1 | ^1.2.3 |
 
 Наш загрузчик просил только `./Page` — то есть три из четырёх
 не открылись бы вообще, и ни один из них не собран под React 19.

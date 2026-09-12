@@ -1,2 +1,4 @@
-ALTER TABLE IF EXISTS "project"
-    ADD COLUMN IF NOT EXISTS "is_ugen" BOOLEAN NOT NULL DEFAULT FALSE;
+-- Once added project.is_ugen.
+--
+-- Removed with the Ugen surface: the app generator is not part of the
+-- open-source build, and nothing here was read by anything that remains.

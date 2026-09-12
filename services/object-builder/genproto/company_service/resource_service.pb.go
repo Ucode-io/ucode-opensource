@@ -3135,7 +3135,7 @@ func (x *MailchimpCredentials) GetDefaultOtp() string {
 // project-resource setting deliberately contains only public bot metadata and
 // the reference needed by trusted backend services to load the secret.
 // The selected table remains the project's source of truth for conversations.
-// Message and attachment records live in dedicated Ugen Telegram system tables.
+// Message and attachment records live in dedicated Telegram system tables.
 type TelegramChatMapping struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

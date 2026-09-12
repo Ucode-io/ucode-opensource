@@ -10,7 +10,6 @@ var (
 	ErrBalanceInsuffient         = errors.New("balance + credit limit is less than fare price")
 	ErrFareAlreadyExists         = errors.New("fare already exists")
 	ErrUcodePlanChangeNotAllowed = errors.New("ucode plans cannot be changed via AttachFare")
-	ErrCrossProductSwitch        = errors.New("cannot switch between ucode and ugen plans")
 	ErrSamePlanAlreadyActive     = errors.New("project is already subscribed to this plan")
 	ErrBillingPeriodPlanChange   = errors.New("billing period cannot be changed together with plan change")
 	ErrSubscriptionCancelPending = errors.New("subscription is scheduled to cancel at period end")

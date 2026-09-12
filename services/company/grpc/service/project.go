@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"time"
 
 	"github.com/Ucode-io/ucode-opensource/services/company/config"
 	pb "github.com/Ucode-io/ucode-opensource/services/company/genproto/company_service"
@@ -15,14 +13,11 @@ import (
 	"github.com/Ucode-io/ucode-opensource/services/company/storage"
 
 	"github.com/google/uuid"
-	"github.com/xuri/excelize/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
-
-const ugenProjectsExcelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 // AdminService ...
 type ProjectService struct {
@@ -95,23 +90,6 @@ func (s *ProjectService) GetById(ctx context.Context, req *pb.GetProjectByIdRequ
 	if err != nil {
 		s.logger.Error("--GetProjectById--", l.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return project, nil
-}
-
-func (s *ProjectService) GetUgenProjectByCompanyId(ctx context.Context, req *pb.GetUgenProjectByCompanyIdReq) (*pb.Project, error) {
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.GetUgenProjectByCompanyId", req)
-	defer dbSpan.Finish()
-
-	if req.GetCompanyId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "company_id is required")
-	}
-
-	project, err := s.storage.Project().GetUgenProjectByCompanyId(ctx, req.GetCompanyId())
-	if err != nil {
-		s.logger.Error("--GetUgenProjectByCompanyId--", l.Error(err))
-		return nil, status.Error(codes.NotFound, "head ugen project not found for company")
 	}
 
 	return project, nil
@@ -408,164 +386,4 @@ func (s *ProjectService) AttachCustomer(ctx context.Context, in *pb.AttachCustom
 	}
 
 	return &pb.EmptyProto{}, nil
-}
-
-func (s *ProjectService) GetProjectUgenStatus(ctx context.Context, req *pb.GetProjectUgenStatusRequest) (*pb.GetProjectUgenStatusResponse, error) {
-	s.logger.Info("--GetProjectUgenStatus--requested", l.Any("req: ", req))
-
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.GetProjectUgenStatus", req)
-	defer dbSpan.Finish()
-
-	resp, err := s.storage.Project().GetProjectUgenStatus(ctx, req)
-	if err != nil {
-		s.logger.Error("--GetProjectUgenStatus--", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return resp, nil
-}
-
-func (s *ProjectService) UpdateProjectUgenAccess(ctx context.Context, req *pb.UpdateProjectUgenAccessRequest) (*pb.UpdateProjectUgenAccessResponse, error) {
-	s.logger.Info("--UpdateProjectUgenAccess--requested", l.Any("req: ", req))
-
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.UpdateProjectUgenAccess", req)
-	defer dbSpan.Finish()
-
-	resp, err := s.storage.Project().UpdateProjectUgenAccess(ctx, req)
-	if err != nil {
-		s.logger.Error("--UpdateProjectUgenAccess--", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return resp, nil
-}
-
-func (s *ProjectService) AutoAssignUgenIfSingle(ctx context.Context, req *pb.AutoAssignUgenIfSingleRequest) (*pb.AutoAssignUgenIfSingleResponse, error) {
-	s.logger.Info("--AutoAssignUgenIfSingle--requested", l.Any("req: ", req))
-
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.AutoAssignUgenIfSingle", req)
-	defer dbSpan.Finish()
-
-	resp, err := s.storage.Project().AutoAssignUgenIfSingle(ctx, req)
-	if err != nil {
-		s.logger.Error("--AutoAssignUgenIfSingle--", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return resp, nil
-}
-
-func (s *ProjectService) ListUgenProjects(ctx context.Context, req *pb.ListUgenProjectsRequest) (*pb.ListUgenProjectsResponse, error) {
-	s.logger.Info("--ListUgenProjects--requested", l.Any("req: ", req))
-
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.ListUgenProjects", req)
-	defer dbSpan.Finish()
-
-	resp, err := s.storage.Project().ListUgenProjects(ctx, req)
-	if err != nil {
-		s.logger.Error("--ListUgenProjects--", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return resp, nil
-}
-
-func (s *ProjectService) ExportUgenProjects(ctx context.Context, req *pb.ExportUgenProjectsRequest) (*pb.ExportUgenProjectsResponse, error) {
-	s.logger.Info("--ExportUgenProjects--requested", l.Any("req: ", req))
-
-	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_project.ExportUgenProjects", req)
-	defer dbSpan.Finish()
-
-	if s.minio == nil {
-		return nil, status.Error(codes.FailedPrecondition, config.ErrMinioNotConfigured.Error())
-	}
-
-	projects, err := s.storage.Project().ListAllUgenProjects(ctx, req.GetSearch())
-	if err != nil {
-		s.logger.Error("--ExportUgenProjects--ListAllUgenProjects", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	file, err := buildUgenProjectsExcel(projects)
-	if err != nil {
-		s.logger.Error("--ExportUgenProjects--buildExcel", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	fileName := fmt.Sprintf("ugen_projects_%s.xlsx", time.Now().Format("20060102_150405"))
-	objectName := fmt.Sprintf("ugen_projects/%s", fileName)
-
-	fileURL, err := s.minio.Upload(ctx, objectName, ugenProjectsExcelContentType, file)
-	if err != nil {
-		s.logger.Error("--ExportUgenProjects--upload", l.Error(err))
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-
-	return &pb.ExportUgenProjectsResponse{
-		FileUrl:  fileURL,
-		FileName: fileName,
-		Count:    int32(len(projects)),
-		Projects: projects,
-	}, nil
-}
-
-func buildUgenProjectsExcel(projects []*pb.UgenProjectItem) ([]byte, error) {
-	const sheet = "Ugen Projects"
-
-	f := excelize.NewFile()
-	defer f.Close()
-
-	if err := f.SetSheetName("Sheet1", sheet); err != nil {
-		return nil, err
-	}
-
-	headers := []string{
-		"Project ID", "Title", "Company ID", "K8s Namespace", "Logo", "Fare ID",
-		"Balance", "Credit Limit", "Status", "Created At", "Updated At",
-		"Environment ID", "Company Projects Count", "Last Activity Date",
-	}
-	for col, h := range headers {
-		cell, err := excelize.CoordinatesToCellName(col+1, 1)
-		if err != nil {
-			return nil, err
-		}
-		if err := f.SetCellValue(sheet, cell, h); err != nil {
-			return nil, err
-		}
-	}
-
-	for i, p := range projects {
-		values := []any{
-			p.GetProjectId(),
-			p.GetTitle(),
-			p.GetCompanyId(),
-			p.GetK8SNamespace(),
-			p.GetLogo(),
-			p.GetFareId(),
-			p.GetBalance(),
-			p.GetCreditLimit(),
-			p.GetStatus(),
-			p.GetCreatedAt(),
-			p.GetUpdatedAt(),
-			p.GetEnvironmentId(),
-			p.GetCompanyProjectsCount(),
-			p.GetLastActivityDate(),
-		}
-		for col, v := range values {
-			cell, err := excelize.CoordinatesToCellName(col+1, i+2)
-			if err != nil {
-				return nil, err
-			}
-			if err := f.SetCellValue(sheet, cell, v); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	buf, err := f.WriteToBuffer()
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
 }

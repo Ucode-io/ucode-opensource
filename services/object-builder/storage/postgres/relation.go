@@ -3014,14 +3014,14 @@ func (r *relationRepo) GetRelationsByTableFrom(ctx context.Context, projectID st
 
 		// cascadings / dynamic_tables were read from the row but previously dropped,
 		// so cascading relations and dynamic tables were silently lost on any reader
-		// of this method (including the ugen template copier). Parse them the same
+		// of this method (including the template copier). Parse them the same
 		// way as auto_filters and carry them through.
 		//
 		// These columns are sometimes persisted as a JSON object ("{}") instead of
 		// an array, so unmarshaling into a slice fails. Older readers dropped these
 		// fields entirely, so tolerate any non-array shape by treating it as empty
 		// rather than failing the whole read — a strict error here aborts the
-		// ugen-template copier mid-clone and leaves the child project empty.
+		// template copier mid-clone and leaves the child project empty.
 		var cascadingsArray []*nb.Cascading
 		if len(cascadings) > 0 {
 			if err := json.Unmarshal(cascadings, &cascadingsArray); err != nil {

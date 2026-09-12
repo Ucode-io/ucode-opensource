@@ -156,7 +156,7 @@ func main() {
 		return
 	}
 	if minioClient == nil {
-		log.Warn("minio is not configured, ugen projects export will be unavailable")
+		log.Warn("minio is not configured, project export will be unavailable")
 	}
 
 	projectService := service.NewProjectService(pgStore, log, projectServiceNodes, baseLoad, minioClient)
@@ -169,7 +169,6 @@ func main() {
 	visualizationService := service.NewVisualizationService(log, uConf)
 	templateService := service.NewTemplateService(pgStore, log, serviceNodes)
 	integrationResourceService := service.NewIntegrationResourceService(pgStore, log)
-	ugenTemplateService := service.NewUgenTemplateService(pgStore, log, serviceNodes)
 	mfeShortLinkService := service.NewMfeShortLinkService(pgStore, log)
 
 	pb.RegisterProjectServiceServer(s, projectService)
@@ -182,7 +181,6 @@ func main() {
 	pb.RegisterVisualizationServiceServer(s, visualizationService)
 	pb.RegisterTemplateMetadataServiceServer(s, templateService)
 	pb.RegisterIntegrationResourceServiceServer(s, integrationResourceService)
-	pb.RegisterUgenTemplateServiceServer(s, ugenTemplateService)
 	pb.RegisterMfeShortLinkServiceServer(s, mfeShortLinkService)
 
 	lis, err := net.Listen("tcp", baseLoad.RPCPort)

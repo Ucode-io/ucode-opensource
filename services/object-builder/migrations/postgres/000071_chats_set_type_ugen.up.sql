@@ -1,7 +1,4 @@
-DO $$
-BEGIN
-    IF to_regclass('public.chats') IS NOT NULL THEN
-        UPDATE chats SET type = 'ugen';
-    END IF;
-END
-$$;
+-- Once set every chat's type to 'ugen'.
+--
+-- Removed with the Ugen surface: the app generator is not part of the
+-- open-source build, and nothing here was read by anything that remains.

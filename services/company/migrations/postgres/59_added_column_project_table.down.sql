@@ -1,2 +1,1 @@
-ALTER TABLE IF EXISTS "project"
-DROP COLUMN IF EXISTS "is_ugen";
+-- Nothing to undo: the objects this dropped are no longer created.

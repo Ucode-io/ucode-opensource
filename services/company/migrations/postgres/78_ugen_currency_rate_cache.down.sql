@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS ugen_currency_rate_cache;
+-- Nothing to undo: the objects this dropped are no longer created.

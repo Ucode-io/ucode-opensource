@@ -27,7 +27,3 @@ const (
 func checkUserProjectLimit(_ context.Context, _ client.ServiceManagerI, _ storage.StorageI, _, _ string) error {
 	return nil
 }
-
-func checkUgenBuildersLimit(_ context.Context, _ client.ServiceManagerI, _ storage.StorageI, _, _ string) error {
-	return nil
-}

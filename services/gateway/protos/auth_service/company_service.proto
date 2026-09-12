@@ -34,7 +34,7 @@ message RegisterCompanyRequest {
   RegisterUserInfo user_info = 2;
   GoogleToken googleToken = 3;
   string fare_id = 4;
-  bool is_ugen = 5;
+  reserved 5;
 }
 
 message CompanyPrimaryKey {

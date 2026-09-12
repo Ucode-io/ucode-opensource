@@ -1,2 +1,1 @@
-ALTER TABLE ugen_template
-    DROP COLUMN IF EXISTS images;
+-- Nothing to undo: the objects this dropped are no longer created.

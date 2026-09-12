@@ -16,6 +16,5 @@ type StorageI interface {
 	Airbyte() repo.AirbyteStorageI
 	TemplateMetadata() repo.TemplateStorageI
 	IntegrationResource() repo.IntegrationResourceStorageI
-	UgenTemplate() repo.UgenTemplateStorageI
 	MfeShortLink() repo.MfeShortLinkStorageI
 }

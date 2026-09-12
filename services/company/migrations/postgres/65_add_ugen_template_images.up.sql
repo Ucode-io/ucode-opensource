@@ -1,2 +1,4 @@
-ALTER TABLE ugen_template
-    ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';
+-- Once added images to ugen_template.
+--
+-- Removed with the Ugen surface: the app generator is not part of the
+-- open-source build, and nothing here was read by anything that remains.

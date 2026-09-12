@@ -137,8 +137,6 @@ type BaseConfig struct {
 	// IpakInsecureSkipVerify disables TLS verification for the Ipak client. Staging
 	// escape hatch only (use IpakCACert in production).
 	IpakInsecureSkipVerify bool
-	// PublicAppUrl is the Ugen base URL used to build success_url/fail_url.
-	PublicAppUrl string
 
 	Minio struct {
 		Endpoint  string
@@ -208,7 +206,6 @@ func BaseLoad() BaseConfig {
 			c.IpakCACert = string(pem)
 		}
 	}
-	c.PublicAppUrl = cast.ToString(getOrReturnDefault("PUBLIC_APP_URL", ""))
 
 	c.Minio.Endpoint = cast.ToString(getOrReturnDefault("MINIO_ENDPOINT", ""))
 	c.Minio.AccessKey = cast.ToString(getOrReturnDefault("MINIO_ACCESS_KEY", ""))

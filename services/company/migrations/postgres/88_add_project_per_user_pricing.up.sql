@@ -1,11 +1,7 @@
--- Per-user pricing for template-derived projects: a Ugen template may carry a
--- per_user_price that is copied onto every project provisioned from it. When set
--- (> 0), adding a user to that project charges the price to the company's head
--- project balance instead of enforcing the fare-based user limit. Ordinary
--- projects keep per_user_price = 0 and the existing limit behaviour.
-ALTER TABLE ugen_template
-    ADD COLUMN IF NOT EXISTS per_user_price DECIMAL(20,2) NOT NULL DEFAULT 0;
-
+-- Per-user pricing on a project: when set (> 0), adding a user charges the
+-- price rather than enforcing a plan's seat limit. The template side of this
+-- went with the Ugen surface; the project columns stay because the service
+-- still reads and writes them.
 ALTER TABLE project
     ADD COLUMN IF NOT EXISTS per_user_price       DECIMAL(20,2) NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS per_user_currency_id UUID REFERENCES currency(id) ON DELETE SET NULL;

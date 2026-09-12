@@ -27,7 +27,6 @@ import (
 func (h *HandlerV1) CreateCompany(c *gin.Context) {
 	var (
 		company models.CompanyCreateRequest
-		isUgen  = c.Query("is_ugen") == "true"
 	)
 
 	if err := c.ShouldBindJSON(&company); err != nil {
@@ -57,7 +56,6 @@ func (h *HandlerV1) CreateCompany(c *gin.Context) {
 			CompanyId:    companyPKey.GetId(),
 			K8SNamespace: "cp-region-type-id",
 			Title:        company.Name,
-			IsUgen:       isUgen,
 		},
 	)
 	if err != nil {

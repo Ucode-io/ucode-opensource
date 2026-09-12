@@ -1,7 +1,7 @@
 MODULES := ./services/auth/... ./services/company/... ./services/gateway/... ./services/object-builder/... ./cmd/ucode/...
 
-.PHONY: build vet test test-integration fmt tidy cli cli-assets cli-assets-check \
-        images smoke release-dry-run
+.PHONY: build vet test test-integration fmt tidy proto cli cli-assets \
+        cli-assets-check images smoke release-dry-run
 
 build:
 	go build $(MODULES)
@@ -21,6 +21,23 @@ fmt:
 
 tidy:
 	@for m in services/*/; do (cd "$$m" && go mod tidy); done
+
+# Regenerates every service's Go bindings from its own protos/ directory.
+#
+# That directory — not the repository root's proto/ — is what the checked-in
+# genproto was built from: regenerating all 904 files from it reproduces them
+# byte for byte, which is what makes this safe to run. Needs protoc with
+# protoc-gen-go and protoc-gen-go-grpc on PATH.
+proto:
+	@for s in auth company gateway object-builder; do \
+		rm -rf "services/$$s/genproto" ; \
+		for d in services/$$s/protos/*/ ; do \
+			protoc -I="$$d" -I="services/$$s/protos" \
+				--go_out="services/$$s" --go-grpc_out="services/$$s" "$$d"*.proto || exit 1 ; \
+		done ; \
+		printf '  %s\n' "$$s" ; \
+	done
+	@echo "regenerated from services/*/protos"
 
 # The CLI embeds the stack definition so `ucode start` needs no checkout.
 # deploy/ stays canonical; this copies it in before building.

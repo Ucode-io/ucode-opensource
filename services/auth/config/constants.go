@@ -86,9 +86,6 @@ const (
 	FARE_USERS    string = "users_count"
 	FARE_BUILDERS string = "builders"
 
-
-	UgenSuperAdminUserId string = "c12c163c-38ee-4b37-8854-1dc9285fc3f8"
-
 	// Commit Types
 	COMMIT_TYPE_TABLE string = "TABLE"
 	SMS_TEXT          string = "Code"
