@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-09-12
+# A removal, not a behaviour change: nothing the open-source platform does
+# differs afterwards, because none of this code or data was reachable from it.
+# There is no capability to write a spec for.
+skip_specs: true

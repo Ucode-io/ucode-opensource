@@ -1,3 +1,9 @@
+-- The hosted product's price list used to be seeded here. The open-source
+-- build has no billing: the service code that read these tables was removed,
+-- so the tables ship empty and the rows would only be commercial data with
+-- nothing to read them. The schema itself stays, so a fork that wants billing
+-- has somewhere to put it.
+
 CREATE TABLE IF NOT EXISTS ugen_billing_period (
     code                VARCHAR(32) PRIMARY KEY,
     name                VARCHAR(64) NOT NULL,
@@ -9,21 +15,11 @@ CREATE TABLE IF NOT EXISTS ugen_billing_period (
     updated_at          TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO ugen_billing_period (code, name, months, discount_percent, is_active, sort_order)
-VALUES
-    ('monthly', 'Monthly', 1, 0, TRUE, 1),
-    ('six_months', '6 months', 6, 13, TRUE, 2),
-    ('annual', 'Annual', 12, 24, TRUE, 3)
-ON CONFLICT (code) DO UPDATE SET
-    name = EXCLUDED.name,
-    months = EXCLUDED.months,
-    discount_percent = EXCLUDED.discount_percent,
-    is_active = EXCLUDED.is_active,
-    sort_order = EXCLUDED.sort_order,
-    updated_at = NOW();
+-- The billing periods and their discounts were seeded here; see the note
+-- above. The table stays so the column below still has a target.
 
 ALTER TABLE subscription
-    ADD COLUMN IF NOT EXISTS billing_period_code VARCHAR(32) REFERENCES ugen_billing_period(code) DEFAULT 'monthly',
+    ADD COLUMN IF NOT EXISTS billing_period_code VARCHAR(32) REFERENCES ugen_billing_period(code),
     ADD COLUMN IF NOT EXISTS billing_period_months INTEGER NOT NULL DEFAULT 1,
     ADD COLUMN IF NOT EXISTS billing_period_discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT FALSE,
