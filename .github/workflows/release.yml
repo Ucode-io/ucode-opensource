@@ -1,0 +1,42 @@
+# Publishes the CLI for a tag.
+#
+# images.yml runs on the same trigger and publishes the container images the
+# CLI pulls. Both come out of one `git push origin v0.1.0`, and the CLI pins
+# itself to the matching image tag, so the two halves of a release cannot drift
+# apart.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      # goreleaser creates the GitHub release and uploads the archives.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # goreleaser builds the changelog from the log, which a shallow
+          # clone does not have.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          # The workspace, not one module's go.mod: the modules disagree on
+          # the patch version and the highest of them has to win.
+          go-version-file: go.work
+          cache: false
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

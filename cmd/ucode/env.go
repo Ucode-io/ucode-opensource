@@ -11,12 +11,21 @@ import (
 // UCODE_IMAGE_PREFIX and UCODE_VERSION are carried through from the process
 // environment when set, so a checkout can run `make images && UCODE_VERSION=local
 // ucode start` and exercise the images it just built instead of pulling.
+//
+// Failing that, a released CLI pins the images to its own version. Both come
+// out of the same tag — pushing `v0.1.0` publishes images tagged `0.1.0` and a
+// CLI reporting `0.1.0` — so the pin keeps an installed CLI on the images it
+// was released with, instead of following `latest` into changes it has never
+// seen. Builds from a checkout report "dev" and stay on `latest`.
 func defaultEnv(secretKey string) string {
 	images := ""
 	if prefix := os.Getenv("UCODE_IMAGE_PREFIX"); prefix != "" {
 		images += "UCODE_IMAGE_PREFIX=" + prefix + "\n"
 	}
-	if version := os.Getenv("UCODE_VERSION"); version != "" {
+	switch v := os.Getenv("UCODE_VERSION"); {
+	case v != "":
+		images += "UCODE_VERSION=" + v + "\n"
+	case version != "dev":
 		images += "UCODE_VERSION=" + version + "\n"
 	}
 	if images != "" {

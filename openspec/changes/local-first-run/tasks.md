@@ -120,7 +120,11 @@ pinned every core. Users must never have to do that.
 
 ## 8. Release
 
-- [ ] 8.1 goreleaser config for darwin and linux, amd64 and arm64
+- [x] 8.1 goreleaser config for darwin and linux, amd64 and arm64 — `.goreleaser.yaml`
+      plus `release.yml` on the same `v*` tag as the images. All four targets
+      cross-compile and the version ldflag lands (`ucode version 0.1.0-test`).
+      Archive names carry no version, so `/releases/latest/download/` resolves
+      and `install.sh` never has to ask the API which tag is current
 - [x] 8.2 Publish service images to ghcr.io from CI — workflow written, six
       images, amd64 and arm64. Not yet observed running on a real runner
 - [x] 8.4 Watch the first images run — green in 7m33s, six images for amd64 and
@@ -132,11 +136,17 @@ pinned every core. Users must never have to do that.
       the registry auth challenge, not a visibility signal. The real check is
       to take an anonymous token from `ghcr.io/token?scope=repository:...:pull`
       and fetch the manifest with it
-- [ ] 8.3 Quickstart in the README that matches what the CLI actually does.
-      Blocking, and larger than it looks: the README opens with `ucode start`
-      but never says how to obtain the `ucode` binary, and the "Without the
-      CLI" fallback needs a clone of a repository that is private. Public
-      images on their own install nothing — 8.1 has to land first
+- [x] 8.3 Quickstart in the README that matches what the CLI actually does —
+      the install command was missing entirely; the README opened on `ucode
+      start` with no way to obtain the binary. Added `install.sh` (checksum
+      verified, no sudo, refuses anything but macOS/Linux on amd64/arm64), the
+      hand-rolled equivalent for anyone who will not pipe into a shell, the
+      clone the "Without the CLI" route actually needs, and a Releasing section
+- [x] 8.7 Pin a released CLI to its own image tag. It followed `latest`, so an
+      installed CLI would silently pick up images it had never been run
+      against. `v0.1.0` publishes images `0.1.0` and a CLI reporting `0.1.0`;
+      dev builds still track `latest`. Covered by cmd/ucode/env_test.go, which
+      was mutation-checked
 - [ ] 8.6 Exercise the default image path end to end. Every local run so far
       used `UCODE_VERSION=local` against images built on this machine; the
       `:latest`-from-ghcr path that a stranger actually gets has never been

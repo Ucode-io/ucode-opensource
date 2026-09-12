@@ -1,0 +1,79 @@
+# Builds and publishes the ucode CLI.
+#
+# The CLI is the only thing a user downloads. Everything else — the four
+# services, the admin panel, the migrations — arrives as container images the
+# first time `ucode start` runs, which is why this file builds one small binary
+# and nothing else.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# publishes the images (images.yml, on the same tag) and this release together.
+
+version: 2
+
+project_name: ucode
+
+before:
+  hooks:
+    # The CLI embeds its own copies of the compose file and the database init
+    # script, because go:embed cannot reach outside its module directory. A
+    # release built from stale copies would ship a stack definition that no
+    # test ever ran.
+    - make cli-assets-check
+
+builds:
+  - id: ucode
+    dir: cmd/ucode
+    main: .
+    binary: ucode
+    env:
+      - CGO_ENABLED=0
+      # The repository is a Go workspace, but the CLI is a self-contained
+      # module whose only dependency is cobra. Loading the workspace would
+      # drag in four services it does not import.
+      - GOWORK=off
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # Reproducible builds: without this the archive changes on every rebuild
+    # of the same commit.
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: ucode
+    ids: [ucode]
+    # No version in the file name, deliberately. It lets
+    # /releases/latest/download/ucode_darwin_arm64.tar.gz resolve on its own,
+    # so install.sh never has to ask the API which tag is current — and never
+    # hits the 60-per-hour anonymous rate limit. The version is still in the
+    # tag, on the release page, and in `ucode --version`.
+    name_template: 'ucode_{{ .Os }}_{{ .Arch }}'
+    formats: [tar.gz]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+
+release:
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/Ucode-io/ucode-opensource/main/install.sh | sh
+    ucode start
+    ```
+
+    Docker is the only prerequisite. First run downloads about 1.5 GB of images.

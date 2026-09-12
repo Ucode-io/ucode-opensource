@@ -11,11 +11,33 @@ individual record and field.
 
 Docker is required. Everything else comes with the CLI.
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ucode-io/ucode-opensource/main/install.sh | sh
+ucode start
+```
+
+### Installing without the pipe
+
+Piping a script into a shell is a reasonable thing to refuse. The script does
+three things — downloads one archive, checks its sha256, moves the binary onto
+your PATH — and you can read it at [install.sh](install.sh) or do the same by
+hand. Replace `darwin_arm64` with your platform: `darwin` or `linux`, `amd64`
+or `arm64`.
+
+```bash
+base=https://github.com/Ucode-io/ucode-opensource/releases/latest/download
+curl -fsSLO $base/ucode_darwin_arm64.tar.gz
+curl -fsSLO $base/checksums.txt
+grep ' ucode_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
+tar -xzf ucode_darwin_arm64.tar.gz ucode
+sudo mv ucode /usr/local/bin/
+```
+
 ### What it needs
 
 | | |
 |---|---|
-| Memory | The stack uses about 300 MB across all eight containers. On macOS and Windows, Docker Desktop reserves its own virtual machine on top of that — budget 4 GB free for a comfortable time |
+| Memory | The stack uses about 300 MB across all eight containers. On macOS, Docker Desktop reserves its own virtual machine on top of that — budget 4 GB free for a comfortable time |
 | Disk | ~1.5 GB of images, plus whatever your data grows to |
 | CPU | Near idle once running |
 
@@ -23,13 +45,11 @@ You never build anything to install ucode: `ucode start` pulls prebuilt images.
 Building from source is only for working on ucode itself, and that is the part
 that is heavy.
 
-```bash
-ucode start
-```
-
-That brings up the whole platform, creates the first admin and opens the admin
-panel at <http://127.0.0.1:3000>. First run takes a few minutes while images
-download; after that it is about fifteen seconds.
+`ucode start` brings up the whole platform, creates the first admin and opens
+the admin panel at <http://127.0.0.1:3000>. First run takes a few minutes while
+images download; after that it is about fifteen seconds. An installed CLI stays
+on the image version it was released with, so an upgrade is deliberate: install
+a newer CLI and the images follow.
 
 ```
 Login      admin@ucode.local
@@ -49,14 +69,19 @@ it anywhere else.
 
 ### Without the CLI
 
-The CLI is a thin wrapper around Docker Compose. If you would rather drive it
-yourself:
+The CLI is a thin wrapper around Docker Compose, and the compose file it embeds
+is the one in this repository. To drive it yourself, clone first:
 
 ```bash
+git clone https://github.com/Ucode-io/ucode-opensource.git
+cd ucode-opensource
 cp deploy/.env.example deploy/.env
 # set SECRET_KEY to a random value
 docker compose --project-directory deploy up
 ```
+
+This route pulls `:latest` rather than a pinned version, and skips the first
+admin the CLI creates for you — you get the stack, not the finished setup.
 
 ## What is inside
 
@@ -109,6 +134,22 @@ a module — so use `make`, which lists them explicitly.
 
 Integration tests are behind a build tag and start their own database through
 testcontainers. Nothing needs configuring; Docker just has to be running.
+
+### Releasing
+
+One tag publishes both halves. `images.yml` builds the six container images and
+`release.yml` builds the CLI, and because the CLI pins itself to the matching
+image tag, the two cannot drift apart.
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`make release-dry-run` builds the archives locally without publishing anything.
+The CLI embeds copies of `deploy/docker-compose.yml` and
+`deploy/postgres-init.sql` — go:embed cannot read outside its own module — so
+`make cli-assets` syncs them and a release refuses to run if they have drifted.
 
 ## What this is not
 
