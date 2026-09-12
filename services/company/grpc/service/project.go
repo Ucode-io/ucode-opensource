@@ -61,10 +61,6 @@ func (s *ProjectService) Create(ctx context.Context, req *pb.CreateProjectReques
 		req.K8SNamespace = "u-code"
 	}
 
-	if req.FareId == "" {
-		req.FareId = config.SMALL_FARE_ID
-	}
-
 	projectId := uuid.New()
 
 	company, err := s.storage.Project().GetProjectsByCompanyId(ctx, &pb.GetProjectsByCompanyIdReq{

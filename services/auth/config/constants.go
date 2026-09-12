@@ -86,7 +86,6 @@ const (
 	FARE_USERS    string = "users_count"
 	FARE_BUILDERS string = "builders"
 
-	UGEN_FREE_FARE_ID = "07d8a364-ebb2-4291-a452-f44b335cb031"
 
 	UgenSuperAdminUserId string = "c12c163c-38ee-4b37-8854-1dc9285fc3f8"
 

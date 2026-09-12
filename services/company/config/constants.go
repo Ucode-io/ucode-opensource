@@ -77,7 +77,6 @@ var (
 	PaymeCreatorType            = "server"
 	PaymeCurrencyId             = "0803582e-29d6-42fe-86ac-b4287b8fa929"
 	PaymeStatusPaid             = 4
-	SMALL_FARE_ID               = "7d958abe-08df-4735-a4f3-d275d1482b47"
 
 	// Ipak Yo'li E-Comm (Visa/Mastercard hosted-page top-ups). Reuses the shared
 	// payment_status vocabulary (pending/accepted/cancelled) and UZS currency.

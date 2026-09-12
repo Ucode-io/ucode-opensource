@@ -81,7 +81,7 @@ func (c *projectRepo) Create(ctx context.Context, id string, project *pb.CreateP
 			is_ugen,
 			per_user_price,
 			per_user_currency_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, '')::uuid) RETURNING id`
+		) VALUES ($1, $2, $3, $4, NULLIF($5, '')::uuid, $6, $7, NULLIF($8, '')::uuid) RETURNING id`
 
 	err = c.db.QueryRow(
 		ctx,
