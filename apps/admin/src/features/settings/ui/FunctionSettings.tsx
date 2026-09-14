@@ -51,8 +51,9 @@ export function FunctionSettings() {
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(FUNCTIONS_PAGE);
 
-  const { functions, count, isLoading, error } = useProjectFunctions(search, page);
+  const { functions, count, isLoading, error } = useProjectFunctions(search, page, limit);
   const remove = useDeleteFunction();
 
   const [editing, setEditing] = useState<ProjectFunction | "new" | null>(null);
@@ -146,7 +147,16 @@ export function FunctionSettings() {
         </table>
       </div>
 
-      <Pager page={page} total={count} limit={FUNCTIONS_PAGE} onPage={setPage} />
+      <Pager
+        page={page}
+        total={count}
+        limit={limit}
+        onPage={setPage}
+        onLimit={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
+      />
 
       {editing && (
         <FunctionDialog

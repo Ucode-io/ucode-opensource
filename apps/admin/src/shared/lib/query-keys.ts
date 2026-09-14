@@ -102,16 +102,21 @@ export const keys = {
      * это и есть запрос, а не отбор в памяти.
      */
     usersAll: () => [...keys.settings.all, "users"] as const,
-    users: (projectId: string, clientTypeId: string, search: string, page: number) =>
-      [...keys.settings.usersAll(), projectId, clientTypeId, search, page] as const,
+    users: (
+      projectId: string,
+      clientTypeId: string,
+      search: string,
+      page: number,
+      limit: number,
+    ) => [...keys.settings.usersAll(), projectId, clientTypeId, search, page, limit] as const,
     /**
      * API-ключи. Ключ выдаётся в ОДНОМ окружении (`environment_id`
      * берётся из заголовка запроса), поэтому окружение в ключе кэша:
      * иначе список prod и dev делил бы одну ячейку.
      */
     apiKeysAll: () => [...keys.settings.all, "api-keys"] as const,
-    apiKeys: (projectId: string, envId: string, search: string, page: number) =>
-      [...keys.settings.apiKeysAll(), projectId, envId, search, page] as const,
+    apiKeys: (projectId: string, envId: string, search: string, page: number, limit: number) =>
+      [...keys.settings.apiKeysAll(), projectId, envId, search, page, limit] as const,
     /** Справочник платформ клиента — общий на всё приложение. */
     clientPlatforms: () => [...keys.settings.all, "client-platforms"] as const,
     /**
@@ -174,6 +179,11 @@ export const keys = {
     connections: (envId: string) => [...keys.settings.all, "connections", envId] as const,
     connectionTables: (envId: string, connectionId: string) =>
       [...keys.settings.connections(envId), connectionId] as const,
+    /**
+     * Сохранённые запросы SQL-консоли. Лежат в базе того же ресурса,
+     * что и сами данные, — то есть у каждого окружения свои.
+     */
+    sqlQueries: (envId: string) => [...keys.settings.all, "sql-queries", envId] as const,
   },
   icons: {
     all: ["icons"] as const,
@@ -247,8 +257,8 @@ export const keys = {
     all: ["functions"] as const,
     list: (envId: string) => [...keys.functions.all, envId] as const,
     /** Страница раздела функций: у него свой поиск и свои страницы. */
-    page: (envId: string, search: string, page: number) =>
-      [...keys.functions.all, envId, "page", search, page] as const,
+    page: (envId: string, search: string, page: number, limit: number) =>
+      [...keys.functions.all, envId, "page", search, page, limit] as const,
     /**
      * Исходники функции. Ответ — весь репозиторий разом, поэтому
      * запрашивается он только у открытой карточки.

@@ -50,20 +50,28 @@ export type ApiKey = {
 
 export const API_KEYS_PAGE = 20;
 
-export function useApiKeys({ search, page }: { search: string; page: number }) {
+export function useApiKeys({
+  search,
+  page,
+  limit,
+}: {
+  search: string;
+  page: number;
+  limit: number;
+}) {
   const store = useSession();
   const projectId = store.getProjectId() ?? "";
   const envId = store.getEnvironmentId() ?? "";
 
   const query = useQuery({
-    queryKey: keys.settings.apiKeys(projectId, envId, search, page),
+    queryKey: keys.settings.apiKeys(projectId, envId, search, page, limit),
     queryFn: () =>
       authApi.get<ApiKeysResponse>(`${API_KEYS}/${projectId}`, {
         params: {
           "project-id": projectId,
           search,
-          limit: API_KEYS_PAGE,
-          offset: (page - 1) * API_KEYS_PAGE,
+          limit,
+          offset: (page - 1) * limit,
         },
       }),
     enabled: Boolean(projectId),

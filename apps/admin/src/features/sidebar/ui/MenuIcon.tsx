@@ -26,8 +26,12 @@ import { kindOf } from "../model/types";
  * пункта. Строка меню не остаётся пустой ни в один момент.
  */
 
-/** Тип пункта → иконка по умолчанию. Покрывает все типы бэкенда. */
-const byType: Record<string, TablerIcon> = {
+/**
+ * Тип пункта → иконка по умолчанию. Покрывает все типы бэкенда.
+ * Экспортирован: тот же маппинг рисует пункты меню создания
+ * (AddMenuButton) — второй список типов рядом был бы второй правдой.
+ */
+export const byType: Record<string, TablerIcon> = {
   FOLDER: IconFolder,
   WIKI_FOLDER: IconFolder,
   MINIO_FOLDER: IconBucket,

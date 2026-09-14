@@ -86,16 +86,16 @@ function toFunction(dto: FunctionDto): ProjectFunction {
   };
 }
 
-export function useProjectFunctions(search: string, page: number) {
+export function useProjectFunctions(search: string, page: number, limit = FUNCTIONS_PAGE) {
   const envId = useSession().getEnvironmentId() ?? "";
   const query = useQuery({
-    queryKey: keys.functions.page(envId, search, page),
+    queryKey: keys.functions.page(envId, search, page, limit),
     queryFn: () =>
       api.get<ListDto>("/v2/function", {
         params: {
           search,
-          limit: FUNCTIONS_PAGE,
-          offset: (page - 1) * FUNCTIONS_PAGE,
+          limit,
+          offset: (page - 1) * limit,
         },
       }),
   });

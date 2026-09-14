@@ -48,8 +48,9 @@ export function ApiKeySettings() {
   const [query, setQuery] = useState("");
   const search = useDeferredValue(query);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(API_KEYS_PAGE);
 
-  const { apiKeys, count, isLoading } = useApiKeys({ search, page });
+  const { apiKeys, count, isLoading } = useApiKeys({ search, page, limit });
   const { roles } = useRoles();
   const { clientTypes } = useClientTypes();
   const remove = useDeleteApiKey();
@@ -152,7 +153,16 @@ export function ApiKeySettings() {
         </table>
       </div>
 
-      <Pager page={page} total={count} limit={API_KEYS_PAGE} onPage={setPage} />
+      <Pager
+        page={page}
+        total={count}
+        limit={limit}
+        onPage={setPage}
+        onLimit={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
+      />
 
       {editing && (
         <ApiKeyDialog

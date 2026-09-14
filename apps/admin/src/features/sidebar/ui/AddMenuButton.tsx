@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IconPlus } from "@tabler/icons-react";
+import { IconPlus, IconTemplate } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
 import { useGlobalRight } from "@/features/auth";
 import { Button } from "@/shared/ui/button";
@@ -7,6 +7,7 @@ import { Icon } from "@/shared/ui/icon";
 import { Popover, PopoverItem } from "@/shared/ui/popover";
 import { TemplateDialog } from "@/features/templates";
 import { useCreateMenu } from "../api/mutations";
+import { byType } from "./MenuIcon";
 import {
   CREATE_TITLES,
   EMPTY_MENU_FORM,
@@ -15,6 +16,12 @@ import {
   type CreatableType,
   type MenuFormValue,
 } from "./MenuFormDialog";
+
+/** Та же иконка, что и у самого пункта меню в дереве (MenuIcon.byType):
+ *  два списка типов рядом были бы двумя правдами о том, что чем рисуется. */
+const itemIcon = (icon: (typeof byType)[string]) => (
+  <Icon as={icon} size={16} className="shrink-0 text-fg-muted" />
+);
 
 /**
  * Кнопка «+» в шапке сайдбара: создаёт пункт на верхнем уровне.
@@ -87,6 +94,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
         {(close) => (
           <>
             <PopoverItem
+              icon={itemIcon(byType.TABLE!)}
               onClick={() => {
                 close();
                 setForm({ type: "TABLE" });
@@ -95,6 +103,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
               {t("menuAction.createTable")}
             </PopoverItem>
             <PopoverItem
+              icon={itemIcon(byType.TABLE!)}
               onClick={() => {
                 close();
                 setForm({ type: "TABLE", existing: true });
@@ -103,6 +112,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
               {t("menuAction.linkTable")}
             </PopoverItem>
             <PopoverItem
+              icon={itemIcon(byType.FOLDER!)}
               onClick={() => {
                 close();
                 setForm({ type: "FOLDER" });
@@ -111,6 +121,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
               {t("menuAction.createFolder")}
             </PopoverItem>
             <PopoverItem
+              icon={itemIcon(byType.MINIO_FOLDER!)}
               onClick={() => {
                 close();
                 setForm({ type: "MINIO_FOLDER" });
@@ -119,6 +130,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
               {t("menuAction.createFiles")}
             </PopoverItem>
             <PopoverItem
+              icon={itemIcon(byType.LINK!)}
               onClick={() => {
                 close();
                 setForm({ type: "LINK" });
@@ -127,6 +139,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
               {t("menuAction.createLink")}
             </PopoverItem>
             <PopoverItem
+              icon={itemIcon(byType.MICROFRONTEND!)}
               onClick={() => {
                 close();
                 setForm({ type: "MICROFRONTEND" });
@@ -135,6 +148,7 @@ export function AddMenuButton({ parentId, label }: { parentId: string; label?: s
               {t("menuAction.createMicrofrontend")}
             </PopoverItem>
             <PopoverItem
+              icon={itemIcon(IconTemplate)}
               onClick={() => {
                 close();
                 setTemplates(true);

@@ -94,12 +94,12 @@ function toParams(filters: ActivityFilters) {
   };
 }
 
-export function useActivity(filters: ActivityFilters, page: number) {
+export function useActivity(filters: ActivityFilters, page: number, limit: number) {
   const envId = useSession().getEnvironmentId() ?? "";
 
   const params = {
-    limit: ACTIVITY_PAGE,
-    offset: (page - 1) * ACTIVITY_PAGE,
+    limit,
+    offset: (page - 1) * limit,
     ...toParams(filters),
   };
 
