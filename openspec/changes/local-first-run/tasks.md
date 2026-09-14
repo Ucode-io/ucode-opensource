@@ -174,7 +174,9 @@ pinned every core. Users must never have to do that.
       second laptop 2026-09-12; `xattr -d com.apple.quarantine` cleared it, but
       that is not something to put in a quickstart. Needs a paid Developer ID
       and a notarytool step in the release workflow
-- [ ] 8.6 Exercise the default image path end to end. Every local run so far
-      used `UCODE_VERSION=local` against images built on this machine; the
-      `:latest`-from-ghcr path that a stranger actually gets has never been
-      run. MinIO is the precedent for trusting a warm cache
+- [x] 8.6 Exercise the default image path end to end — done twice. The
+      published `:latest` images were run on this machine (smoke green, digest
+      matched ghcr exactly), and `install.sh` was run anonymously against the
+      v0.1.0 release: it picked the right platform, verified the checksum and
+      produced a CLI reporting 0.1.0, which pins images `:0.1.0` — present for
+      all six. Neither `chmod` nor `xattr` was needed: curl does not quarantine
