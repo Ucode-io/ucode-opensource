@@ -169,6 +169,12 @@ export const keys = {
 
     usageTimes: (projectId: string, params: Record<string, string | number>) =>
       [...keys.settings.all, "usage", projectId, "times", params] as const,
+    /**
+     * Занятое место в базе. Окружение в ключе: считается размер базы
+     * ресурса ОКРУЖЕНИЯ, а не проекта целиком.
+     */
+    databaseSize: (projectId: string, envId: string) =>
+      [...keys.settings.all, "usage", projectId, "database-size", envId] as const,
     /** Свои эндпоинты (`/x-api/...`): список на проект и окружение. */
     endpoints: (projectId: string, envId: string) =>
       [...keys.settings.all, "endpoints", projectId, envId] as const,

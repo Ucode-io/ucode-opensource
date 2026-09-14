@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Tabs } from "@/shared/ui/tabs";
 import {
+  useDatabaseSize,
   useUsage,
   useUsageActors,
   useUsageTimes,
@@ -40,10 +41,21 @@ export function Usage() {
 
   // Сводка сверху всегда с уровня маршрутов — кэш живёт, лишних запросов нет.
   const { usage, isLoading } = useUsage(clientOnly);
+  /* Место в базе не зависит ни от среза, ни от уровня: оно про
+     окружение целиком, поэтому запрос вне этой троицы. */
+  const { storage } = useDatabaseSize();
   const { actors, isLoading: actorsLoading } = useUsageActors(route, clientOnly);
   const { times, isLoading: timesLoading } = useUsageTimes(route, sender, clientOnly);
 
   const amount = (value: number) => value.toLocaleString(i18n.language);
+
+  /* Мегабайты человеку: до гигабайта — целыми, дальше — гигабайтами
+     с десятой долей. «1234 МБ» читается хуже, чем «1,2 ГБ», а «0,2 МБ»
+     хуже, чем «0 МБ»: точность здесь никому не нужна. */
+  const size = (mb: number) =>
+    mb >= 1024
+      ? `${(mb / 1024).toLocaleString(i18n.language, { maximumFractionDigits: 1 })} ${t("usage.gb")}`
+      : `${Math.round(mb).toLocaleString(i18n.language)} ${t("usage.mb")}`;
 
   const authLabel = (authType: string) =>
     authType === "bearer"
@@ -85,18 +97,43 @@ export function Usage() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SectionHeader title={t("usage.title")} hint={t("usage.hint")} />
 
-      {usage && (
-        <div className="shrink-0 border-b border-border px-4 py-3">
-          {usage.blocked && <p className="mb-1 text-sm text-danger">{t("usage.blocked")}</p>}
-          <p
-            className={`text-sm ${
-              (usage.percentUsed ?? 0) > 80 && !usage.blocked ? "text-warning" : "text-fg"
-            }`}
-          >
-            {usage.unlimited
-              ? t("usage.unlimited", { used: amount(usage.used) })
-              : t("usage.used", { used: amount(usage.used), limit: amount(usage.limit) })}
-          </p>
+      {(usage || storage) && (
+        <div className="shrink-0 space-y-1 border-b border-border px-4 py-3">
+          {usage?.blocked && <p className="text-sm text-danger">{t("usage.blocked")}</p>}
+
+          {usage && (
+            <p
+              className={`text-sm ${
+                (usage.percentUsed ?? 0) > 80 && !usage.blocked ? "text-warning" : "text-fg"
+              }`}
+            >
+              {usage.unlimited
+                ? t("usage.unlimited", { used: amount(usage.used) })
+                : t("usage.used", { used: amount(usage.used), limit: amount(usage.limit) })}
+            </p>
+          )}
+
+          {/*
+            Объём базы — вторая строка той же сводки, а не свой экран:
+            вопрос у них общий («во что упирается проект»), а разводить
+            два числа по двум местам значит заставить искать второе.
+            Порог тот же, что у запросов: за четырьмя пятыми лимита
+            цифра из справочной становится предупреждением.
+          */}
+          {storage && (
+            <p
+              className={`text-sm ${
+                (storage.percentUsed ?? 0) > 80 ? "text-warning" : "text-fg-muted"
+              }`}
+            >
+              {storage.limit
+                ? t("usage.database", {
+                    used: size(storage.used),
+                    limit: size(storage.limit),
+                  })
+                : t("usage.databaseFree", { used: size(storage.used) })}
+            </p>
+          )}
         </div>
       )}
 
