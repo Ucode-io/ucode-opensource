@@ -48,7 +48,7 @@ func (h *Handler) AddRole(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param role-id path string true "role-id"
-// @Success 200 {object} http.Response{data=models.GetRoleByIdResponse} "Role data"
+// @Success 200 {object} http.Response{data=auth_service.GetRoleByIdResponse} "Role data"
 // @Response 400 {object} http.Response{data=string} "Invalid Argument"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) GetRoleByID(c *gin.Context) {
@@ -481,7 +481,7 @@ func (h *Handler) AddPermissionScope(c *gin.Context) {
 // @Produce json
 // @Param permission-scope body auth_service.PermissionScopePrimaryKey true "PermissionScopePrimaryKeyBody"
 // @Success 204
-// @Response 400 {object} http.Response{data=models.CommonMessage} "Invalid Argument"
+// @Response 400 {object} http.Response{data=auth_service.CommonMessage} "Invalid Argument"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) RemovePermissionScope(c *gin.Context) {
 	var permissionScope auth_service.PermissionScopePrimaryKey

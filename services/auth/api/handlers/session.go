@@ -18,7 +18,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param login body auth_service.LoginRequest true "LoginRequestBody"
-// @Success 201 {object} http.Response{data=models.LoginResponse} "Login data"
+// @Success 201 {object} http.Response{data=auth_service.LoginResponse} "Login data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) Login(c *gin.Context) {

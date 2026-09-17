@@ -393,7 +393,7 @@ func (h *Handler) V2SendCode(c *gin.Context) {
 // @Param Environment-Id header string false "Environment-Id"
 // @Param project-id query string false "project-id"
 // @Param registerBody body models.RegisterOtp true "register_body"
-// @Success 201 {object} http.Response{data=models.V2LoginResponse} "Register Data data"
+// @Success 201 {object} http.Response{data=pb.V2LoginResponse} "Register Data data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2Register(c *gin.Context) {

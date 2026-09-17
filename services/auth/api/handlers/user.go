@@ -373,7 +373,7 @@ func (h *Handler) SendMessageToUserEmail(c *gin.Context) {
 }
 
 // AddUserProject godoc
-// @ID add user project
+// @ID add_user_project
 // @Router /add-user-project [POST]
 // @Summary Add User Project
 // @Description Add User Project

@@ -33,6 +33,7 @@ import (
 	"github.com/spf13/cast"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 // ResourceService AdminService ...
@@ -2679,22 +2680,31 @@ func (s *ResourceService) UpdateProjectResource(ctx context.Context, in *pb.Proj
 	return resp, nil
 }
 
+// The two helpers below clone through proto.Clone rather than copying the
+// struct: a generated message carries a mutex, and copying it by value is what
+// `go vet` flags.
 func projectResourceAddRequestForLog(in *pb.AddResourceToProjectRequest) *pb.AddResourceToProjectRequest {
 	if in == nil {
 		return nil
 	}
-	safe := *in
+	safe, _ := proto.Clone(in).(*pb.AddResourceToProjectRequest)
+	if safe == nil {
+		return nil
+	}
 	safe.Secret = nil
-	return &safe
+	return safe
 }
 
 func projectResourceForLog(in *pb.ProjectResource) *pb.ProjectResource {
 	if in == nil {
 		return nil
 	}
-	safe := *in
+	safe, _ := proto.Clone(in).(*pb.ProjectResource)
+	if safe == nil {
+		return nil
+	}
 	safe.Secret = nil
-	return &safe
+	return safe
 }
 
 func (s *ResourceService) DeleteProjectResource(ctx context.Context, in *pb.PrimaryKeyProjectResource) (*pb.Empty, error) {

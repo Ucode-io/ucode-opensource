@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/cast"
+	"google.golang.org/protobuf/proto"
 )
 
 // AddResourceToProject godoc
@@ -328,12 +329,17 @@ func (h *HandlerV1) DeleteProjectResource(c *gin.Context) {
 }
 
 // projectResourceForLog returns a copy safe to write to logs: the secret is
-// dropped so credentials never reach the log sink.
+// dropped so credentials never reach the log sink. proto.Clone rather than a
+// struct copy — a generated message carries a mutex, and copying it by value
+// is what `go vet` flags.
 func projectResourceForLog(resource *pb.ProjectResource) *pb.ProjectResource {
 	if resource == nil {
 		return nil
 	}
-	safe := *resource
+	safe, _ := proto.Clone(resource).(*pb.ProjectResource)
+	if safe == nil {
+		return nil
+	}
 	safe.Secret = nil
-	return &safe
+	return safe
 }

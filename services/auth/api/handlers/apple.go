@@ -22,10 +22,10 @@ import (
 // @Accept json
 // @Produce json
 // @Param X-API-KEY header string false "X-API-KEY"
-// @Param registerBody body auth_service.AppleIdSettings true "register_body"
-// @Success 201 {object} http.Response{data=auth_service.AppleIdSettings} "User data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Param registerBody body pb.AppleIdSettings true "register_body"
+// @Success 201 {object} status.Response{data=pb.AppleIdSettings} "User data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) CreateAppleIdSettings(c *gin.Context) {
 	var body *pb.AppleIdSettings
 
@@ -68,10 +68,10 @@ func (h *Handler) CreateAppleIdSettings(c *gin.Context) {
 // @Tags AppleId
 // @Accept json
 // @Produce json
-// @Param registerBody body auth_service.AppleIdSettings true "register_body"
-// @Success 200 {object} http.Response{data=auth_service.AppleIdSettings} "Apple Config data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Param registerBody body pb.AppleIdSettings true "register_body"
+// @Success 200 {object} status.Response{data=pb.AppleIdSettings} "Apple Config data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) UpdateAppleIdSettings(c *gin.Context) {
 	var body *pb.AppleIdSettings
 
@@ -108,9 +108,9 @@ func (h *Handler) UpdateAppleIdSettings(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param project_id query string true "project_id"
-// @Success 200 {object} http.Response{data=auth_service.GetListAppleIdSettingsResponse} "Apple Config data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 200 {object} status.Response{data=pb.GetListAppleIdSettingsResponse} "Apple Config data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) GetAppleIdSettings(c *gin.Context) {
 	resp, err := h.services.AppleIdService().GetListAppleIdSettings(
 		c.Request.Context(), &pb.GetListAppleIdSettingsRequest{
@@ -135,8 +135,8 @@ func (h *Handler) GetAppleIdSettings(c *gin.Context) {
 // @Produce json
 // @Param id path string true "id"
 // @Success 204
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) DeleteAppleIdSettings(c *gin.Context) {
 	resp, err := h.services.AppleIdService().DeleteAppleIdSettings(
 		c.Request.Context(), &pb.AppleIdSettingsPrimaryKey{

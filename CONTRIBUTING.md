@@ -17,6 +17,7 @@ For working on the code itself:
 
 ```bash
 make build            # every service
+make vet              # go vet; CI runs it too
 make test             # unit tests, no Docker
 make test-integration # integration tests; they start their own Postgres
 ```

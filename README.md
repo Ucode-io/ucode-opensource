@@ -114,12 +114,14 @@ single-node arrangement production uses.
 
 ```bash
 make build            # build every service
+make vet              # go vet across every module
 make test             # unit tests, no Docker needed
 make test-integration # integration tests; starts throwaway Postgres containers
 make cli              # build bin/ucode
 make images           # build the container images locally
 make smoke            # walk the user path against a running stack
 make proto            # regenerate the gRPC bindings
+make swagger          # regenerate the /swagger docs (needs swag v1.8.9)
 ```
 
 To run the stack from images you just built rather than the published ones:

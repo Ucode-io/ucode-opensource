@@ -16,7 +16,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param project-id query string true "project-id"
-// @Success 200 {object} http.Response{data=company_service.GetListConfiguredResourceEnvironmentRes} "Environment data"
+// @Success 200 {object} http.Response{data=pb.GetListConfiguredResourceEnvironmentRes} "Environment data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) GetAllResourceEnvironments(c *gin.Context) {

@@ -438,7 +438,7 @@ func (h *Handler) V2DeleteUser(c *gin.Context) {
 
 // @Security ApiKeyAuth
 // V2DeleteFromAuthTable godoc
-// @ID delete_user_v2
+// @ID delete_user_from_auth_table_v2
 // @Param Resource-Id header string false "Resource-Id"
 // @Param Environment-Id header string true "Environment-Id"
 // @Router /v2/auth-table/{user-id} [DELETE]
@@ -491,7 +491,7 @@ func (h *Handler) V2DeleteFromAuthTable(c *gin.Context) {
 }
 
 // AddUserToProject godoc
-// @ID add user to project
+// @ID add_user_to_project
 // @Param Resource-Id header string false "Resource-Id"
 // @Param Environment-Id header string true "Environment-Id"
 // @Router /v2/add-user-to-project [POST]

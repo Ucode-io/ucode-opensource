@@ -94,8 +94,8 @@ func (h *HandlerV3) GetSingleLayout(c *gin.Context) {
 
 // GetListLayouts godoc
 // @Security ApiKeyAuth
-// @ID get_list_layouts
-// @Router /v2/layout [GET]
+// @ID get_list_layouts_v3
+// @Router /v3/menus/{menu_id}/views/{view_id}/tables/{collection}/layout [GET]
 // @Summary Get list layouts
 // @Description Get list layouts
 // @Tags Layout

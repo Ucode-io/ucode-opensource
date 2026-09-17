@@ -161,7 +161,7 @@ func main() {
 
 	h := handlers.NewHandler(baseConf, mapProjectConfs, log, projectServiceNodes, compSrvc, authSrvc, newRedis, centralRedis, cache, limiter, vaultClient)
 
-	api.SetUpAPI(r, h, baseConf, tracer)
+	api.SetUpAPI(r, &h, baseConf, tracer)
 
 	log.Info("server is running...")
 	if err := r.Run(baseConf.HTTPPort); err != nil {

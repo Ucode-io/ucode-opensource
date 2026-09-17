@@ -1,0 +1,36 @@
+# Compiles, vets and unit-tests every Go module.
+#
+# The README tells a contributor to run `make build vet test` before sending a
+# change. Nothing enforced it, so `go vet` was red on main for as long as anyone
+# had been looking: two log helpers copied a generated protobuf message — and
+# its mutex — by value. Cheap to keep green, expensive to rediscover.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # go.work carries the highest requirement across the modules; a
+          # single module's go.mod would install a Go too old for the others.
+          go-version-file: go.work
+
+      - run: make build
+
+      - run: make vet
+
+      - run: make test
+
+      # The CLI embeds the compose file. A release fails on a stale copy, which
+      # is the wrong place to find out.
+      - run: make cli-assets-check

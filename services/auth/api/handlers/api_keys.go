@@ -21,9 +21,9 @@ import (
 // @Produce json
 // @Param project-id path string true "project-id"
 // @Param api-key body auth_service.CreateReq true "ApiKeyReqBody"
-// @Success 201 {object} http.Response{data=auth_service.CreateRes} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.CreateRes} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) CreateApiKey(c *gin.Context) {
 	var apiKey auth_service.CreateReq
 
@@ -80,9 +80,9 @@ func (h *Handler) CreateApiKey(c *gin.Context) {
 // @Param project-id path string true "project-id"
 // @Param id path string true "id"
 // @Param api-key body auth_service.UpdateReq true "ApiKeyReqBody"
-// @Success 201 {object} http.Response{data=auth_service.UpdateRes} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.UpdateRes} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) UpdateApiKey(c *gin.Context) {
 	var apiKey auth_service.UpdateReq
 
@@ -117,9 +117,9 @@ func (h *Handler) UpdateApiKey(c *gin.Context) {
 // @Produce json
 // @Param id path string true "id"
 // @Param project-id path string true "project-id"
-// @Success 201 {object} http.Response{data=auth_service.GetRes} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.GetRes} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) GetApiKey(c *gin.Context) {
 
 	res, err := h.services.ApiKeysService().Get(
@@ -152,9 +152,9 @@ func (h *Handler) GetApiKey(c *gin.Context) {
 // @Param search query string false "search"
 // @Param client_type_id query string false "client_type_id"
 // @Param role_id query string false "role_id"
-// @Success 201 {object} http.Response{data=auth_service.GetListRes} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.GetListRes} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) GetListApiKeys(c *gin.Context) {
 
 	offset, err := h.getOffsetParam(c)
@@ -212,9 +212,9 @@ func (h *Handler) GetListApiKeys(c *gin.Context) {
 // @Produce json
 // @Param project-id path string true "project-id"
 // @Param id path string true "id"
-// @Success 201 {object} http.Response{data=auth_service.DeleteRes} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.DeleteRes} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) DeleteApiKeys(c *gin.Context) {
 
 	res, err := h.services.ApiKeysService().Delete(
@@ -239,9 +239,9 @@ func (h *Handler) DeleteApiKeys(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param api-key body auth_service.GenerateApiTokenReq true "ApiKeyReqBody"
-// @Success 201 {object} http.Response{data=auth_service.GenerateApiTokenRes} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.GenerateApiTokenRes} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) GenerateApiKeyToken(c *gin.Context) {
 	var apiKey auth_service.GenerateApiTokenReq
 
@@ -273,9 +273,9 @@ func (h *Handler) GenerateApiKeyToken(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param api-key body auth_service.RefreshApiTokenReq true "ApiKeyReqBody"
-// @Success 201 {object} http.Response{data=auth_service.RefreshApiTokenReq} "ApiKey data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.RefreshApiTokenReq} "ApiKey data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) RefreshApiKeyToken(c *gin.Context) {
 	var apiKey auth_service.RefreshApiTokenReq
 
@@ -309,9 +309,9 @@ func (h *Handler) RefreshApiKeyToken(c *gin.Context) {
 // @Param offset query integer false "offset"
 // @Param limit query integer false "limit"
 // @Param search query string false "search"
-// @Success 200 {object} http.Response{data=auth_service.GetClientPlatformListResponse} "GetClientPlatformListResponseBody"
-// @Response 400 {object} http.Response{data=string} "Invalid Argument"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 200 {object} status.Response{data=auth_service.GetClientPlatformListResponse} "GetClientPlatformListResponseBody"
+// @Response 400 {object} status.Response{data=string} "Invalid Argument"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) GetClientPlatformList(c *gin.Context) {
 	offset, err := h.getOffsetParam(c)
 	if err != nil {
@@ -354,9 +354,9 @@ func (h *Handler) GetClientPlatformList(c *gin.Context) {
 // @Param client-id query string false "client-id"
 // @Param offset query integer false "offset"
 // @Param limit query integer false "limit"
-// @Success 201 {object} http.Response{data=auth_service.ListClientTokenResponse} "Tokens data"
-// @Response 400 {object} http.Response{data=string} "Bad Request"
-// @Failure 500 {object} http.Response{data=string} "Server Error"
+// @Success 201 {object} status.Response{data=auth_service.ListClientTokenResponse} "Tokens data"
+// @Response 400 {object} status.Response{data=string} "Bad Request"
+// @Failure 500 {object} status.Response{data=string} "Server Error"
 func (h *Handler) ListClientTokens(c *gin.Context) {
 	offset, err := h.getOffsetParam(c)
 	if err != nil {

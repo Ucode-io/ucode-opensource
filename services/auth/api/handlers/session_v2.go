@@ -332,8 +332,8 @@ func (h *Handler) V3MultiCompanyLogin(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param login body auth_service.V2LoginRequest true "LoginRequestBody"
-// @Success 201 {object} http.Response{data=models.V2LoginResponse} "User data"
+// @Param login body pba.V2LoginRequest true "LoginRequestBody"
+// @Success 201 {object} http.Response{data=pba.V2LoginResponse} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2Login(c *gin.Context) {
@@ -503,8 +503,8 @@ func (h *Handler) V2Login(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param for_env query string false "for_env"
-// @Param user body auth_service.RefreshTokenRequest true "RefreshTokenRequestBody"
-// @Success 200 {object} http.Response{data=models.V2LoginResponse} "User data"
+// @Param user body pba.RefreshTokenRequest true "RefreshTokenRequestBody"
+// @Success 200 {object} http.Response{data=pba.V2LoginResponse} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2RefreshToken(c *gin.Context) {
@@ -551,8 +551,8 @@ func (h *Handler) V2RefreshToken(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param user body auth_service.RefreshTokenRequest true "RefreshTokenRequestBody"
-// @Success 200 {object} http.Response{data=auth_service.V2RefreshTokenSuperAdminResponse} "User data"
+// @Param user body pba.RefreshTokenRequest true "RefreshTokenRequestBody"
+// @Success 200 {object} http.Response{data=pba.V2RefreshTokenSuperAdminResponse} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2RefreshTokenSuperAdmin(c *gin.Context) {
@@ -591,8 +591,8 @@ func (h *Handler) V2RefreshTokenSuperAdmin(c *gin.Context) {
 // @Param Environment-Id header string false "Environment-Id"
 // @Param X-API-KEY header string false "X-API-KEY"
 // @Param project-id query string false "project-id"
-// @Param login body auth_service.V2LoginWithOptionRequest true "V2LoginRequest"
-// @Success 201 {object} http.Response{data=models.V2LoginWithOptionsResponse} "User data"
+// @Param login body pba.V2LoginWithOptionRequest true "V2LoginRequest"
+// @Success 201 {object} http.Response{data=pba.V2LoginWithOptionsResponse} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2LoginWithOption(c *gin.Context) {
@@ -687,8 +687,8 @@ func (h *Handler) V2LoginWithOption(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param login body auth_service.MultiCompanyLoginRequest true "LoginRequestBody"
-// @Success 201 {object} http.Response{data=models.MultiCompanyLoginResponse} "User data"
+// @Param login body pba.MultiCompanyLoginRequest true "LoginRequestBody"
+// @Success 201 {object} http.Response{data=pba.MultiCompanyLoginResponse} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) MultiCompanyLogin(c *gin.Context) {
@@ -733,8 +733,8 @@ func (h *Handler) MultiCompanyLogin(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param login body auth_service.V2MultiCompanyLoginReq true "LoginRequestBody"
-// @Success 201 {object} http.Response{data=models.V2MultiCompanyOneLoginRes} "User data"
+// @Param login body pba.V2MultiCompanyLoginReq true "LoginRequestBody"
+// @Success 201 {object} http.Response{data=pba.V2MultiCompanyOneLoginRes} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2MultiCompanyLogin(c *gin.Context) {
@@ -833,8 +833,8 @@ func (h *Handler) V2MultiCompanyLogin(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param login body auth_service.V2MultiCompanyLoginReq true "LoginRequestBody"
-// @Success 201 {object} http.Response{data=models.V2MultiCompanyOneLoginRes} "User data"
+// @Param login body pba.V2MultiCompanyLoginReq true "LoginRequestBody"
+// @Success 201 {object} http.Response{data=pba.V2MultiCompanyOneLoginRes} "User data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2MultiCompanyOneLogin(c *gin.Context) {
@@ -933,7 +933,7 @@ func (h *Handler) V2MultiCompanyOneLogin(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param login body auth_service.ForgotPasswordRequest true "ForgotPasswordRequest"
+// @Param login body pba.ForgotPasswordRequest true "ForgotPasswordRequest"
 // @Success 201 {object} http.Response{data=models.ForgotPasswordResponse} "Response"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
@@ -1016,7 +1016,7 @@ func (h *Handler) ForgotPassword(c *gin.Context) {
 // @Tags V2_Session
 // @Accept json
 // @Produce json
-// @Param login body auth_service.ForgotPasswordRequest true "ForgotPasswordRequest"
+// @Param login body pba.ForgotPasswordRequest true "ForgotPasswordRequest"
 // @Success 201 {object} http.Response{data=models.ForgotPasswordResponse} "Response"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
@@ -1200,7 +1200,7 @@ func (h *Handler) EmailEnter(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param body body models.ResetPassword true "ResetPasswordRequest"
-// @Success 201 {object} http.Response{data=auth_service.User} "Response"
+// @Success 201 {object} http.Response{data=pba.User} "Response"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) V2ResetPassword(c *gin.Context) {
@@ -1233,7 +1233,7 @@ func (h *Handler) V2ResetPassword(c *gin.Context) {
 // @Tags Expire Sessions
 // @Accept json
 // @Produce json
-// @Param sessions body auth_service.ExpireSessionsRequest true "ExpireSessionsRequestBody"
+// @Param sessions body pba.ExpireSessionsRequest true "ExpireSessionsRequestBody"
 // @Success 200 {object} http.Response{data=string} "Response data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
@@ -1269,7 +1269,7 @@ func (h *Handler) ExpireSessions(c *gin.Context) {
 // @Param Authorization header string true "Bearer access token or API-KEY"
 // @Param X-API-KEY header string false "API key when Authorization is API-KEY"
 // @Param project-id query string false "Project id"
-// @Param request body auth_service.DeleteByParamsRequest true "Delete sessions by params request"
+// @Param request body pba.DeleteByParamsRequest true "Delete sessions by params request"
 // @Success 204
 // @Response 400 {object} http.Response{data=string} "Invalid Argument"
 // @Failure 500 {object} http.Response{data=string} "Server Error"

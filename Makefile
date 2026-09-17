@@ -1,6 +1,6 @@
 MODULES := ./services/auth/... ./services/company/... ./services/gateway/... ./services/object-builder/... ./cmd/ucode/...
 
-.PHONY: build vet test test-integration fmt tidy proto cli cli-assets \
+.PHONY: build vet test test-integration fmt tidy proto swagger cli cli-assets \
         cli-assets-check images smoke release-dry-run
 
 build:
@@ -38,6 +38,28 @@ proto:
 		printf '  %s\n' "$$s" ; \
 	done
 	@echo "regenerated from services/*/protos"
+
+# Regenerates the swagger docs the two HTTP services serve at /swagger.
+#
+# --parseDependency is not optional: the annotations name generated protobuf
+# types, and without it swag never opens those packages and stops at the first
+# one. --parseInternal is what lets it see this module's own packages.
+#
+# Output is not byte-for-byte stable — swag names a definition after the
+# shortest unambiguous form of its package path, and which of two colliding
+# packages gets the short name changes between runs. The spec is equivalent
+# either way, so expect noise in the diff and check the paths, not the bytes.
+#
+# Needs swag v1.8.9, matching the library the services link:
+#   go install github.com/swaggo/swag/cmd/swag@v1.8.9
+SWAG ?= swag
+
+swagger:
+	@for s in auth gateway; do \
+		(cd services/$$s && $(SWAG) init -g api/api.go -o api/docs \
+			--parseDependency --parseInternal) || exit 1 ; \
+	done
+	@echo "regenerated services/{auth,gateway}/api/docs"
 
 # The CLI embeds the stack definition so `ucode start` needs no checkout.
 # deploy/ stays canonical; this copies it in before building.

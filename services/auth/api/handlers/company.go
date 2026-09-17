@@ -18,8 +18,8 @@ import (
 // @Tags Company
 // @Accept json
 // @Produce json
-// @Param company body auth_service.RegisterCompanyRequest true "RegisterCompanyRequestBody"
-// @Success 201 {object} http.Response{data=auth_service.CompanyPrimaryKey} "Company data"
+// @Param company body pba.RegisterCompanyRequest true "RegisterCompanyRequestBody"
+// @Success 201 {object} http.Response{data=pba.CompanyPrimaryKey} "Company data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) RegisterCompany(c *gin.Context) {
@@ -52,7 +52,7 @@ func (h *Handler) RegisterCompany(c *gin.Context) {
 // @Tags Company
 // @Accept json
 // @Produce json
-// @Param company body auth_service.UpdateCompanyRequest true "UpdateCompanyRequestBody"
+// @Param company body pba.UpdateCompanyRequest true "UpdateCompanyRequestBody"
 // @Success 204
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"

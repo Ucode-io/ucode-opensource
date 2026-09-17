@@ -466,7 +466,7 @@ func (h *Handler) V2RemoveRole(c *gin.Context) {
 // @Produce json
 // @Param project-id path string false "project-id"
 // @Param role-id path string false "role-id"
-// @Success 200 {object} http.Response{data=models.GetListWithRoleAppTablePermissionsResponse} "GetPermissionListResponseBody"
+// @Success 200 {object} http.Response{data=obs.GetListWithRoleAppTablePermissionsResponse} "GetPermissionListResponseBody"
 // @Response 400 {object} http.Response{data=string} "Invalid Argument"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) GetListWithRoleAppTablePermissions(c *gin.Context) {
@@ -552,7 +552,7 @@ func (h *Handler) GetListWithRoleAppTablePermissions(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param project-id query string true "project-id"
-// @Param permission body object_builder_service.UpdateRoleAppTablePermissionsRequest true "UpdateRoleRequestBody"
+// @Param permission body obs.UpdateRoleAppTablePermissionsRequest true "UpdateRoleRequestBody"
 // @Success 204
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
@@ -670,7 +670,7 @@ func (h *Handler) UpdateRoleAppTablePermissions(c *gin.Context) {
 // @Param project-id path string true "project-id"
 // @Param role-id path string true "role-id"
 // @Param parent-id path string true "parent-id"
-// @Success 200 {object} http.Response{data=models.GetAllMenuPermissionsResponse} "GetMenuPermissionListResponseBody"
+// @Success 200 {object} http.Response{data=obs.GetAllMenuPermissionsResponse} "GetMenuPermissionListResponseBody"
 // @Response 400 {object} http.Response{data=string} "Invalid Argument"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) GetListMenuPermissions(c *gin.Context) {
@@ -749,8 +749,8 @@ func (h *Handler) GetListMenuPermissions(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param project-id query string true "project-id"
-// @Param permission body object_builder_service.UpdateMenuPermissionsRequest true "UpdateMenuPermissionRequestBody"
-// @Success 200 {object} http.Response{data=models.UpdateMenuPermissionsRequest} "Role data"
+// @Param permission body obs.UpdateMenuPermissionsRequest true "UpdateMenuPermissionRequestBody"
+// @Success 200 {object} http.Response{data=obs.UpdateMenuPermissionsRequest} "Role data"
 // @Response 400 {object} http.Response{data=string} "Bad Request"
 // @Failure 500 {object} http.Response{data=string} "Server Error"
 func (h *Handler) UpdateMenuPermissions(c *gin.Context) {
