@@ -42,9 +42,23 @@ func NewCompanyService(cfg config.BaseConfig, log logger.LoggerI, strg storage.S
 	}
 }
 
-func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRequest) (*pb.CompanyPrimaryKey, error) {
+func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRequest) (pKey *pb.CompanyPrimaryKey, err error) {
 	dbSpan, ctx := span.StartSpanFromContext(ctx, "grpc_company.Register", req)
 	defer dbSpan.Finish()
+
+	// Everything below writes to two services and two databases with no
+	// transaction spanning them. rollback gives the caller the next best
+	// thing: on any failure the writes already made are undone, so a retry
+	// meets a clean installation instead of a half-built one. The returns are
+	// named so that every existing `return nil, err` below triggers it — a
+	// return statement assigns the named results before deferred calls run,
+	// so this sees the error even where the expression used a shadowed one.
+	rollback := &registerRollback{log: s.log}
+	defer func() {
+		if err != nil {
+			rollback.run(ctx, err)
+		}
+	}()
 
 	var (
 		before      runtime.MemStats
@@ -109,6 +123,11 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("---RegisterCompany--->CreateCompanyServiceClient", logger.Error(err))
 		return nil, err
 	}
+	rollback.record("company", func(ctx context.Context) error {
+		_, err := s.services.CompanyServiceClient().Delete(ctx,
+			&company_service.DeleteCompanyRequest{Id: companyPKey.GetId()})
+		return err
+	})
 
 	project, err := s.services.ProjectServiceClient().Create(ctx, &company_service.CreateProjectRequest{
 		CompanyId:    companyPKey.GetId(),
@@ -120,6 +139,14 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("---RegisterCompany--->CreateProject", logger.Error(err))
 		return nil, err
 	}
+	rollback.record("project", func(ctx context.Context) error {
+		_, err := s.services.ProjectServiceClient().Delete(ctx,
+			&company_service.DeleteProjectRequest{
+				ProjectId: project.GetProjectId(),
+				CompanyId: companyPKey.GetId(),
+			})
+		return err
+	})
 
 	_, _ = s.services.ProjectServiceClient().Update(ctx, &company_service.Project{
 		CompanyId:    companyPKey.GetId(),
@@ -149,8 +176,13 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("---RegisterCompany-->CreateEnvironment", logger.Error(err))
 		return nil, err
 	}
+	rollback.record("environment", func(ctx context.Context) error {
+		_, err := s.services.EnvironmentService().Delete(ctx,
+			&company_service.EnvironmentPrimaryKey{Id: environment.GetId()})
+		return err
+	})
 
-	_, err = s.services.ApiKeysService().Create(ctx, &pb.CreateReq{
+	apiKey, err := s.services.ApiKeysService().Create(ctx, &pb.CreateReq{
 		Name:             "Function",
 		ProjectId:        project.ProjectId,
 		EnvironmentId:    environment.GetId(),
@@ -163,6 +195,10 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("!!!RegisterCompany-->CreateApiKey", logger.Error(err))
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	rollback.record("api key", func(ctx context.Context) error {
+		_, err := s.services.ApiKeysService().Delete(ctx, &pb.DeleteReq{Id: apiKey.GetId()})
+		return err
+	})
 
 	hashedPassword, err := security.HashPasswordBcrypt(password)
 	if err != nil {
@@ -182,6 +218,10 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("---RegisterCompany--->CreateUser", logger.Error(err))
 		return nil, err
 	}
+	rollback.record("admin user", func(ctx context.Context) error {
+		_, err := s.strg.User().Delete(ctx, &pb.UserPrimaryKey{Id: createUserRes.GetId()})
+		return err
+	})
 
 	_, err = s.services.CompanyServiceClient().Update(ctx, &company_service.Company{
 		Id:      companyPKey.Id,
@@ -205,6 +245,14 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("---RegisterCompany-->AddUser2Project", logger.Error(err))
 		return nil, err
 	}
+	rollback.record("project membership", func(ctx context.Context) error {
+		_, err := s.strg.User().DeleteUserFromProject(ctx, &pb.DeleteSyncUserRequest{
+			UserId:    createUserRes.GetId(),
+			ProjectId: project.GetProjectId(),
+			CompanyId: companyPKey.GetId(),
+		})
+		return err
+	})
 
 	resource, err := s.services.ResourceService().CreateResource(ctx, &company_service.CreateResourceReq{
 		CompanyId:     companyPKey.GetId(),
@@ -222,6 +270,11 @@ func (s *companyService) Register(ctx context.Context, req *pb.RegisterCompanyRe
 		s.log.Error("---RegisterCompany-AutoCreateResource--->", logger.Error(err))
 		return nil, err
 	}
+	rollback.record("project database", func(ctx context.Context) error {
+		_, err := s.services.ResourceService().RemoveResource(ctx,
+			&company_service.RemoveResourceRequest{Id: resource.GetId()})
+		return err
+	})
 
 	_, err = s.services.ServiceResource().Update(ctx, &company_service.UpdateServiceResourceReq{
 		EnvironmentId:    environment.GetId(),

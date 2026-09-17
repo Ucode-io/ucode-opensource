@@ -65,9 +65,42 @@
       Verified: object-builder healthy after 5 checks, company started 2.9s
       behind it, smoke green. Still not transactional — a rollback would be the
       real fix; this makes the failure both unlikely and visible
-- [ ] 3.10 Make company registration transactional, or have the CLI clear a
-      half-created company itself. 3.8 stops the known race and reports the
-      damage, but the two writes are still not one unit
+- [x] 3.10 Company registration now undoes itself when it fails.
+
+      A transaction was not available: `Register` is nine writes across two
+      services and two databases, reached over gRPC. What it has instead is
+      compensation. Each write records how to undo itself, and a deferred
+      handler on a named error return replays the recorded undos in reverse
+      when the function returns an error — company, project, environment, api
+      key, admin user, the user's membership of the project, and the project's
+      own Postgres database. The named return is what makes it hard to forget:
+      every existing `return nil, err` triggers it, including the ones whose
+      expression used a shadowed `err`, because a return statement assigns the
+      named results before deferred calls run.
+
+      Reverse order is not cosmetic — project references company, and
+      `user_project` references the user, so undoing the outer thing first
+      fails on a foreign key. The compensation also runs on a context derived
+      with `context.WithoutCancel`: by the time it runs, the caller has often
+      already timed out or hung up, which is frequently what failed the
+      registration in the first place. It carries its own 30s deadline, and a
+      failed undo logs and continues rather than stranding the steps below it —
+      above all the company row, which is the one that blocks a retry.
+
+      Two supporting fixes. `CompanyService.Delete` and
+      `EnvironmentService.Delete` in company-service logged their failure and
+      returned success, so the rollback could never learn an undo had not
+      happened; both now return the error. (That also means a failed delete
+      from the admin panel stops reporting 204.)
+
+      Tested: `register_rollback_test.go` covers reverse order, continuing past
+      a failed undo, and surviving a cancelled caller context. All three were
+      mutation-checked — forward order, `return` instead of `continue`, and
+      dropping `WithoutCancel` each turn a test red.
+
+      Not yet proven end to end: forcing the original failure (object-builder
+      not listening) against a live stack and watching the retry succeed. That
+      needs `ucode reset`, so it belongs with 5.2 and 1.6
 - [x] 3.9 Preflight must check ports. Port 5432 was already taken on the test
       machine and compose failed with a raw Docker error
 - [x] 3.6 Print credentials and open the browser

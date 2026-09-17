@@ -100,6 +100,7 @@ func (s *CompanyService) Delete(ctx context.Context, req *pb.DeleteCompanyReques
 	err := s.storage.Company().Delete(ctx, req.Id)
 	if err != nil {
 		s.logger.Error("--DeleteCompany--", l.Error(err))
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &pb.Empty{}, nil

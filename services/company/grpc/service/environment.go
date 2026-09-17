@@ -268,6 +268,7 @@ func (s *EnvironmentService) Delete(ctx context.Context, in *pb.EnvironmentPrima
 	res, err := s.storage.Environment().Delete(ctx, in)
 	if err != nil {
 		s.logger.Error("--DeleteEnvironment--", l.Error(err))
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return res, nil
