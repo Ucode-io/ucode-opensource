@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { IconTrash } from "@tabler/icons-react";
 import { z } from "zod";
 import {
   BOARD_ORDER,
@@ -125,7 +126,9 @@ import { useSession } from "@/shared/api/use-session";
 import { toast } from "@/shared/lib/toast";
 import { useUi } from "@/shared/lib/ui-store";
 import type { TranslationKey } from "@/shared/lib/i18n";
+import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Icon } from "@/shared/ui/icon";
 import { Tabs } from "@/shared/ui/tabs";
 
 /**
@@ -1258,42 +1261,42 @@ function MenuPage() {
               {/* Поиск, отбор и сортировка — про таблицу: у нарисованного
                   заглушкой view искать нечего, а ручка дерева их не читает. */}
               {supportedView && !treeView && (
-                <TableToolbar
-                  tableSlug={view.tableSlug}
-                  columns={columns}
-                  language={language}
-                  sorts={sortless ? [] : sorts}
-                  /* Ни на доске, ни в календаре сортировки нет: там
-                     порядок строк не виден вовсе — карточки расставлены
-                     руками, события стоят по своим датам. */
-                  {...(sortless
-                    ? {}
-                    : {
-                        onSorts: (next: Sort[]) =>
-                          setSearch({ sort: formatSorts(next), page: 1 }, true),
-                      })}
-                  /* Перечитать строки. Данные меняются и без нас —
-                     приложением заказчика, функцией, импортом, — а кэш
-                     держит их минуту. */
-                  onRefresh={() => void refetchRows()}
-                  refreshing={isFetching}
-                  filtersOpen={filtersVisible}
-                  filterCount={activeFilters}
-                  // Закрытие не стирает сами фильтры: спрятать строку и снять
-                  // отбор — разные намерения.
-                  onToggleFilters={() => setSearch({ filtersOpen: !filtersVisible }, true)}
-                  search={searchText}
-                  /* Поиск — отдельное право роли (`search_button`), и его
-                     отсутствие убирает поле, а не только кнопку: см.
-                     searchText выше. */
-                  {...(can.searchButton
-                    ? {
-                        onSearch: (next: string) =>
-                          setSearch({ search: next || undefined, page: 1 }, true),
-                      }
-                    : {})}
-                />
-              )}
+                  <TableToolbar
+                    tableSlug={view.tableSlug}
+                    columns={columns}
+                    language={language}
+                    sorts={sortless ? [] : sorts}
+                    /* Ни на доске, ни в календаре сортировки нет: там
+                       порядок строк не виден вовсе — карточки расставлены
+                       руками, события стоят по своим датам. */
+                    {...(sortless
+                      ? {}
+                      : {
+                          onSorts: (next: Sort[]) =>
+                            setSearch({ sort: formatSorts(next), page: 1 }, true),
+                        })}
+                    /* Перечитать строки. Данные меняются и без нас —
+                       приложением заказчика, функцией, импортом, — а кэш
+                       держит их минуту. */
+                    onRefresh={() => void refetchRows()}
+                    refreshing={isFetching}
+                    filtersOpen={filtersVisible}
+                    filterCount={activeFilters}
+                    // Закрытие не стирает сами фильтры: спрятать строку и снять
+                    // отбор — разные намерения.
+                    onToggleFilters={() => setSearch({ filtersOpen: !filtersVisible }, true)}
+                    search={searchText}
+                    /* Поиск — отдельное право роли (`search_button`), и его
+                       отсутствие убирает поле, а не только кнопку: см.
+                       searchText выше. */
+                    {...(can.searchButton
+                      ? {
+                          onSearch: (next: string) =>
+                            setSearch({ search: next || undefined, page: 1 }, true),
+                        }
+                      : {})}
+                  />
+                )}
 
               {/* Действия таблицы: функции проекта над отмеченными
                   строками. Рядом с настройками, а не среди поиска
@@ -1307,6 +1310,25 @@ function MenuPage() {
                   selected={[...selected]}
                   canEdit={can.settings}
                 />
+              )}
+
+              {/* Удаление отмеченных — тут же, у поиска и действий, а не
+                  внизу под таблицей: строку выделяют здесь же, в шапке,
+                  и убирать её отсюда логичнее, чем ехать взглядом в подвал.
+                  Кнопка появляется вместе с выделением и раздвигает
+                  остальное влево — панели действий не место, когда
+                  выделять нечего. */}
+              {supportedView && can.delete && selected.size > 0 && (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={remove.isPending}
+                  onClick={() => setConfirming(true)}
+                  className="ml-2 border border-danger"
+                >
+                  <Icon as={IconTrash} size={14} />
+                  {t("table.deleteSelected", { count: selected.size })}
+                </Button>
               )}
 
               {/* «Новая запись» карточкой, а не строкой в таблице:
@@ -1976,10 +1998,8 @@ function MenuPage() {
               setTableLimit(view.tableSlug, next);
               setSearch({ limit: next, page: 1 });
             }}
-            /* Удаление — отдельное право роли: без него кнопки нет.
-               Выделение при этом остаётся: над отмеченными строками
-               запускают действия. */
-            {...(can.delete ? { onDeleteSelected: () => setConfirming(true) } : {})}
+            /* Кнопка удаления отмеченных переехала в шапку, к остальным
+               действиям над выделением (TableActions) — см. выше. */
           />
           )}
         </>

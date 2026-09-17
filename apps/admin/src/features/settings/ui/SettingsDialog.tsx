@@ -11,6 +11,7 @@ import {
   IconRoute,
   IconServer2,
   IconShieldLock,
+  IconTerminal2,
   IconUser,
   IconUsers,
   IconX,
@@ -31,6 +32,7 @@ import { MicrofrontendSettings } from "./MicrofrontendSettings";
 import { ProfileSettings } from "./ProfileSettings";
 import { ProjectSettings } from "./ProjectSettings";
 import { RoleSettings } from "./RoleSettings";
+import { SqlConsole } from "./SqlConsole";
 import { UserSettings } from "./UserSettings";
 import { ResourceSettings } from "./resources/ResourceSettings";
 
@@ -148,6 +150,10 @@ const GROUPS: {
         wide: true,
       },
       { id: "connections", labelKey: "connections.title", icon: IconDatabase, wide: true },
+      /* Своего права у консоли нет: в GLOBAL_RIGHTS такой кнопки не
+         заводили. Значит её видит тот же, кто видит настройки проекта
+         целиком, — групповое `settings_button`. */
+      { id: "sql", labelKey: "sql.title", icon: IconTerminal2, wide: true },
       { id: "resources", labelKey: "resources.title", icon: IconPlug, wide: true },
       {
         id: "activity",
@@ -172,6 +178,7 @@ const CONTENT: Record<string, () => React.JSX.Element> = {
   functions: FunctionSettings,
   microfrontends: MicrofrontendSettings,
   connections: ConnectionSettings,
+  sql: SqlConsole,
   resources: ResourceSettings,
   activity: ActivityLog,
 };

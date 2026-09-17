@@ -44,13 +44,19 @@ export function ViewTabs({
   );
 
   return (
-    <Tabs
-      tabs={tabs}
-      activeId={activeId}
-      onSelect={(id) => {
-        const view = views.find((item) => item.id === id);
-        if (view) onSelect(view);
-      }}
-    />
+    // Ограничение ширины — тут, а не в самом Tabs: полоса view делит
+    // subheader с поиском и действиями, и без потолка десяток вкладок
+    // вытеснил бы их за край. У вкладок в других местах (карточка,
+    // настройки) свободного соседства с другими элементами нет.
+    <div className="max-w-[416px] min-w-0">
+      <Tabs
+        tabs={tabs}
+        activeId={activeId}
+        onSelect={(id) => {
+          const view = views.find((item) => item.id === id);
+          if (view) onSelect(view);
+        }}
+      />
+    </div>
   );
 }

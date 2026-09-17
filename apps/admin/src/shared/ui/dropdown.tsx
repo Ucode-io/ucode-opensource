@@ -54,11 +54,14 @@ export function Dropdown({
   /**
    * Высота кнопки. `sm` — для панели настроек поля и строк отбора, где
    * поля стоят в столбик по десятку и в полный рост не помещаются.
+   * `control` — вровень с кнопкой и полоской вкладок (`--spacing-control`,
+   * те же 32px), для строки, где дропдаун стоит рядом с `Tabs`: `sm`
+   * там читается тесно, а `md` (36px, высота `Input`) выше вкладок.
    * Отдельным свойством, а не классом снаружи: у конфликтующих утилит
    * Tailwind побеждает не та, что стоит позже в атрибуте, а та, что
    * позже в собранном CSS, — и высота получалась бы через раз.
    */
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "control";
   disabled?: boolean;
   onChange: (value: string) => void;
   /** Строка поиска. Есть `onSearch` — над списком появляется поле. */
@@ -107,7 +110,11 @@ export function Dropdown({
           aria-haspopup="menu"
           {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
           className={`flex w-full items-center gap-2 rounded-md border bg-surface text-left transition-colors disabled:opacity-50 ${
-            size === "sm" ? "h-7 px-1.5 text-xs" : "h-(--spacing-input) px-2.5 text-sm"
+            size === "sm"
+              ? "h-7 px-1.5 text-xs"
+              : size === "control"
+                ? "h-(--spacing-control) px-2.5 text-sm"
+                : "h-(--spacing-input) px-2.5 text-sm"
           } ${open ? "border-accent" : "border-border-strong hover:border-fg-subtle"}`}
         >
           {/* Значок выбранного — на кнопке, а не только в раскрытом

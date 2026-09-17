@@ -375,4 +375,5 @@ view той же связи, — и в карточке появлялись в�
 | `GRID` | Упразднённый [[ViewType]] | `TABLE` |
 | `enable_multi_language`, `attributes.enable_multi_language` | Не существуют в схеме. Признак называется `enable_multilanguage` | `enable_multilanguage` |
 | `attributes.enable_multilanguage`, `attributes.autofill_table`, `attributes.autofill_field`, `attributes.automatic` | Эхо: бэкенд копирует туда колонки, отдавая layout. Пишутся и читаются только колонки | одноимённые колонки [[Field]] |
+| `Endpoint` для `/v1/custom-endpoints` | Занято правилами подмены пути `/x-api/...` (`settings/model/endpoint`). Custom endpoint — это сохранённый SQL-запрос, который выполняют по id | `SavedQuery` |
 | `new_design`, `new_router`, `new_layout` | Поля Project в бэкенде, различавшие поколения UI. Новый фронт их не читает и всегда работает как «новая версия» | — |

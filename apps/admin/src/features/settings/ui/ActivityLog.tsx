@@ -1,14 +1,10 @@
-import { useDeferredValue, useState } from "react";
-import { IconFileSpreadsheet } from "@tabler/icons-react";
+import { Fragment, useDeferredValue, useState } from "react";
+import { IconChevronDown, IconChevronUp, IconFileSpreadsheet } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
-import { localized, useTables } from "@/features/table";
-import { useDataLanguages } from "@/features/workspace";
 import { Button } from "@/shared/ui/button";
 import { DatePicker } from "@/shared/ui/date-picker";
-import { Dropdown } from "@/shared/ui/dropdown";
 import { Icon } from "@/shared/ui/icon";
 import { Input } from "@/shared/ui/input";
-import { Modal } from "@/shared/ui/modal";
 import { Tabs } from "@/shared/ui/tabs";
 import {
   ACTIVITY_PAGE,
@@ -18,9 +14,11 @@ import {
   useExportActivity,
   type ActivityFilters,
 } from "../api/activity";
-import { unwrapEntry } from "../model/activity";
+import { diffEntry, unwrapEntry, type EntryChange } from "../model/activity";
+import { relativeTime } from "../model/time";
 import { FunctionLogs } from "./FunctionLogs";
-import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
+import { ActionBadge, Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
+import { TableFilter } from "./TableFilter";
 import { Usage } from "./Usage";
 
 /**
@@ -74,6 +72,7 @@ function ChangesLog() {
 
   const [filters, setFilters] = useState<ActivityFilters>(NO_FILTERS);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(ACTIVITY_PAGE);
 
   /*
    * Текстовые поля отложены, даты — нет: дату вводят целиком и разом,
@@ -81,7 +80,7 @@ function ChangesLog() {
    * поэтому лишних запросов на каждую букву не уходит.
    */
   const deferred = useDeferredValue(filters);
-  const { entries, count, isLoading } = useActivity(deferred, page);
+  const { entries, count, isLoading } = useActivity(deferred, page, limit);
 
   const [opened, setOpened] = useState("");
   const exportExcel = useExportActivity();
@@ -95,10 +94,14 @@ function ChangesLog() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SectionHeader title={t("activity.title")} hint={t("activity.hint")}>
         {/* Выгружается отобранное, а не страница: файл делают, чтобы
-            посмотреть шире экрана. */}
+            посмотреть шире экрана.
+
+            Кнопка основная, как и в остальных разделах настроек: это
+            единственное действие в шапке. `secondary` здесь белая
+            на белой панели и держится на одном волоске границы —
+            вариант рассчитан на фон приложения, а не на поверхность. */}
         <Button
           size="sm"
-          variant="secondary"
           disabled={exportExcel.isPending}
           onClick={() => exportExcel.mutate(deferred)}
         >
@@ -189,121 +192,206 @@ function ChangesLog() {
               <Th>{t("activity.table")}</Th>
               <Th>{t("activity.user")}</Th>
               <Th className="w-24">{t("activity.status")}</Th>
+              <Th className="w-10" />
             </tr>
           </thead>
 
           <tbody>
-            {isLoading && <Empty text={t("common.loading")} colSpan={5} />}
-            {!isLoading && !entries.length && <Empty text={t("activity.empty")} colSpan={5} />}
+            {isLoading && <Empty text={t("common.loading")} colSpan={6} />}
+            {!isLoading && !entries.length && <Empty text={t("activity.empty")} colSpan={6} />}
 
             {entries.map((entry) => (
-              <tr
-                key={entry.id}
-                onClick={() => setOpened(entry.id)}
-                className="cursor-pointer hover:bg-surface-hover"
-              >
-                <Td className="text-fg-muted">{formatDateTime(entry.date, i18n.language)}</Td>
-                <Td>{entry.action}</Td>
-                <Td className="text-fg-muted">{entry.table}</Td>
-                <Td className="text-fg-muted">{entry.user}</Td>
-                <Td>
-                  {/* Код ответа рисуется только тогда, когда он есть:
-                      у записей до появления колонки он нулевой, и «0»
-                      читалось бы как настоящий ответ. */}
-                  {entry.statusCode > 0 && (
-                    <span
-                      className={
-                        entry.statusCode < 400 ? "text-2xs text-fg-muted" : "text-2xs text-danger"
-                      }
-                    >
-                      {entry.method} {entry.statusCode}
+              /*
+               * Строка и её раскрытие — соседи, а не вложенные: в таблице
+               * подробности живут своей `<tr>` во всю ширину. Поэтому
+               * фрагмент с ключом, а не обёртка: лишний узел между
+               * `<tbody>` и `<tr>` разметку таблицы ломает.
+               */
+              <Fragment key={entry.id}>
+                <tr
+                  onClick={() => setOpened(opened === entry.id ? "" : entry.id)}
+                  /* Открытая строка — `surface-active`, а не `surface-hover`:
+                     наведением подсвечивается любая, и одинаковый тон
+                     не отличал бы открытую от той, под которой сейчас
+                     курсор. Это та же пара тонов, что у списка
+                     подключений. */
+                  className={`cursor-pointer transition-colors hover:bg-surface-hover ${
+                    opened === entry.id ? "bg-surface-active" : ""
+                  }`}
+                >
+                  <Td className="text-fg-muted">
+                    {formatDateTime(entry.date, i18n.language)}
+                    {/* Вторая строка отвечает на другой вопрос: не «когда
+                        именно», а «давно ли». Считать это в уме из даты
+                        человек не должен. */}
+                    <span className="block text-2xs text-fg-subtle">
+                      {relativeTime(entry.date, i18n.language)}
                     </span>
-                  )}
-                </Td>
-              </tr>
+                  </Td>
+                  <Td>
+                    <ActionBadge action={entry.action} />
+                  </Td>
+                  <Td className="text-fg-muted">{entry.table}</Td>
+                  <Td className="text-fg-muted">{entry.user}</Td>
+                  <Td>
+                    {/*
+                      Метод здесь тихим текстом, а не плашкой, как
+                      в журнале функций: рядом уже стоит плашка
+                      действия, и она говорит то же самое — `UPDATE`
+                      это и есть `PUT`. Две цветные метки в одной
+                      строке об одном и том же — это не «заметнее»,
+                      а «пестрее»; цвет достаётся той, что несёт
+                      и глагол, и сущность.
+
+                      Код ответа рисуется только тогда, когда он есть:
+                      у записей до появления колонки он нулевой, и «0»
+                      читалось бы как настоящий ответ. Успех НЕ красим
+                      в зелёный: двухсотых подавляющее большинство,
+                      и зелёная стена перестаёт что-либо выделять —
+                      глаз ищет здесь отказ.
+                    */}
+                    <span className="flex items-baseline gap-1.5 font-mono text-2xs text-fg-subtle">
+                      {entry.method}
+
+                      {entry.statusCode > 0 && (
+                        <span
+                          className={`tabular-nums ${
+                            entry.statusCode < 400 ? "text-fg-muted" : "text-danger"
+                          }`}
+                        >
+                          {entry.statusCode}
+                        </span>
+                      )}
+                    </span>
+                  </Td>
+
+                  <Td className="text-right">
+                    {/* Кнопка, а не один значок на строке: строку мышью
+                        открывают целиком, но с клавиатуры до неё иначе
+                        не добраться — `<tr>` фокус не принимает.
+                        `stopPropagation` — чтобы нажатие не сосчиталось
+                        дважды: сначала кнопкой, потом строкой под ней. */}
+                    <button
+                      type="button"
+                      aria-expanded={opened === entry.id}
+                      aria-controls={`entry-${entry.id}`}
+                      aria-label={opened === entry.id ? t("tree.collapse") : t("tree.expand")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpened(opened === entry.id ? "" : entry.id);
+                      }}
+                      /* `cursor-pointer` явно: у `<button>` курсор по
+                         умолчанию стрелка, а preflight Tailwind v4
+                         его больше не переопределяет. */
+                      className="grid size-6 cursor-pointer place-items-center rounded text-fg-subtle transition-colors hover:bg-surface-active hover:text-fg"
+                    >
+                      <Icon
+                        as={IconChevronDown}
+                        size={14}
+                        className={`transition-transform ${opened === entry.id ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </Td>
+                </tr>
+
+                {opened === entry.id && (
+                  <tr>
+                    {/*
+                      Подробности лежат под своей строкой, а не поверх
+                      списка: соседние записи остаются видны, и чтобы
+                      посмотреть следующую, окно не надо закрывать.
+
+                      Полоса акцента слева связывает раскрытое с его
+                      строкой: без неё это просто серый прямоугольник
+                      между двумя записями, и к какой из них он
+                      относится — к той, что выше, или к той, что ниже,
+                      — приходится догадываться. Цвет тот же, которым
+                      в системе помечено активное (`docs/DESIGN.md`).
+                    */}
+                    <td
+                      colSpan={6}
+                      className="border-b border-b-border border-l-2 border-l-accent bg-bg px-4 py-3"
+                    >
+                      {/*
+                        Появление — та же анимация, что у всего, что
+                        открывается в этом приложении (`--animate-page`,
+                        180мс ease-out): высоту строки таблицы плавно
+                        не разогнать, а мгновенная подмена содержимого
+                        под курсором читается как подёргивание. При
+                        `prefers-reduced-motion` она гасится глобально.
+                      */}
+                      <div id={`entry-${entry.id}`} className="animate-page">
+                        <EntryDetails id={entry.id} />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
       </div>
 
-      <Pager page={page} total={count} limit={ACTIVITY_PAGE} onPage={setPage} />
-
-      {opened && <EntryDialog id={opened} onClose={() => setOpened("")} />}
+      <Pager
+        page={page}
+        total={count}
+        limit={limit}
+        onPage={setPage}
+        onLimit={(next) => {
+          setLimit(next);
+          // Пятая страница по двадцать — это не пятая по сотне: после
+          // смены размера прежний номер указывает в другое место.
+          setPage(1);
+        }}
+      />
     </div>
   );
 }
 
 /**
- * Отбор по таблице — выбором из списка, а не набором подстроки: слаг
- * таблицы (`orders`, `user_addresses`) человек по памяти не наберёт,
- * а с опечаткой журнал молча покажет пусто.
+ * Подробности записи — под самой записью, а не поверх списка.
  *
- * Список тот же, что у связей и у пункта меню, — `useTables`: та же
- * ручка, тот же поиск на сервере и та же догрузка по страницам.
- * Сотни таблиц в проекте — норма, поэтому целиком он не тянется.
+ * Модальное окно здесь было не на месте: журнал читают строку за
+ * строкой, а окно накрывало список целиком, и ради соседней записи его
+ * приходилось закрывать. Раскрытая строка оставляет соседей на виду.
+ * Так же сделано у ugen (`logs-view.tsx`, аккордеон), и это
+ * единственное, что оттуда стоило взять: содержимое у них — тот же
+ * сырой JSON в трёх вкладках.
  *
- * В отбор уходит СЛАГ: сервер сравнивает его по подстроке и со слагом,
- * и с подписью (`version_history.go:158`), но подпись переводится
- * и повторяется у разных таблиц, а слаг один.
- */
-function TableFilter({ value, onChange }: { value: string; onChange: (slug: string) => void }) {
-  const { t } = useTranslation();
-  const [search, setSearch] = useState("");
-  const { current: language } = useDataLanguages();
-  const tables = useTables(search);
-
-  const found = tables.items.map((table) => ({
-    value: table.slug,
-    label: localized(table.labels, language, table.label),
-  }));
-
-  const items = [
-    // Первым пунктом — снять отбор: стереть выбор в списке больше нечем.
-    ...(value ? [{ value: "", label: t("table.clearFilters") }] : []),
-    /*
-     * Выбранная таблица остаётся в списке, даже когда поиск её не нашёл:
-     * иначе набранное в поиске чужое слово стирает подпись с кнопки,
-     * и кажется, что отбора нет, — а он есть. Слага хватает: он же
-     * и лежит в отборе.
-     */
-    ...(value && !found.some((item) => item.value === value)
-      ? [{ value, label: value }]
-      : []),
-    ...found,
-  ];
-
-  return (
-    <Dropdown
-      value={value}
-      items={items}
-      placeholder={t("activity.table")}
-      ariaLabel={t("activity.table")}
-      searchPlaceholder={t("menuForm.tableSearch")}
-      emptyText={t("menuForm.tableEmpty")}
-      search={search}
-      loading={tables.isLoading}
-      hasMore={tables.hasMore}
-      onSearch={setSearch}
-      onLoadMore={tables.loadMore}
-      onChange={onChange}
-      size="sm"
-    />
-  );
-}
-
-/**
- * Одна запись: что просили, что ответили, что было и что стало.
+ * Сверху только разошедшиеся поля, каждое строкой. «Было» и «стало»
+ * целиком — два полотна по две сотни строк, отличающиеся номером
+ * порядка да одним идентификатором; открывали запись ради этого
+ * отличия, а находить его приходилось глазами. Полотна остались,
+ * но под кнопкой — для случая, когда нужно свериться с ответом
+ * целиком.
  *
- * Показываем всё четыре поля, а не только «стало»: по «было» видно,
- * что именно поменялось, а по запросу с ответом — кто и чем это сделал.
  * Пустые разделы не рисуются вовсе: у записи о чтении нет ни «было»,
  * ни «стало», и четыре подписи с прочерками только мешают.
  */
-function EntryDialog({ id, onClose }: { id: string; onClose: () => void }) {
-  const { t, i18n } = useTranslation();
+function EntryDetails({ id }: { id: string }) {
+  const { t } = useTranslation();
   const { entry, isLoading } = useActivityEntry(id);
 
-  const parts = entry
+  const [raw, setRaw] = useState(false);
+
+  const changes = entry ? diffEntry(entry.before, entry.after) : [];
+
+  /*
+   * Повторы выброшены, и это не косметика.
+   *
+   * Шлюз кладёт ОДНО И ТО ЖЕ значение в два поля: `logReq.Response = resp`
+   * и `logReq.Current = resp` стоят рядом в каждом обработчике правки
+   * (`api/handlers/v2/view.go:294`, `field.go:164`, `relation.go:253`
+   * и ещё десяток мест). То есть «Ответ» — это буква в букву «Стало».
+   *
+   * А «Запрос» у правки — тело запроса, то есть тот же самый объект
+   * сущности (`Request: &view`), поэтому он и выглядит как ответ. Это
+   * правда о записи, а не ошибка показа: убрать его нельзя, он всё же
+   * другой — в ответе заполнены поля, которые проставил сервер.
+   *
+   * Остаётся первый по порядку, а порядок здесь от важного к служебному.
+   */
+  const payloads = entry
     ? ([
         ["activity.before", unwrapEntry(entry.before)],
         ["activity.after", unwrapEntry(entry.after)],
@@ -312,47 +400,147 @@ function EntryDialog({ id, onClose }: { id: string; onClose: () => void }) {
       ] as const).filter(([, value]) => value)
     : [];
 
+  const parts = payloads.filter(
+    ([, value], index) => payloads.findIndex(([, other]) => other === value) === index,
+  );
+
   return (
-    <Modal onClose={onClose}>
-      <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-surface shadow-modal">
-        <header className="flex shrink-0 items-start gap-3 border-b border-border px-5 py-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{entry?.action ?? t("common.loading")}</h2>
-            <p className="mt-0.5 text-xs text-fg-subtle">
-              {[
-                entry && formatDateTime(entry.date, i18n.language),
-                entry?.user,
-                entry?.table,
-                entry?.duration ? `${entry.duration} ms` : "",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          </div>
+    <div className="space-y-3">
+      {isLoading && <p className="text-sm text-fg-muted">{t("common.loading")}</p>}
 
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            {t("action.close")}
-          </Button>
-        </header>
+      {/* Длительность — единственное, чего нет в самой строке. */}
+      {entry?.duration ? (
+        <p className="text-2xs text-fg-subtle tabular-nums">{entry.duration} ms</p>
+      ) : null}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-          {isLoading && <p className="text-sm text-fg-muted">{t("common.loading")}</p>}
-          {!isLoading && !parts.length && (
-            <p className="text-sm text-fg-subtle">{t("activity.noPayload")}</p>
-          )}
+      {!isLoading && !parts.length && (
+        <p className="text-sm text-fg-subtle">{t("activity.noPayload")}</p>
+      )}
 
-          {parts.map(([key, value]) => (
-            <section key={key}>
-              <h3 className="mb-1 text-xs font-medium text-fg-muted">{t(key)}</h3>
-              {/* Своя горизонтальная прокрутка: длинная строка JSON
-                  иначе растягивает окно шире экрана. */}
-              <pre className="max-h-64 overflow-auto rounded-md bg-bg p-3 font-mono text-xs text-fg">
-                {value}
-              </pre>
-            </section>
+      {changes.length > 0 && (
+        <div className="overflow-hidden rounded-md border border-border bg-surface">
+          {changes.map((change) => (
+            <div
+              key={change.path}
+              className="flex flex-col gap-1 border-b border-border px-3 py-2 last:border-b-0 sm:flex-row sm:gap-3"
+            >
+              {/* Путь — слева постоянной ширины: список читается
+                  колонкой имён, а не лесенкой. */}
+              <p className="shrink-0 truncate font-mono text-xs text-fg-muted sm:w-52">
+                {change.path}
+              </p>
+
+              <div className="min-w-0 flex-1">
+                <Change change={change} />
+              </div>
+            </div>
           ))}
         </div>
-      </div>
-    </Modal>
+      )}
+
+      {/* Поля есть, а различий нет: правка ничего не изменила
+          (такое пишется в журнал), — и это ответ, а не пустой экран. */}
+      {!isLoading && !changes.length && parts.length > 0 && (
+        <p className="text-sm text-fg-subtle">{t("activity.noChanges")}</p>
+      )}
+
+      {parts.length > 0 && (
+        <div>
+          <Button size="sm" variant="ghost" onClick={() => setRaw(!raw)}>
+            <Icon as={raw ? IconChevronUp : IconChevronDown} size={14} />
+            {raw ? t("activity.hideRaw") : t("activity.showRaw")}
+          </Button>
+        </div>
+      )}
+
+      {raw &&
+        parts.map(([key, value]) => (
+          <section key={key}>
+            <h3 className="mb-1 text-xs font-medium text-fg-muted">{t(key)}</h3>
+            {/* Своя горизонтальная прокрутка: длинная строка JSON
+                иначе растягивает строку таблицы шире экрана. */}
+            <pre className="max-h-64 overflow-auto rounded-md bg-surface p-3 font-mono text-xs text-fg">
+              {value}
+            </pre>
+          </section>
+        ))}
+    </div>
+  );
+}
+
+/**
+ * Что стало с одним полем.
+ *
+ * Короткое значение — строкой «было → стало»: две рамки ради «10 → 20»
+ * занимают полэкрана, а сравнивать там нечего. Длинное всё-таки
+ * разводится в два столбца — в строку оно не читается.
+ *
+ * Цветом помечены только знаки списка: плюс и минус — это добавили
+ * и убрали, то есть ровно то, что означают success и danger. Обычная
+ * смена значения цвета не получает: направление несёт стрелка, и
+ * красить каждую правку значило бы раскрасить весь журнал.
+ */
+function Change({ change }: { change: EntryChange }) {
+  const { t } = useTranslation();
+
+  if ("added" in change) {
+    // Набор тот же — значит переставили. Печатать список дважды незачем:
+    // сам факт и есть всё содержание правки.
+    if (!change.added.length && !change.removed.length) {
+      return <p className="text-xs text-fg-subtle">{t("activity.reordered")}</p>;
+    }
+
+    return (
+      <ul className="max-h-40 space-y-0.5 overflow-auto">
+        {change.removed.map((item, index) => (
+          <li key={`-${index}`} title={item} className="truncate font-mono text-xs text-fg">
+            <span className="text-danger">−</span> {item}
+          </li>
+        ))}
+
+        {change.added.map((item, index) => (
+          <li key={`+${index}`} title={item} className="truncate font-mono text-xs text-fg">
+            <span className="text-success">+</span> {item}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  if (inline(change.before) && inline(change.after)) {
+    return (
+      <p className="flex items-baseline gap-1.5 font-mono text-xs">
+        <span className="min-w-0 truncate text-fg-muted">{change.before || "—"}</span>
+        <span className="shrink-0 text-fg-subtle">→</span>
+        <span className="min-w-0 truncate text-fg">{change.after || "—"}</span>
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <Side label={t("activity.before")} value={change.before} />
+      <Side label={t("activity.after")} value={change.after} />
+    </div>
+  );
+}
+
+/** Влезает в строку: без переносов и не длиннее половины ширины. */
+function inline(value: string): boolean {
+  return value.length <= 48 && !value.includes("\n");
+}
+
+/**
+ * Одна сторона изменения. Пусто — это «поля не было», и так и написано
+ * прочерком: пустая рамка читалась бы как «не загрузилось».
+ */
+function Side({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-0.5 text-2xs text-fg-subtle">{label}</p>
+      <pre className="max-h-40 overflow-auto rounded-md bg-bg p-2 font-mono text-xs text-fg">
+        {value || "—"}
+      </pre>
+    </div>
   );
 }

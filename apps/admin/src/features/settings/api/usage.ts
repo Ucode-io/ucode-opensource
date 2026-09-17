@@ -22,6 +22,65 @@ const BREAKDOWN = "/v1/pricing/api-call/breakdown";
 /** Больше строк не просим: хвост ручка сама складывает в `other`. */
 const TOP = 10;
 
+/**
+ * Занятое место в базе окружения.
+ *
+ * Ручка `/v1/pricing/all` отдаёт тринадцать чисел — функции,
+ * микрофронтенды, файлы, строки, таблицы, ключи, токены, — а читаем
+ * мы одно. Это не расточительство: запрос всё равно один, а экрана
+ * «сколько чего в проекте» у нас нет. Появится — он начнётся здесь,
+ * и добавятся поля, а не второй запрос.
+ *
+ * Считается это `pg_database_size(current_database())`
+ * (`object_builder.go:3337`) по ресурсу ТЕКУЩЕГО окружения
+ * (`pricing.go:63` — `GetResourceUsage(resourceEnvId)`), а лимит
+ * приходит из тарифа ПРОЕКТА. Отсюда окружение в ключе кэша: в prod
+ * и dev занято разное.
+ *
+ * Байты в мегабайты переводит шлюз (`pricing.go:131`), лимит он же
+ * разбирает из строки тарифа («5GB», «500MB») — всё остальное
+ * превращается в ноль (`parseStorageLimitToMB:22`). Ноль поэтому
+ * значит «лимит неизвестен», а не «места нет».
+ *
+ * Ноль в `current` двусмыслен по той же причине: каждый поход внутри
+ * ручки глотает свою ошибку и возвращает пустой ответ (`pricing.go:59`
+ * и ещё шесть таких же), так что пустая база и упавший подсчёт
+ * выглядят одинаково. Врать про это нечем — показываем, что пришло.
+ */
+const PRICING = "/v1/pricing/all";
+
+export type Storage = {
+  /** Занято, МБ. */
+  used: number;
+  /** Потолок тарифа, МБ. 0 — тариф его не называет. */
+  limit: number;
+  /** Доля лимита. null — лимита нет, сравнивать не с чем. */
+  percentUsed: number | null;
+};
+
+export function useDatabaseSize() {
+  const store = useSession();
+  const projectId = store.getProjectId() ?? "";
+  const envId = store.getEnvironmentId() ?? "";
+
+  const query = useQuery({
+    queryKey: keys.settings.databaseSize(projectId, envId),
+    queryFn: () => api.get<{ database_size?: { current?: number; limit?: number } }>(PRICING),
+    enabled: Boolean(projectId && envId),
+    /* Объём базы меняется медленнее, чем счётчик запросов: минуты
+       хватало бы, но и пять — не устаревшая цифра на этом экране. */
+    staleTime: 5 * FRESH_FOR,
+    select: (dto): Storage => {
+      const used = dto.database_size?.current ?? 0;
+      const limit = dto.database_size?.limit ?? 0;
+
+      return { used, limit, percentUsed: limit ? Math.min(100, (used / limit) * 100) : null };
+    },
+  });
+
+  return { storage: query.data, isLoading: query.isLoading };
+}
+
 /*
  * До базы цифры доезжают раз в десять минут, а каждый запрос сюда
  * сам расходует лимит: перезапрашивать чаще минуты нет смысла.

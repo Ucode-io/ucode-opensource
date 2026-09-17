@@ -54,23 +54,25 @@ export function useUsers({
   clientTypeId,
   search,
   page,
+  limit,
 }: {
   clientTypeId: string;
   search: string;
   page: number;
+  limit: number;
 }) {
   const projectId = useSession().getProjectId() ?? "";
 
   const query = useQuery({
-    queryKey: keys.settings.users(projectId, clientTypeId, search, page),
+    queryKey: keys.settings.users(projectId, clientTypeId, search, page, limit),
     queryFn: () =>
       authApi.get<UsersResponse>(USERS, {
         params: {
           "project-id": projectId,
           "client-type-id": clientTypeId,
           search,
-          limit: USERS_PAGE,
-          offset: (page - 1) * USERS_PAGE,
+          limit,
+          offset: (page - 1) * limit,
         },
       }),
     enabled: Boolean(projectId && clientTypeId),

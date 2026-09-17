@@ -1,15 +1,19 @@
 import { useDeferredValue, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/shared/ui/button";
+import { Chip } from "@/shared/ui/chip";
 import { DatePicker } from "@/shared/ui/date-picker";
-import { Input } from "@/shared/ui/input";
+import { Dropdown } from "@/shared/ui/dropdown";
 import {
   FUNCTION_LOGS_PAGE,
   NO_LOG_FILTERS,
   useFunctionLogs,
   type FunctionLogFilters,
 } from "../api/function-logs";
-import { Empty, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
+import { useProjectFunctions } from "../api/functions";
+import { relativeTime } from "../model/time";
+import { Empty, MethodBadge, Pager, SectionHeader, Td, Th, formatDateTime } from "./parts";
+import { TableFilter } from "./TableFilter";
 
 /**
  * Выполнение функций: когда вызвали, что вызвали и чем кончилось.
@@ -28,9 +32,10 @@ export function FunctionLogs() {
 
   const [filters, setFilters] = useState<FunctionLogFilters>(NO_LOG_FILTERS);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(FUNCTION_LOGS_PAGE);
 
   const deferred = useDeferredValue(filters);
-  const { logs, count, isLoading, error } = useFunctionLogs(deferred, page);
+  const { logs, count, isLoading, error } = useFunctionLogs(deferred, page, limit);
 
   const put = (patch: Partial<FunctionLogFilters>) => {
     setFilters((current) => ({ ...current, ...patch }));
@@ -43,39 +48,44 @@ export function FunctionLogs() {
 
       <div className="flex shrink-0 flex-wrap items-end gap-2 border-b border-border px-4 py-2">
         <div className="w-44">
-          <Input
-            value={filters.search}
-            onChange={(event) => put({ search: event.target.value })}
-            placeholder={t("functionLogs.search")}
-            aria-label={t("functionLogs.search")}
-            className="h-7 text-sm"
+          <FunctionFilter
+            value={filters.functionId}
+            onChange={(functionId) => put({ functionId })}
           />
         </div>
 
         {/*
-          Статус — поле ввода, а не список: перечня значений у бэкенда
-          нет. Колонка `status` свободная строка, и сервер сравнивает её
-          сам — зашитый в код набор устарел бы молча, как это уже вышло
-          с типами действий в соседней вкладке.
+          Статус — список из двух значений, и это не догадка: в журнал
+          его пишут ровно два места, и оба знают только «success»
+          и «error» (`helper/invoke_function.go:61,101` и
+          `function_service/api/handlers/function.go:1241,1271`).
+          Третьего не бывает.
+
+          Список здесь обязателен, а не желателен: сравнение ТОЧНОЕ,
+          `l.status = $1` (`version_history.go:396`), — в отличие
+          от журнала изменений, где всё через ILIKE. Набранное руками
+          «succ» молча вернуло бы пустой список.
         */}
-        <div className="w-32">
-          <Input
+        <div className="w-36">
+          <Dropdown
             value={filters.status}
-            onChange={(event) => put({ status: event.target.value })}
+            items={[
+              ...(filters.status ? [{ value: "", label: t("table.clearFilters") }] : []),
+              { value: "success", label: t("functionLogs.success") },
+              { value: "error", label: t("functionLogs.error") },
+            ]}
             placeholder={t("activity.status")}
-            aria-label={t("activity.status")}
-            className="h-7 text-sm"
+            ariaLabel={t("activity.status")}
+            onChange={(status) => put({ status })}
+            size="sm"
           />
         </div>
 
-        <div className="w-36">
-          <Input
-            value={filters.table}
-            onChange={(event) => put({ table: event.target.value })}
-            placeholder={t("activity.table")}
-            aria-label={t("activity.table")}
-            className="h-7 text-sm"
-          />
+        {/* Таблица — тот же выбор из списка, что и в журнале изменений:
+            здесь сравнение тоже точное (`l.table_slug = $1`), и слаг
+            по памяти не набирают. */}
+        <div className="w-40">
+          <TableFilter value={filters.table} onChange={(table) => put({ table })} />
         </div>
 
         <div className="w-36">
@@ -137,21 +147,41 @@ export function FunctionLogs() {
 
             {logs.map((log) => (
               <tr key={log.id} className="hover:bg-surface-hover">
-                <Td className="text-fg-muted">{formatDateTime(log.sentAt, i18n.language)}</Td>
+                <Td className="text-fg-muted">
+                  {formatDateTime(log.sentAt, i18n.language)}
+                  <span className="block text-2xs text-fg-subtle">
+                    {relativeTime(log.sentAt, i18n.language)}
+                  </span>
+                </Td>
                 <Td>{log.functionName || log.functionId}</Td>
                 <Td className="text-fg-muted">{log.tableSlug}</Td>
-                <Td className="text-fg-muted">
-                  {[log.actionType, log.method].filter(Boolean).join(" · ")}
+                <Td>
+                  <span className="flex items-center gap-1.5 text-fg-muted">
+                    <MethodBadge method={log.method} />
+                    {log.actionType}
+                  </span>
                 </Td>
                 <Td className="text-fg-muted">{log.duration ? `${log.duration} ms` : ""}</Td>
                 <Td>
-                  <span
-                    className={`text-2xs ${
-                      /fail|error/i.test(log.status) ? "text-danger" : "text-fg-muted"
-                    }`}
-                  >
-                    {log.status}
-                  </span>
+                  {/*
+                    Исход — плашка, и здесь цвет достаётся именно ей:
+                    на этом экране главный вопрос не «что вызывали»,
+                    а «чем кончилось», и ради него список открывают.
+                    Значений ровно два, оба известны (см. отбор выше),
+                    поэтому зелёная и красная — весь набор.
+
+                    Слово из базы переводится, а не показывается как
+                    есть: «success» в русском интерфейсе — не термин,
+                    а недоделка. Незнакомое значение всё же покажем
+                    как есть, серым: соврать хуже, чем удивить.
+                  */}
+                  {log.status === "success" && (
+                    <Chip color="green">{t("functionLogs.success")}</Chip>
+                  )}
+                  {log.status === "error" && <Chip color="red">{t("functionLogs.error")}</Chip>}
+                  {log.status !== "success" && log.status !== "error" && log.status && (
+                    <Chip color="gray">{log.status}</Chip>
+                  )}
                 </Td>
               </tr>
             ))}
@@ -159,7 +189,68 @@ export function FunctionLogs() {
         </table>
       </div>
 
-      <Pager page={page} total={count} limit={FUNCTION_LOGS_PAGE} onPage={setPage} />
+      <Pager
+        page={page}
+        total={count}
+        limit={limit}
+        onPage={setPage}
+        onLimit={(next) => {
+          setLimit(next);
+          setPage(1);
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * Отбор по функции — списком, а не строкой поиска.
+ *
+ * Дело не только в удобстве: поиск по имени на этой ручке отвечает
+ * ошибкой на весь журнал (условие ссылается на присоединённую таблицу
+ * функций, а счётчик строк выполняется без неё — см. `api/function-logs`).
+ * Отбор по идентификатору такого условия не создаёт.
+ *
+ * Список — первая страница `useProjectFunctions` с поиском на сервере:
+ * функций в проекте единицы, а не сотни, как таблиц, и догрузка
+ * по прокрутке здесь была бы механизмом ради двух десятков строк.
+ * Не нашлось — набирают в поиске, он уходит на сервер.
+ */
+function FunctionFilter({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const { functions, isLoading } = useProjectFunctions(search, 1);
+
+  const found = functions.map((item) => ({
+    value: item.id,
+    label: item.name || item.path || item.id,
+  }));
+
+  const items = [
+    // Первым пунктом — снять отбор: стереть выбор в списке больше нечем.
+    ...(value ? [{ value: "", label: t("table.clearFilters") }] : []),
+    /* Выбранная функция остаётся в списке, даже когда поиск её не нашёл,
+       — иначе набранное чужое слово стирает подпись с кнопки, и кажется,
+       что отбора нет, а он есть. */
+    ...(value && !found.some((item) => item.value === value)
+      ? [{ value, label: value }]
+      : []),
+    ...found,
+  ];
+
+  return (
+    <Dropdown
+      value={value}
+      items={items}
+      placeholder={t("functionLogs.function")}
+      ariaLabel={t("functionLogs.function")}
+      searchPlaceholder={t("functions.search")}
+      emptyText={t("functions.empty")}
+      search={search}
+      loading={isLoading}
+      onSearch={setSearch}
+      onChange={onChange}
+      size="sm"
+    />
   );
 }

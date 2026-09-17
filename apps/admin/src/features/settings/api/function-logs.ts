@@ -51,8 +51,19 @@ type LogDto = {
 type ListDto = { function_logs?: LogDto[] | null; total_count?: number };
 
 export type FunctionLogFilters = {
-  /** Поиск по имени функции. Сервер сравнивает сам. */
-  search: string;
+  /**
+   * Идентификатор функции, а НЕ её имя.
+   *
+   * Соседний параметр `search` ищет по имени — и роняет запрос: он
+   * попадает в условие как `f.name ILIKE`, а счётчик строк выполняется
+   * тем же условием, но без присоединённой таблицы функций
+   * (`version_history.go:495` — `SELECT COUNT(*) from function_logs AS l`),
+   * и postgres отвечает «missing FROM-clause entry for table "f"».
+   * То есть поиск по имени не «работает плохо», он отвечает ошибкой
+   * на весь список. `function_id` сравнивается со своей же колонкой
+   * и такого условия не создаёт. Подробности — docs/backend-notes.md.
+   */
+  functionId: string;
   /** Слаг таблицы, над которой вызывали. */
   table: string;
   status: string;
@@ -61,7 +72,7 @@ export type FunctionLogFilters = {
 };
 
 export const NO_LOG_FILTERS: FunctionLogFilters = {
-  search: "",
+  functionId: "",
   table: "",
   status: "",
   from: "",
@@ -71,17 +82,17 @@ export const NO_LOG_FILTERS: FunctionLogFilters = {
 /** Страница журнала. Сотня — то, что бэкенд берёт сам, если не сказать. */
 export const FUNCTION_LOGS_PAGE = 50;
 
-export function useFunctionLogs(filters: FunctionLogFilters, page: number) {
+export function useFunctionLogs(filters: FunctionLogFilters, page: number, limit: number) {
   const envId = useSession().getEnvironmentId() ?? "";
 
   const params = {
-    search: filters.search,
+    function_id: filters.functionId,
     table: filters.table,
     status: filters.status,
     from_date: filters.from,
     to_date: filters.to,
-    limit: FUNCTION_LOGS_PAGE,
-    offset: (page - 1) * FUNCTION_LOGS_PAGE,
+    limit,
+    offset: (page - 1) * limit,
   };
 
   const query = useQuery({

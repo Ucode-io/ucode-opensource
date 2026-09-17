@@ -50,8 +50,14 @@ const PAGE = 30;
  *
  * Следующая страница просится по смещению: ручка отдаёт `count`, но
  * не отдаёт курсора, и «дальше» здесь — это offset прочитанного.
+ *
+ * `enabled` — для тех, кому список нужен не всегда. У выпадающих
+ * списков он нужен сразу, как только список открыли, а у подсказки
+ * в SQL-консоли — только когда набирают имя таблицы; без выключателя
+ * она тянула бы первую страницу при каждом открытии консоли, и эти
+ * тридцать строк никто бы не прочитал.
  */
-export function useTables(search: string) {
+export function useTables(search: string, enabled = true) {
   const projectId = useSession().getProjectId() ?? "";
   const query = search.trim();
 
@@ -65,7 +71,7 @@ export function useTables(search: string) {
     // Страница короче запрошенной — она последняя, дальше просить нечего.
     getNextPageParam: (last, pages) =>
       (last.tables ?? []).length < PAGE ? undefined : pages.length * PAGE,
-    enabled: Boolean(projectId),
+    enabled: enabled && Boolean(projectId),
     // Таблицы заводит админ в конструкторе, а не пользователь по ходу работы.
     staleTime: 5 * 60_000,
   });

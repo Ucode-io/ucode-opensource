@@ -125,7 +125,17 @@ export function MenuRowActions({ node }: { node: MenuNode }) {
           actions.map((action) => (
             <div key={action.id}>
               {action.separated && <PopoverSeparator />}
-              <PopoverItem danger={action.danger ?? false} onClick={() => run(action.id, close)}>
+              <PopoverItem
+                danger={action.danger ?? false}
+                icon={
+                  <Icon
+                    as={action.icon}
+                    size={16}
+                    className={action.danger ? "shrink-0" : "shrink-0 text-fg-muted"}
+                  />
+                }
+                onClick={() => run(action.id, close)}
+              >
                 {t(action.labelKey, { type: typeWord })}
               </PopoverItem>
             </div>
