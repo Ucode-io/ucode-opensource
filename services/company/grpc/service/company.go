@@ -40,9 +40,18 @@ func (s *CompanyService) Create(ctx context.Context, req *pb.CreateCompanyReques
 	defer dbSpan.Finish()
 
 	companies, err := s.storage.Company().GetList(ctx, &pb.GetCompanyListRequest{})
-	if companies.Count >= 1 && s.cfg.Environment != config.PRODUCTION {
-		s.logger.Error("--CreateCompany--", l.String("error", "only one company allowed"))
-		return nil, status.Error(codes.Internal, "only one company allowed")
+	if err != nil {
+		// Counting is how the limit below is enforced, so a failed count is a
+		// failed create — not a reason to carry on and create anyway.
+		s.logger.Error("--CreateCompany--", l.Error(err))
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	limit := selfHostLimit{noun: "company", setting: "MAX_COMPANIES", max: s.cfg.MaxCompanies}
+	if err := limit.reached(int(companies.GetCount())); err != nil {
+		s.logger.Info("--CreateCompany-- refused by the installation limit",
+			l.Int("companies", int(companies.GetCount())), l.Int("max", s.cfg.MaxCompanies))
+		return nil, err
 	}
 
 	resp, err := s.storage.Company().Create(ctx, req)

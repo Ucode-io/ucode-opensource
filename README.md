@@ -161,6 +161,22 @@ are deliberately not here: AI application generation, billing and payments, and
 every third-party integration. Their absence is intentional — please do not
 send patches adding them back.
 
+### One organisation, one project
+
+A self-hosted installation is set up for one company with one project inside
+it, and as many tables, roles and users in that project as you like. Several
+companies or several projects is what the hosted product is for.
+
+The boundary is two settings rather than something buried in the code:
+
+```bash
+MAX_COMPANIES=1   # 0 for no limit
+MAX_PROJECTS=1    # 0 for no limit
+```
+
+They live in `deploy/.env.example`, and creating past one answers with a
+sentence saying so rather than a server error.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Specifications for work in progress live

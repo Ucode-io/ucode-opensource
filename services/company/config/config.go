@@ -82,6 +82,11 @@ type BaseConfig struct {
 	LogLevel    string
 	RPCPort     string
 
+	// Limits of a self-hosted installation. Zero means no limit. See
+	// grpc/service/limits.go for why these are settings of their own.
+	MaxCompanies int
+	MaxProjects  int
+
 	PostgresHost           string
 	PostgresPort           int
 	PostgresDatabase       string
@@ -160,6 +165,9 @@ func BaseLoad() BaseConfig {
 	c.Environment = cast.ToString(getOrReturnDefault("ENVIRONMENT", "production"))
 	c.LogLevel = cast.ToString(getOrReturnDefault("LOG_LEVEL", "debug"))
 	c.RPCPort = cast.ToString(getOrReturnDefault("RPC_PORT", "8092"))
+
+	c.MaxCompanies = cast.ToInt(getOrReturnDefault("MAX_COMPANIES", 1))
+	c.MaxProjects = cast.ToInt(getOrReturnDefault("MAX_PROJECTS", 1))
 
 	c.PostgresHost = cast.ToString(getOrReturnDefault("POSTGRES_HOST", ""))
 	c.PostgresPort = cast.ToInt(getOrReturnDefault("POSTGRES_PORT", 5432))

@@ -66,9 +66,12 @@ func (s *ProjectService) Create(ctx context.Context, req *pb.CreateProjectReques
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if len(company.GetCompany().GetProjects()) >= 1 && s.cfg.Environment != config.PRODUCTION {
-		s.logger.Error("!!!CreateProject", l.String("error", "only one project allowed"))
-		return nil, status.Error(codes.Internal, "only one project allowed")
+	projects := len(company.GetCompany().GetProjects())
+	limit := selfHostLimit{noun: "project", setting: "MAX_PROJECTS", max: s.cfg.MaxProjects}
+	if err := limit.reached(projects); err != nil {
+		s.logger.Info("--CreateProject-- refused by the installation limit",
+			l.Int("projects", projects), l.Int("max", s.cfg.MaxProjects))
+		return nil, err
 	}
 
 	resp, err := s.storage.Project().Create(ctx, projectId.String(), req)

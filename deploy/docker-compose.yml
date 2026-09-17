@@ -144,6 +144,8 @@ services:
       <<: [*postgres-env, *redis-env, *peer-env]
       SERVICE_NAME: company_service
       ENVIRONMENT: ${ENVIRONMENT}
+      MAX_COMPANIES: ${MAX_COMPANIES:-1}
+      MAX_PROJECTS: ${MAX_PROJECTS:-1}
       POSTGRES_DATABASE: company_service
       RPC_PORT: ":8092"
       SECRETS_PROVIDER: ${SECRETS_PROVIDER}

@@ -1,8 +1,7 @@
 # Limits of a self-hosted installation
 
-> **Parked.** The idea is agreed in principle; the actual list of limits is the
-> product owner's to write. Nothing here is implemented. Do not start on it
-> until that list exists.
+> **Unparked and implemented.** The owner gave the list on 2026-09-17: one
+> company, one project. See `tasks.md`.
 
 ## Why
 
@@ -50,8 +49,18 @@ organisation with as many projects inside it as it likes; several organisations
 in one installation is what the hosted product is for. It costs a single-team
 user nothing.
 
-## What is needed before starting
+## The list
 
-The list of limits, from the product owner. Until then this stays parked: the
-mechanism is easy, deciding where the line runs is not, and guessing at it would
-put a boundary in the code that nobody agreed to.
+From the owner, 2026-09-17:
+
+- **One company per installation.**
+- **One project inside it.**
+
+Everything below that — tables, fields, rows, roles, users, sessions — stays
+unlimited. The limit is on how many *tenants* an installation serves, not on
+how much one tenant can build.
+
+Note what the project limit is not: a second project needs a second database,
+created and registered on object-builder at creation time. Keeping it at one
+is also what makes the single-project simplifications in step 2 of the
+architecture work possible.

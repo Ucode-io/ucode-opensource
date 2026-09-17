@@ -78,10 +78,18 @@ func bootstrap(timeout time.Duration) error {
 }
 
 // alreadyBootstrapped distinguishes "this installation is set up" from a real
-// failure. company-service refuses a second company outside production, which
-// is exactly what a re-run looks like.
+// failure. company-service refuses a second company once MAX_COMPANIES is
+// reached, and a re-run that lost its marker file looks exactly like that.
+//
+// The error arrives as a string: auth flattens the gRPC status into its HTTP
+// response, so the code is gone by the time it reaches here. MAX_COMPANIES is
+// the stable part of that message and is what to match on; the wording around
+// it can change. The old phrasing is still recognised so that a CLI from this
+// version can talk to images published before the limit became a setting.
 func alreadyBootstrapped(err error) bool {
-	return strings.Contains(err.Error(), "only one company allowed")
+	text := err.Error()
+	return strings.Contains(text, "MAX_COMPANIES") ||
+		strings.Contains(text, "only one company allowed")
 }
 
 // retryable reports whether an attempt failed because something was still
