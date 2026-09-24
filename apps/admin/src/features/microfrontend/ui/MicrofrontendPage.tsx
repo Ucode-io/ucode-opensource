@@ -7,7 +7,7 @@ import i18n from "@/shared/lib/i18n";
 import { useMicrofrontend } from "../api/microfrontend";
 import { remoteHttp, remoteHttpV2 } from "../api/remote-http";
 import { startLegacyMirror } from "../model/legacy-mirror";
-import { pinRootFontSize, toggleRemoteStyles } from "../model/remote-styles";
+import { layerRemoteStyles, pinRootFontSize } from "../model/remote-styles";
 import {
   RemoteContractError,
   entryUrl,
@@ -82,11 +82,11 @@ export function MicrofrontendPage({
     if (!entry) return;
 
     const unpin = pinRootFontSize();
-    toggleRemoteStyles(entry, true);
+    const unlayer = layerRemoteStyles(entry);
 
     return () => {
       unpin();
-      toggleRemoteStyles(entry, false);
+      unlayer();
     };
   }, [microfrontend?.url]);
 

@@ -1,4 +1,29 @@
+/*
+ * Порядок слоёв объявлен ДО Tailwind, чтобы вставить между ними `remote`:
+ * туда уходит CSS микрофронтенда (features/microfrontend, remote-styles).
+ * Выше нашего `base` — его preflight и классы должны побеждать наш сброс
+ * внутри ремоута; ниже `utilities` — чтобы его `a { color: inherit }`
+ * и `.hidden` не перебивали наши утилиты в сайдбаре и шапке.
+ */
+@layer theme, base, remote, components, utilities;
+
 @import "tailwindcss";
+
+/*
+ * Фон приложения — плоская заливка --color-bg в обеих темах: F4F5F7
+ * светлая, 10141D тёмная. Уклон в фирменный синий здесь был, но на
+ * обоих фонах читался цветным пятном, а не «чуть теплее».
+ *
+ * Вне слоёв намеренно: слой `remote` выше `base`, и `body { font-family:
+ * Inter; color }` из CSS микрофронтенда иначе перекрасил бы всю админку.
+ */
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  -webkit-font-smoothing: antialiased;
+}
 
 /* Тема переключается классом на <html>, но по умолчанию слушает систему. */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -356,17 +381,6 @@
   /* Угол между двумя полосами иначе остаётся белым в тёмной теме. */
   ::-webkit-scrollbar-corner {
     background: transparent;
-  }
-
-  /* Фон приложения — плоская заливка --color-bg в обеих темах: F4F5F7
-     светлая, 10141D тёмная. Уклон в фирменный синий здесь был, но на
-     обоих фонах читался цветным пятном, а не «чуть теплее». */
-  body {
-    background-color: var(--color-bg);
-    color: var(--color-fg);
-    font-family: var(--font-sans);
-    font-size: var(--text-sm);
-    -webkit-font-smoothing: antialiased;
   }
 
   /*

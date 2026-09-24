@@ -1,52 +1,73 @@
 import { expect, test, vi } from "vitest";
-import { scopeSelector, toggleRemoteStyles } from "./remote-styles";
+import { layerRemoteStyles, scopeSelector } from "./remote-styles";
 
 /*
  * DOM подделан, а не поднят: в проекте нет ни jsdom, ни happy-dom, и
  * заводить их ради трёх строк незачем. Функция знает о документе ровно
- * `querySelectorAll` и два поля ссылки — этого и хватает.
+ * `querySelectorAll`, `createElement` и `head` — этого и хватает.
  */
 const ENTRY = "https://app.example.com/assets/remoteEntry.js";
+const THEIRS = "https://app.example.com/assets/style.abc123.css";
+
+type FakeStyle = { dataset: Record<string, string>; textContent: string; remove(): void };
 
 function withStylesheets(...hrefs: string[]) {
-  const links = hrefs.map((href) => ({ href, disabled: false }));
-  vi.stubGlobal("document", { querySelectorAll: () => links });
-  return links;
+  const links = hrefs.map((href) => ({ href, media: "" }));
+  const head: FakeStyle[] = [];
+
+  vi.stubGlobal("MutationObserver", class { observe() {} disconnect() {} });
+  vi.stubGlobal("document", {
+    querySelectorAll: () => links,
+    createElement: (): FakeStyle => {
+      const style: FakeStyle = {
+        dataset: {},
+        textContent: "",
+        remove: () => void head.splice(head.indexOf(style), 1),
+      };
+      return style;
+    },
+    head: { append: (style: FakeStyle) => void head.push(style) },
+  });
+  return { links, head };
 }
 
-test("уходя с экрана, гасим стили ремоута — но не свои", () => {
-  const [theirs, ours] = withStylesheets(
-    "https://app.example.com/assets/style.abc123.css",
-    "http://localhost:7777/assets/index.css",
-  );
+test("стили ремоута уезжают в слой `remote` — свои не трогаем", () => {
+  const { links, head } = withStylesheets(THEIRS, "http://localhost:7777/assets/index.css");
+  const [theirs, ours] = links;
 
-  toggleRemoteStyles(ENTRY, false);
+  layerRemoteStyles(ENTRY);
 
-  expect(theirs?.disabled).toBe(true);
+  // Оригинал гасим: вне слоёв он бил бы наши утилиты.
+  expect(theirs?.media).toBe("not all");
+  expect(head.map((style) => style.textContent)).toEqual([
+    `@import url("${THEIRS}") layer(remote);`,
+  ]);
   // Свои не трогаем никогда: у них другой origin.
-  expect(ours?.disabled).toBe(false);
+  expect(ours?.media).toBe("");
 });
 
-test("возвращаясь, включаем обратно", () => {
-  const [theirs] = withStylesheets("https://app.example.com/assets/style.abc123.css");
+test("уход гасит, возврат включает заново", () => {
+  const { head } = withStylesheets(THEIRS);
 
-  toggleRemoteStyles(ENTRY, false);
-  toggleRemoteStyles(ENTRY, true);
+  layerRemoteStyles(ENTRY)();
+  expect(head).toEqual([]);
 
   /*
-   * Именно включаем, а не вставляем заново: узел остаётся в `<head>`,
-   * потому что плагин федерации помнит вставленные адреса и второй раз
-   * ссылку не создаст (`seen` в его `dynamicLoadingCss`).
+   * Копию делаем снова мы: оригинал остаётся погашенным в `<head>`,
+   * а плагин федерации второй раз ссылку не создаст (`seen` в его
+   * `dynamicLoadingCss`).
    */
-  expect(theirs?.disabled).toBe(false);
+  layerRemoteStyles(ENTRY);
+  expect(head).toHaveLength(1);
 });
 
-test("битый адрес сборки ничего не гасит", () => {
-  const [ours] = withStylesheets("http://localhost:7777/assets/index.css");
+test("битый адрес сборки ничего не трогает", () => {
+  const { links, head } = withStylesheets("http://localhost:7777/assets/index.css");
 
-  toggleRemoteStyles("", false);
+  layerRemoteStyles("")();
 
-  expect(ours?.disabled).toBe(false);
+  expect(links[0]?.media).toBe("");
+  expect(head).toEqual([]);
 });
 
 /*

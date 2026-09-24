@@ -2,7 +2,8 @@
  * Чужой CSS живёт в нашем документе — и по умолчанию побеждает наш.
  *
  * Разбор на живом микрофронтенде (Chakra + Mantine) показал две
- * разные утечки, и лечатся они по-разному.
+ * разные утечки, и лечатся они по-разному. Третья, от ремоута на
+ * Tailwind v3, — у `layerRemoteStyles` ниже.
  *
  * **Первая — глобальный сброс.** ChakraProvider вкладывает в наш
  * `<head>` десятки тегов `<style data-emotion="css-global">` с
@@ -208,19 +209,60 @@ export function containRemoteStyles(container: Element): () => void {
 }
 
 /**
- * Включить или погасить таблицы стилей, приехавшие с адреса сборки.
+ * Опустить таблицы стилей с адреса сборки в слой `remote` — на всё время,
+ * пока открыт экран. Возвращает функцию, гасящую их обратно.
  *
- * Убирать сам `<link>` нельзя: плагин `@originjs` помнит вставленные
- * адреса (`seen` в его `dynamicLoadingCss`) и второй раз ссылку не
- * создаст. Поэтому не удаляем, а гасим.
+ * Это **третья утечка**, и она самая широкая. Ремоут на Tailwind v3
+ * приносит `<link>` с preflight и утилитами вне слоёв — а значит, поверх
+ * всех наших утилит: `a { color: inherit }` бьёт `text-fg-muted`
+ * в сайдбаре, `button { padding: 0 }` — отступы кнопок, `*
+ * { border-color }` — прозрачную рамку карточки. Классы у v3 и нашего v4
+ * те же самые, так что сузить по поддереву мало — порталы ремоута
+ * (выпадашки, диалоги) живут в `body` и остались бы без стилей.
+ *
+ * Слой решает обе стороны: `remote` стоит между нашими `base` и
+ * `utilities` (порядок — в app/styles.css). Внутри ремоута его правила
+ * по-прежнему бьют наш сброс, снаружи — проигрывают нашим утилитам.
+ *
+ * `@import … layer()`, а не свой `<style>` с текстом: относительные
+ * `url()` шрифтов и картинок браузер разрешит от адреса листа, и CORS
+ * не нужен. Оригинальную ссылку не удаляем, а глушим навсегда: плагин
+ * `@originjs` помнит вставленные адреса (`seen` в `dynamicLoadingCss`)
+ * и второй раз её не создаст — копию при возврате делаем сами.
+ *
+ * Наблюдатель — потому что ссылка приезжает позже экрана: её вставляет
+ * `get()` ремоута, когда тот уже грузится.
  */
-export function toggleRemoteStyles(entry: string, enabled: boolean) {
+export function layerRemoteStyles(entry: string): () => void {
   const origin = originOf(entry);
-  if (!origin) return;
+  if (!origin) return () => {};
 
-  for (const link of document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet']")) {
-    if (link.href.startsWith(origin)) link.disabled = !enabled;
-  }
+  const copies = new Map<string, HTMLStyleElement>();
+
+  const adopt = () => {
+    for (const link of document.querySelectorAll<HTMLLinkElement>("link[rel='stylesheet']")) {
+      if (!link.href.startsWith(origin) || copies.has(link.href)) continue;
+
+      // `media`, а не `disabled`: ссылку ловим сразу после вставки, листа
+      // ещё нет, и Chrome такой `disabled` молча забывает — лист грузится
+      // включённым.
+      link.media = "not all";
+      const copy = document.createElement("style");
+      copy.dataset.ucode = "remote-styles";
+      copy.textContent = `@import url(${JSON.stringify(link.href)}) layer(remote);`;
+      document.head.append(copy);
+      copies.set(link.href, copy);
+    }
+  };
+
+  adopt();
+  const observer = new MutationObserver(adopt);
+  observer.observe(document.head, { childList: true });
+
+  return () => {
+    observer.disconnect();
+    for (const copy of copies.values()) copy.remove();
+  };
 }
 
 function originOf(entry: string): string {
