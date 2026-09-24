@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { hexToChipColor } from "@/shared/ui/chip";
 import { EMPTY_DRAFT, toDraft } from "../model/field-draft";
 import { toField } from "./normalize";
-import { toCreateBody, toUpdateBody } from "./fields";
+import { toCreateBody, toUpdateBodies, toUpdateBody } from "./fields";
 
 const AT = { tableSlug: "bookings", language: "en", id: "11111111-2222-3333-4444-555555555555" };
 
@@ -430,4 +430,37 @@ test("снятое числовое сравнение видимости не �
   // Условие сняли целиком — уезжают пустыми все три ключа.
   const none = toUpdateBody(field, { ...toDraft(field, "en"), hideField: "" }, "en");
   expect(none.attributes).toMatchObject({ hide_path_field: "", hide_path: "", type: "" });
+});
+
+test("переименование колонки: один запрос, а вместе со сменой типа — два", () => {
+  const field = toField({
+    id: "f1",
+    slug: "price",
+    type: "NUMBER",
+    label: "Price",
+    attributes: {},
+  } as Parameters<typeof toField>[0]);
+  const draft = toDraft(field, "en");
+
+  // Слаг не трогали — уходит прежний, запрос один.
+  expect(toUpdateBodies(field, draft, "en").map((body) => body.slug)).toEqual(["price"]);
+  // Стёртое поле ввода — тоже «не трогали»: колонка без имени невозможна.
+  expect(toUpdateBody(field, { ...draft, slug: " " }, "en").slug).toBe("price");
+
+  // Только слаг — один запрос, RENAME сделает бэкенд.
+  expect(toUpdateBodies(field, { ...draft, slug: "cost" }, "en")).toMatchObject([
+    { slug: "cost", type: "NUMBER" },
+  ]);
+
+  /*
+   * Слаг и тип сразу бэкенд не переживает (field.go:618-644): DROP по
+   * старому имени, затем RENAME уже несуществующей колонки. Поэтому
+   * сначала переименование со СТАРЫМ типом, потом смена типа.
+   */
+  expect(
+    toUpdateBodies(field, { ...draft, slug: "cost", type: "SINGLE_LINE" }, "en"),
+  ).toMatchObject([
+    { id: "f1", slug: "cost", type: "NUMBER" },
+    { id: "f1", slug: "cost", type: "SINGLE_LINE" },
+  ]);
 });

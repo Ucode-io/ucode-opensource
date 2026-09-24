@@ -49,6 +49,7 @@ import {
   type RelationDraft,
 } from "../model/relation-draft";
 import { cascadeSteps } from "../model/cascade";
+import { languageGroups } from "../model/multilanguage";
 import { localized, type Field, type Relation } from "../model/types";
 import { useTableFields, useTables } from "../api/tables";
 import { AutofillSettings } from "./AutofillSettings";
@@ -138,12 +139,35 @@ export function FieldEditor({
 
   const slug = draft.slug.trim();
   /*
-   * Только при создании: у существующего поля слаг совпадает сам с собой
-   * и «занят» был бы всегда. Правится он тоже только здесь — переименовать
-   * колонку после создания нельзя (см. api/fields).
+   * Проверяется только ИЗМЕНЁННЫЙ слаг: у существующего поля он совпадает
+   * сам с собой и «занят» был бы всегда, а старое имя, заведённое мимо
+   * админки, может и не пройти нашу проверку — это не повод ругаться.
    */
+  const renaming = Boolean(field && slug && slug !== field.slug);
   const slugError =
-    !editing && Boolean(slug && (!isValidSlug(slug) || fields.some((item) => item.slug === slug)));
+    (renaming || !editing) &&
+    Boolean(slug && (!isValidSlug(slug) || fields.some((item) => item.slug === slug)));
+
+  /*
+   * Где переименование ломает больше, чем чинит — имя не правится вовсе.
+   *
+   * INCREMENT_ID: счётчик живёт в `incrementseqs` по имени колонки,
+   * а RENAME его не трогает. После переименования создание любой записи
+   * в таблице падает (prepareFunctions.go:133, backend-notes «Поле»).
+   *
+   * Языковая колонка (`title_en`): переводы собираются в одно поле по
+   * базе слага (model/multilanguage). Переименуй одну — и она выпадет
+   * из группы, а переименовывать всю группу разом бэкенд не умеет.
+   */
+  const slugLock = !field
+    ? null
+    : field.type === "INCREMENT_ID"
+      ? "fieldForm.slugLockedIncrement"
+      : [...languageGroups(fields, languages.map((item) => item.code)).values()].some((group) =>
+            group.some((item) => item.id === field.id),
+          )
+        ? "fieldForm.slugLockedLanguage"
+        : null;
 
   /**
    * Закрытие — это и есть «сохранить»: уезжает ровно одно изменение.
@@ -151,10 +175,15 @@ export function FieldEditor({
    * У связи не так: её правки уходят кнопкой, а закрытие ничего
    * не сохраняет. Иначе PUT /v2/fields уехал бы по колонке-ссылке,
    * которой он не управляет.
+   *
+   * Негодный слаг не уезжает — ошибка под полем была видна, пока его
+   * набирали, — а остальные правки сохраняются с прежним именем колонки.
    */
   const close = () => {
-    if (!editingRelation && field && JSON.stringify(draft) !== JSON.stringify(initial)) {
-      onSubmit(draft);
+    const next = slugError ? { ...draft, slug: initial.slug } : draft;
+
+    if (!editingRelation && field && JSON.stringify(next) !== JSON.stringify(initial)) {
+      onSubmit(next);
     }
     onClose();
   };
@@ -380,23 +409,40 @@ export function FieldEditor({
             </div>
 
             {/*
-              Имя колонки в базе. Показано и правится только при создании:
-              человек должен видеть, как будет называться колонка, а после
-              создания переименовать её нельзя (см. api/fields).
+              Имя колонки в базе. При создании человек видит, как будет
+              называться колонка; у существующего поля её можно
+              переименовать, как и в старой админке (поле «Key»).
             */}
-            {!editing && (
-              <input
-                value={draft.slug}
-                aria-label={t("fieldForm.slug")}
-                placeholder={t("fieldForm.slug")}
-                onChange={(event) => {
-                  setSlugTouched(true);
-                  patch({ slug: event.target.value });
-                }}
-                className={`mx-1 h-6 rounded-md bg-transparent px-2 font-mono text-2xs outline-none transition-colors hover:bg-surface-hover focus:bg-surface-hover ${
-                  slugError ? "text-danger" : "mb-1 text-fg-subtle"
-                }`}
-              />
+            <input
+              value={draft.slug}
+              readOnly={Boolean(slugLock)}
+              aria-label={t("fieldForm.slug")}
+              placeholder={t("fieldForm.slug")}
+              title={slugLock ? t(slugLock) : undefined}
+              onChange={(event) => {
+                setSlugTouched(true);
+                patch({ slug: event.target.value });
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                if (editing) close();
+                else create(draft.type);
+              }}
+              className={`mx-1 h-6 rounded-md bg-transparent px-2 font-mono text-2xs outline-none transition-colors ${
+                slugLock ? "cursor-default" : "hover:bg-surface-hover focus:bg-surface-hover"
+              } ${slugError ? "text-danger" : "mb-1 text-fg-subtle"}`}
+            />
+
+            {/*
+              Колонку в базе переименует RENAME — значения останутся.
+              Но имя поля живёт не только в схеме: формулы, функции
+              и настройки view ссылаются на него текстом, и за ними
+              бэкенд не следит.
+            */}
+            {renaming && !slugError && (
+              <p className="m-1 rounded-md bg-warning-subtle p-2 text-2xs text-warning">
+                {t("fieldForm.renameWarning")}
+              </p>
             )}
 
             {/*
@@ -433,8 +479,9 @@ export function FieldEditor({
             )}
 
             {/* Пока слаг занят или неправилен, клик по типу поле не создаёт
-                (create молча выходит) — без подписи это выглядит так, будто
-                панель сломалась. */}
+                (create молча выходит), а у существующего поля закрытие
+                не уносит новое имя (см. close) — без подписи это выглядит
+                так, будто панель сломалась. */}
             {slugError && (
               <p className="mx-1 mb-1 px-2 text-2xs text-danger">{t("fieldForm.slugInvalid")}</p>
             )}

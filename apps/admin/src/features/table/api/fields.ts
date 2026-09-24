@@ -69,22 +69,34 @@ export function useCreateField(tableSlug: string | undefined) {
  * заново объект: ручка перезаписывает запись целиком, и всё, чего
  * в теле не окажется, обнулится (см. Field.raw).
  *
- * Слаг не меняем никогда. Бэкенд его умеет — делает RENAME COLUMN, —
- * но у него же есть ветка «сменился тип»: она сначала дропает колонку
- * по СТАРОМУ слагу, а потом переименовывает её по новому. Два изменения
- * сразу ломают запрос, и разбираться в этом ради переименования
- * колонки, которую видит только база, незачем.
+ * Слаг правится: бэкенд делает RENAME COLUMN, значения остаются на месте.
+ * Сколько запросов уходит и в каком порядке — см. toUpdateBodies.
  */
 export function useUpdateField(tableSlug: string | undefined) {
   const queryClient = useQueryClient();
   const slug = tableSlug ?? "";
 
   return useMutation({
-    mutationFn: ({ field, draft, language }: { field: Field; draft: FieldDraft; language: string }) =>
-      api.put<unknown>(`/v2/fields/${slug}`, toUpdateBody(field, draft, language)),
+    mutationFn: async ({
+      field,
+      draft,
+      language,
+    }: {
+      field: Field;
+      draft: FieldDraft;
+      language: string;
+    }) => {
+      // Строго по очереди: второй запрос рассчитывает на колонку,
+      // которую переименовал первый.
+      for (const body of toUpdateBodies(field, draft, language)) {
+        await api.put<unknown>(`/v2/fields/${slug}`, body);
+      }
+    },
 
     onError: (error) => reportError(error, "common.saveFailed"),
-    onSuccess: () => invalidateSchema(queryClient),
+    // И при ошибке тоже: из двух запросов мог пройти первый, и колонка
+    // уже называется по-новому.
+    onSettled: () => invalidateSchema(queryClient),
   });
 }
 
@@ -147,8 +159,32 @@ export function invalidateSchema(queryClient: ReturnType<typeof useQueryClient>)
 }
 
 /**
- * Черновик поверх исходного ответа. Меняются ровно четыре вещи:
- * подпись, тип, подпись на языке данных и список вариантов.
+ * Тела запросов на правку поля — одно, а при смене типа И слага — два.
+ *
+ * Обход бэкенда: `storage/postgres/field.go:618-644` на смену типа
+ * дропает колонку по СТАРОМУ слагу и заводит её по новому, а следом
+ * переименовывает старый слаг в новый — колонки со старым именем уже
+ * нет, и запрос откатывается целиком (docs/backend-notes.md, «Поле»).
+ * Поэтому сначала отдельно переименовываем — исходной записью с одним
+ * новым слагом, — а тип меняет второй запрос, уже по новому имени.
+ */
+export function toUpdateBodies(
+  field: Field,
+  draft: FieldDraft,
+  language: string,
+): Record<string, unknown>[] {
+  const body = toUpdateBody(field, draft, language);
+  if (body.slug === field.slug || body.type === field.type) return [body];
+
+  return [{ ...field.raw, id: field.id, slug: body.slug }, body];
+}
+
+/**
+ * Черновик поверх исходного ответа. Меняются подпись, слаг, тип,
+ * подпись на языке данных и список вариантов.
+ *
+ * Пустой слаг значит «не трогали»: имя колонки не может быть пустым,
+ * и такой черновик уходит с прежним.
  *
  * Варианты прежнего типа стираются, если новый тип их не знает: иначе
  * у обычной строки остаётся мёртвый список вариантов в настройках,
@@ -165,7 +201,7 @@ export function toUpdateBody(
   return {
     ...field.raw,
     id: field.id,
-    slug: field.slug,
+    slug: draft.slug.trim() || field.slug,
     label,
     type: draft.type,
     required: draft.required,
